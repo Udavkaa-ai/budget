@@ -22,15 +22,15 @@ function cumulative(arr) {
  * Линия — кумулятивный план нарастающим итогом
  */
 export async function generateChartImage(month = null, year = null) {
-  const { labels, userExpenses, trackingDays, monthName } = getChartData(month, year, config.trackingStartDay);
+  const { labels, userExpenses, daysInMonth, monthName } = getChartData(month, year, config.trackingStartDay);
 
   if (labels.length === 0) {
     return null;
   }
 
-  // Переменные расходы = общие минус фиксированные
+  // Дневная ставка переменных расходов = на весь месяц
   const variableMonthly = config.plannedMonthly - config.plannedFixed;
-  const variableDaily = Math.round(variableMonthly / trackingDays);
+  const variableDaily = variableMonthly / daysInMonth;
   const fixedDay = config.fixedExpensesDay;
 
   const datasets = [];
@@ -46,10 +46,10 @@ export async function generateChartImage(month = null, year = null) {
     i++;
   }
 
-  // Кумулятивная линия плана: переменные растут равномерно, фиксированные — скачком на fixedDay
-  const plannedCumulative = labels.map((dayLabel, idx) => {
+  // Кумулятивная линия плана: переменные пропорционально дню месяца, фиксированные — скачком на fixedDay
+  const plannedCumulative = labels.map((dayLabel) => {
     const day = parseInt(dayLabel);
-    let planned = variableDaily * (idx + 1);
+    let planned = Math.round(variableDaily * day);
     if (day >= fixedDay) {
       planned += config.plannedFixed;
     }

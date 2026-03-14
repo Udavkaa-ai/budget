@@ -232,7 +232,7 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
 
   const trackingDays = endDay - startDay + 1;
 
-  return { labels, userExpenses, trackingDays, month: curMonth, year: curYear, monthName: getMonthName(curMonth, curYear) };
+  return { labels, userExpenses, trackingDays, daysInMonth, month: curMonth, year: curYear, monthName: getMonthName(curMonth, curYear) };
 }
 
 /**
