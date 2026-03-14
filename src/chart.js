@@ -4,9 +4,22 @@ import { config } from './config.js';
 const QUICKCHART_URL = 'https://quickchart.io/chart';
 
 /**
- * Генерирует PNG-диаграмму расходов семьи по дням
- * Столбцы — фактические расходы по каждому члену семьи
- * Пунктирная линия — запланированный дневной расход
+ * Превращает массив дневных значений в кумулятивный (нарастающий итог)
+ */
+function cumulative(arr) {
+  const result = [];
+  let sum = 0;
+  for (const val of arr) {
+    sum += val;
+    result.push(sum);
+  }
+  return result;
+}
+
+/**
+ * Генерирует PNG-диаграмму расходов семьи
+ * Столбцы (stacked) — кумулятивные расходы по каждому члену семьи
+ * Линия — кумулятивный план нарастающим итогом
  */
 export async function generateChartImage(month = null, year = null) {
   const { labels, userExpenses, trackingDays, monthName } = getChartData(month, year, config.trackingStartDay);
@@ -15,31 +28,45 @@ export async function generateChartImage(month = null, year = null) {
     return null;
   }
 
-  const plannedDaily = Math.round(config.plannedMonthly / trackingDays);
+  // Переменные расходы = общие минус фиксированные
+  const variableMonthly = config.plannedMonthly - config.plannedFixed;
+  const variableDaily = Math.round(variableMonthly / trackingDays);
+  const fixedDay = config.fixedExpensesDay;
 
   const datasets = [];
-  const colors = ['#4e79a7', '#f28e2b', '#76b7b2', '#e15759'];
+  const colors = ['#4e79a7', '#f28e2b', '#76b7b2', '#59a14f'];
   let i = 0;
 
   for (const [user, amounts] of Object.entries(userExpenses)) {
     datasets.push({
       label: user,
-      data: amounts,
+      data: cumulative(amounts),
       backgroundColor: colors[i % colors.length],
     });
     i++;
   }
 
-  // Линия планового расхода
+  // Кумулятивная линия плана: переменные растут равномерно, фиксированные — скачком на fixedDay
+  const plannedCumulative = labels.map((dayLabel, idx) => {
+    const day = parseInt(dayLabel);
+    let planned = variableDaily * (idx + 1);
+    if (day >= fixedDay) {
+      planned += config.plannedFixed;
+    }
+    return planned;
+  });
+  const totalPlanned = plannedCumulative[plannedCumulative.length - 1];
+
   datasets.push({
-    label: `План (${plannedDaily.toLocaleString('ru-RU')} ₽/день)`,
-    data: labels.map(() => plannedDaily),
+    label: `План (${totalPlanned.toLocaleString('ru-RU')} ₽)`,
+    data: plannedCumulative,
     type: 'line',
     borderColor: '#e15759',
     borderWidth: 2,
     borderDash: [6, 4],
     fill: false,
-    pointRadius: 0,
+    pointRadius: 2,
+    pointBackgroundColor: '#e15759',
   });
 
   const chartConfig = {
@@ -48,16 +75,18 @@ export async function generateChartImage(month = null, year = null) {
     options: {
       title: {
         display: true,
-        text: `Расходы семьи по дням — ${monthName}`,
+        text: `Расходы семьи — ${monthName} (нарастающий итог)`,
         fontSize: 16,
       },
       scales: {
         yAxes: [{
           ticks: { beginAtZero: true },
           scaleLabel: { display: true, labelString: 'Сумма (₽)' },
+          stacked: true,
         }],
         xAxes: [{
           scaleLabel: { display: true, labelString: 'Число месяца' },
+          stacked: true,
         }],
       },
       legend: { position: 'bottom' },

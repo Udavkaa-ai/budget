@@ -30,8 +30,12 @@ export const config = {
   reminderMinute: parseInt(process.env.REMINDER_MINUTE) || 0,
   remindersEnabled: process.env.REMINDERS_ENABLED !== 'false',
 
-  // Бюджет — плановые переменные расходы за месяц (продукты, кафе, транспорт, одежда, медицина, развлечения)
-  plannedMonthly: parseInt(process.env.PLANNED_MONTHLY) || 137000,
+  // Бюджет — общие плановые расходы за месяц
+  plannedMonthly: parseInt(process.env.PLANNED_MONTHLY) || 194000,
+  // Фиксированные обязательные расходы (ипотека 31k, ЖКХ 12k, кружки 14k)
+  plannedFixed: parseInt(process.env.PLANNED_FIXED) || 57000,
+  // День списания фиксированных расходов
+  fixedExpensesDay: parseInt(process.env.FIXED_EXPENSES_DAY) || 15,
   // День начала отслеживания (null = автоопределение по первой записи)
   trackingStartDay: process.env.TRACKING_START_DAY ? parseInt(process.env.TRACKING_START_DAY) : null
 };
