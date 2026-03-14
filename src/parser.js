@@ -13,7 +13,7 @@ const CATEGORIES = [
   'Прочее'
 ];
 
-const SYSTEM_PROMPT = `Ты - парсер расходов. Извлеки из сообщения пользователя список трат.
+const SYSTEM_PROMPT = `Ты — парсер расходов. Извлеки из сообщения пользователя список трат.
 
 Для каждой траты определи:
 - date: дата в формате DD.MM.YYYY
@@ -23,7 +23,7 @@ const SYSTEM_PROMPT = `Ты - парсер расходов. Извлеки из
 
 Правила дат:
 - "сегодня" = текущая дата
-- "вчера" = текущая дата -1 день
+- "вчера" = текущая дата − 1 день
 - "позавчера" = −2 дня
 - "в понедельник/вторник/..." = ближайший прошедший день недели
 - Если дата не указана → текущая дата
@@ -43,7 +43,7 @@ const SYSTEM_PROMPT = `Ты - парсер расходов. Извлеки из
 Ответь ТОЛЬКО валидным JSON массивом, без markdown:
 [{"date": "...", "category": "...", "amount": 0, "description": "..."}]
 
-Если расходы не распознаны - верни []`;
+Если расходы не распознаны — верни []`;
 
 /**
  * Запрос к одной модели с таймаутом
@@ -152,7 +152,7 @@ export async function parseExpenses(text) {
       console.log(`✅ ${model}: распознано ${expenses.length} записей`);
       return { expenses, model };
     } catch (parseError) {
-      console.warn(`⚠️  ${model}: ошибка парсинга JSON - ${parseError.message}`);
+      console.warn(`⚠️  ${model}: ошибка парсинга JSON — ${parseError.message}`);
       lastError = parseError.message;
       continue; // fallback
     }

@@ -144,11 +144,13 @@ export function getFamilyToday() {
 
 /**
  * Расходы семьи за месяц (сгруппированы по пользователям)
+ * @param {number|null} targetMonth - месяц (1-12), null = текущий
+ * @param {number|null} targetYear - год, null = текущий
  */
-export function getFamilySummary() {
+export function getFamilySummary(targetMonth = null, targetYear = null) {
   const now = new Date();
-  const curMonth = now.getMonth() + 1;
-  const curYear = now.getFullYear();
+  const curMonth = targetMonth || (now.getMonth() + 1);
+  const curYear = targetYear || now.getFullYear();
 
   const byUser = {};
   const byCategory = {};
@@ -156,35 +158,81 @@ export function getFamilySummary() {
 
   for (const exp of data.expenses) {
     const [, month, year] = exp.date.split('.').map(Number);
-    
+
     if (month === curMonth && year === curYear) {
       const user = exp.user || 'Неизвестно';
-      
-      // По пользователям
+
       if (!byUser[user]) {
         byUser[user] = { total: 0, byCategory: {} };
       }
       byUser[user].total += exp.amount;
       byUser[user].byCategory[exp.category] = (byUser[user].byCategory[exp.category] || 0) + exp.amount;
-      
-      // Общее по категориям
+
       byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
       total += exp.amount;
     }
   }
 
-  return { byUser, byCategory, total, monthName: getMonthName() };
+  return { byUser, byCategory, total, month: curMonth, year: curYear, monthName: getMonthName(curMonth, curYear) };
 }
 
 /**
- * Экспорт всех данных
+ * Данные для диаграммы: расходы по дням и пользователям
  */
-export function exportData() {
-  return {
-    expenses: data.expenses,
-    exportedAt: new Date().toISOString(),
-    totalRecords: data.expenses.length
-  };
+/**
+ * @param {number|null} targetMonth - месяц (1-12), null = текущий
+ * @param {number|null} targetYear - год, null = текущий
+ * @param {number|null} startDayOverride - принудительный день начала
+ */
+export function getChartData(targetMonth = null, targetYear = null, startDayOverride = null) {
+  const now = new Date();
+  const curMonth = targetMonth || (now.getMonth() + 1);
+  const curYear = targetYear || now.getFullYear();
+  const daysInMonth = new Date(curYear, curMonth, 0).getDate();
+
+  // Для текущего месяца — до сегодня, для прошлых — весь месяц
+  const isCurrentMonth = curMonth === (now.getMonth() + 1) && curYear === now.getFullYear();
+  const endDay = isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+
+  // Если override не задан — находим первый день с данными
+  let startDay = startDayOverride;
+  if (!startDay) {
+    let minDay = endDay;
+    for (const exp of data.expenses) {
+      const [day, month, year] = exp.date.split('.').map(Number);
+      if (month === curMonth && year === curYear && day < minDay) {
+        minDay = day;
+      }
+    }
+    startDay = minDay;
+  }
+
+  const labels = [];
+  const fullDates = [];
+  for (let d = startDay; d <= endDay; d++) {
+    const dateStr = `${String(d).padStart(2, '0')}.${String(curMonth).padStart(2, '0')}.${curYear}`;
+    fullDates.push(dateStr);
+    labels.push(String(d));
+  }
+
+  const dailyByUser = {};
+  for (const exp of data.expenses) {
+    const [day, month, year] = exp.date.split('.').map(Number);
+    if (month === curMonth && year === curYear && day >= startDay && day <= endDay) {
+      const user = exp.user || 'Неизвестно';
+      if (!dailyByUser[user]) dailyByUser[user] = {};
+      dailyByUser[user][exp.date] = (dailyByUser[user][exp.date] || 0) + exp.amount;
+    }
+  }
+
+  const userExpenses = {};
+  for (const [user, dateMap] of Object.entries(dailyByUser)) {
+    userExpenses[user] = fullDates.map(date => dateMap[date] || 0);
+  }
+
+  const trackingDays = endDay - startDay + 1;
+
+  return { labels, userExpenses, trackingDays, month: curMonth, year: curYear, monthName: getMonthName(curMonth, curYear) };
 }
 
 /**
@@ -209,28 +257,23 @@ function formatDate(date) {
   return `${d}.${m}.${date.getFullYear()}`;
 }
 
-function getMonthName() {
+function getMonthName(month = null, year = null) {
   const months = [
     'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
   ];
   const now = new Date();
-  return `${months[now.getMonth()]} ${now.getFullYear()}`;
+  const m = month || (now.getMonth() + 1);
+  const y = year || now.getFullYear();
+  return `${months[m - 1]} ${y}`;
 }
 
-// Сохранение при выходе
-process.on('SIGINT', async () => {
+/**
+ * Принудительно сохранить данные (вызывается при завершении из index.js)
+ */
+export async function flushData() {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
     await saveData();
   }
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-    await saveData();
-  }
-  process.exit(0);
-});
+}

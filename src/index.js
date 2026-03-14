@@ -1,8 +1,9 @@
 import { Telegraf, Markup } from 'telegraf';
 import { config } from './config.js';
 import { parseExpenses, CATEGORIES } from './parser.js';
-import { loadData, appendExpenses, getMonthSummary, getTodaySummary, getFamilyToday, getFamilySummary, exportCSV } from './storage.js';
+import { loadData, appendExpenses, getTodaySummary, getFamilyToday, getFamilySummary, exportCSV, flushData } from './storage.js';
 import { initReminders, stopReminders } from './reminders.js';
+import { generateChartImage } from './chart.js';
 
 const bot = new Telegraf(config.telegramToken);
 
@@ -25,7 +26,7 @@ bot.use((ctx, next) => {
 const mainMenu = Markup.keyboard([
   ['➕ Добавить', '📊 Сегодня'],
   ['👨‍👩‍👧‍👦 Семья', '📈 Месяц'],
-  ['📎 Экспорт']
+  ['📉 Диаграмма', '📎 Экспорт']
 ]).resize();
 
 // /start
@@ -55,6 +56,7 @@ bot.help((ctx) => {
     `/today — мои расходы сегодня\n` +
     `/family — расходы семьи\n` +
     `/summary — статистика за месяц\n` +
+    `/chart — диаграмма расходов\n` +
     `/export — выгрузить CSV`,
     { parse_mode: 'Markdown', ...mainMenu }
   );
@@ -229,35 +231,115 @@ async function showFamilyToday(ctx) {
   ctx.reply(text, { parse_mode: 'Markdown', ...mainMenu });
 }
 
-// Кнопка "📈 Месяц" — статистика за месяц
-bot.hears('📈 Месяц', showMonthlySummary);
-bot.command('summary', showMonthlySummary);
+// ============ НАВИГАЦИЯ ПО МЕСЯЦАМ ============
 
-async function showMonthlySummary(ctx) {
-  const summary = getFamilySummary();
-  
+function monthNavKeyboard(month, year, prefix) {
+  const prev = month === 1 ? { m: 12, y: year - 1 } : { m: month - 1, y: year };
+  const next = month === 12 ? { m: 1, y: year + 1 } : { m: month + 1, y: year };
+
+  const now = new Date();
+  const isCurrentMonth = month === (now.getMonth() + 1) && year === now.getFullYear();
+
+  const buttons = [
+    Markup.button.callback('◀ Пред.', `${prefix}:${prev.m}.${prev.y}`),
+  ];
+  if (!isCurrentMonth) {
+    buttons.push(Markup.button.callback('След. ▶', `${prefix}:${next.m}.${next.y}`));
+  }
+
+  return Markup.inlineKeyboard([buttons]);
+}
+
+function parseMonthYear(str) {
+  const [m, y] = str.split('.').map(Number);
+  return { month: m, year: y };
+}
+
+// Кнопка "📈 Месяц" — статистика за месяц
+bot.hears('📈 Месяц', (ctx) => sendMonthlySummary(ctx));
+bot.command('summary', (ctx) => sendMonthlySummary(ctx));
+
+bot.action(/^sum:(\d+\.\d+)$/, async (ctx) => {
+  const { month, year } = parseMonthYear(ctx.match[1]);
+  await ctx.answerCbQuery();
+  await sendMonthlySummary(ctx, month, year, true);
+});
+
+async function sendMonthlySummary(ctx, month = null, year = null, editMessage = false) {
+  const summary = getFamilySummary(month, year);
+
   if (summary.total === 0) {
-    return ctx.reply('📭 В этом месяце записей нет.', mainMenu);
+    const msg = `📭 ${summary.monthName} — записей нет.`;
+    const nav = monthNavKeyboard(summary.month, summary.year, 'sum');
+    if (editMessage) {
+      return ctx.editMessageText(msg, nav);
+    }
+    return ctx.reply(msg, { ...mainMenu, ...nav });
   }
 
   let text = `📊 *${summary.monthName}*\n\n`;
-  
-  // По категориям
+
   text += `*По категориям:*\n`;
   const sortedCats = Object.entries(summary.byCategory).sort((a, b) => b[1] - a[1]);
   for (const [cat, amount] of sortedCats) {
     text += `${getEmoji(cat)} ${cat}: ${fmt(amount)}\n`;
   }
-  
-  // По членам семьи
+
   text += `\n*По членам семьи:*\n`;
   for (const [user, data] of Object.entries(summary.byUser)) {
     text += `👤 ${user}: ${fmt(data.total)}\n`;
   }
-  
+
   text += `\n💰 *Итого: ${fmt(summary.total)}*`;
-  
-  ctx.reply(text, { parse_mode: 'Markdown', ...mainMenu });
+
+  const nav = monthNavKeyboard(summary.month, summary.year, 'sum');
+  if (editMessage) {
+    return ctx.editMessageText(text, { parse_mode: 'Markdown', ...nav });
+  }
+  ctx.reply(text, { parse_mode: 'Markdown', ...mainMenu, ...nav });
+}
+
+// Кнопка "📉 Диаграмма"
+bot.hears('📉 Диаграмма', (ctx) => sendChart(ctx));
+bot.command('chart', (ctx) => sendChart(ctx));
+
+bot.action(/^chart:(\d+\.\d+)$/, async (ctx) => {
+  const { month, year } = parseMonthYear(ctx.match[1]);
+  await ctx.answerCbQuery();
+  await sendChart(ctx, month, year);
+});
+
+async function sendChart(ctx, month = null, year = null) {
+  const statusMsg = await ctx.reply('🔄 Генерирую диаграмму...');
+
+  try {
+    const image = await generateChartImage(month, year);
+
+    if (!image) {
+      return ctx.telegram.editMessageText(
+        ctx.chat.id, statusMsg.message_id, null,
+        '📭 Нет данных для диаграммы за выбранный период.'
+      );
+    }
+
+    // Определяем month/year для навигации
+    const now = new Date();
+    const m = month || (now.getMonth() + 1);
+    const y = year || now.getFullYear();
+    const nav = monthNavKeyboard(m, y, 'chart');
+
+    await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+    await ctx.replyWithPhoto(
+      { source: image, filename: 'chart.png' },
+      { caption: '📉 Расходы семьи по дням\nСтолбцы — факт, пунктир — план', ...nav }
+    );
+  } catch (err) {
+    console.error('Chart error:', err);
+    ctx.telegram.editMessageText(
+      ctx.chat.id, statusMsg.message_id, null,
+      '❌ Ошибка генерации диаграммы.'
+    );
+  }
 }
 
 // Кнопка "📎 Экспорт"
@@ -418,11 +500,13 @@ async function start() {
 
 start();
 
-process.once('SIGINT', () => {
+process.once('SIGINT', async () => {
   stopReminders();
+  await flushData();
   bot.stop('SIGINT');
 });
-process.once('SIGTERM', () => {
+process.once('SIGTERM', async () => {
   stopReminders();
+  await flushData();
   bot.stop('SIGTERM');
 });

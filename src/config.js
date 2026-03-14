@@ -28,7 +28,12 @@ export const config = {
   // Напоминания (время по Москве)
   reminderHour: parseInt(process.env.REMINDER_HOUR) || 20,
   reminderMinute: parseInt(process.env.REMINDER_MINUTE) || 0,
-  remindersEnabled: process.env.REMINDERS_ENABLED !== 'false'
+  remindersEnabled: process.env.REMINDERS_ENABLED !== 'false',
+
+  // Бюджет — плановые переменные расходы за месяц (продукты, кафе, транспорт, одежда, медицина, развлечения)
+  plannedMonthly: parseInt(process.env.PLANNED_MONTHLY) || 137000,
+  // День начала отслеживания (null = автоопределение по первой записи)
+  trackingStartDay: process.env.TRACKING_START_DAY ? parseInt(process.env.TRACKING_START_DAY) : null
 };
 
 // Проверка конфигурации
