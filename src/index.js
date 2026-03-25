@@ -593,7 +593,7 @@ bot.action('noop', (ctx) => ctx.answerCbQuery());
 // ============ ДЕТАЛИЗАЦИЯ ПО КАТЕГОРИИ ============
 
 // cat_detail:Категория.месяц.год  или  cat_detail:Категория.месяц.год.фильтр
-bot.action(/^cat_detail:(.+)\.(\d+)\.(\d+)(?:\.(\w+))?$/, async (ctx) => {
+bot.action(/^cat_detail:(.+)\.(\d+)\.(\d+)(?:\.(.+))?$/, async (ctx) => {
   const category = ctx.match[1];
   const month = parseInt(ctx.match[2]);
   const year = parseInt(ctx.match[3]);
