@@ -5,7 +5,7 @@ import {
   loadData, appendExpenses,
   getTodaySummary, getFamilyDay, getFamilyToday,
   getFamilySummary, getChartData, exportCSV, flushData,
-  getSettings, updateSetting,
+  getSettings, updateSetting, retagFixedExpenses,
 } from './storage.js';
 import { initReminders, stopReminders } from './reminders.js';
 import { generateChartImage } from './chart.js';
@@ -434,6 +434,12 @@ bot.action('toggle_fixed', async (ctx) => {
   await showSettings(ctx, true);
 });
 
+bot.action('retag_fixed', async (ctx) => {
+  const count = await retagFixedExpenses();
+  await ctx.answerCbQuery(count > 0 ? `📌 Помечено ${count} записей` : 'Новых записей не найдено');
+  await showSettings(ctx, true);
+});
+
 async function showSettings(ctx, editMessage = false) {
   const settings = getSettings();
   const excludeFixed = settings.excludeFixed || false;
@@ -453,7 +459,8 @@ async function showSettings(ctx, editMessage = false) {
     [Markup.button.callback(
       excludeFixed ? '✅ Включить постоянные' : '🚫 Исключить постоянные',
       'toggle_fixed'
-    )]
+    )],
+    [Markup.button.callback('🔄 Пересканировать старые записи', 'retag_fixed')],
   ]);
 
   if (editMessage) {
