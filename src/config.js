@@ -46,7 +46,7 @@ export const config = {
     { name: 'Садик и уроки', amount: 14000 },
   ],
   // Ключевые слова для авто-пометки постоянных расходов при вводе
-  fixedKeywords: (process.env.FIXED_KEYWORDS || 'ипотека,жкх,коммунальн,садик,допурок')
+  fixedKeywords: (process.env.FIXED_KEYWORDS || 'ипотека,жкх,коммунальн,садик,допурок,кружок')
     .split(',').map(s => s.trim().toLowerCase()),
 };
 

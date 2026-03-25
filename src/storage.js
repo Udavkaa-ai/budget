@@ -305,6 +305,24 @@ function getMonthName(month = null, year = null) {
 }
 
 /**
+ * Ретроактивно проставить isFixed по ключевым словам для всех записей
+ * Возвращает количество помеченных записей
+ */
+export async function retagFixedExpenses() {
+  let tagged = 0;
+  for (const exp of data.expenses) {
+    const descLower = (exp.description || '').toLowerCase();
+    const shouldBeFixed = config.fixedKeywords.some(kw => descLower.includes(kw));
+    if (shouldBeFixed && !exp.isFixed) {
+      exp.isFixed = true;
+      tagged++;
+    }
+  }
+  if (tagged > 0) debouncedSave();
+  return tagged;
+}
+
+/**
  * Принудительно сохранить данные (вызывается при завершении из index.js)
  */
 export async function flushData() {
