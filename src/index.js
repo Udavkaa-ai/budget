@@ -592,42 +592,69 @@ bot.action('noop', (ctx) => ctx.answerCbQuery());
 
 // ============ ДЕТАЛИЗАЦИЯ ПО КАТЕГОРИИ ============
 
-// cat_detail:Категория.месяц.год
-bot.action(/^cat_detail:(.+)\.(\d+)\.(\d+)$/, async (ctx) => {
+// cat_detail:Категория.месяц.год  или  cat_detail:Категория.месяц.год.фильтр
+bot.action(/^cat_detail:(.+)\.(\d+)\.(\d+)(?:\.(\w+))?$/, async (ctx) => {
   const category = ctx.match[1];
   const month = parseInt(ctx.match[2]);
   const year = parseInt(ctx.match[3]);
+  const filter = ctx.match[4] || null;
   await ctx.answerCbQuery();
-  await showCategoryDetail(ctx, category, month, year, true);
+  await showCategoryDetail(ctx, category, month, year, filter, true);
 });
 
-async function showCategoryDetail(ctx, category, month, year, editMessage = false) {
-  const expenses = getCategoryExpenses(category, month, year);
+async function showCategoryDetail(ctx, category, month, year, filter = null, editMessage = false) {
+  const allExpenses = getCategoryExpenses(category, month, year);
   const monthLabel = getMonthName(month, year);
-  const backBtn = Markup.inlineKeyboard([
+
+  // Уникальные пользователи в этой категории
+  const users = [...new Set(allExpenses.map(e => e.user).filter(Boolean))];
+
+  // Применяем фильтр по первой букве имени
+  const activeFilter = filter === 'all' ? null : filter;
+  const expenses = activeFilter
+    ? allExpenses.filter(e => (e.user || '?')[0].toUpperCase() === activeFilter)
+    : allExpenses;
+
+  // Строка фильтров
+  const filterRow = [
+    Markup.button.callback(
+      !activeFilter ? '✅ Все' : 'Все',
+      `cat_detail:${category}.${month}.${year}.all`
+    ),
+    ...users.map(u => Markup.button.callback(
+      activeFilter === u[0].toUpperCase() ? `✅ ${u}` : u,
+      `cat_detail:${category}.${month}.${year}.${u[0].toUpperCase()}`
+    ))
+  ];
+
+  const keyboard = Markup.inlineKeyboard([
+    filterRow,
     [Markup.button.callback('⬅️ Назад к месяцу', `sum:${month}.${year}`)]
   ]);
 
-  if (expenses.length === 0) {
+  if (allExpenses.length === 0) {
     const msg = `📭 ${getEmoji(category)} ${category} — ${monthLabel}: записей нет.`;
-    if (editMessage) return ctx.editMessageText(msg, backBtn);
-    return ctx.reply(msg, backBtn);
+    if (editMessage) return ctx.editMessageText(msg, keyboard);
+    return ctx.reply(msg, keyboard);
   }
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const filterLabel = activeFilter
+    ? ` · ${users.find(u => u[0].toUpperCase() === activeFilter) || activeFilter}`
+    : '';
 
-  let text = `${getEmoji(category)} *${category} — ${monthLabel}*\n\n`;
+  let text = `${getEmoji(category)} *${category} — ${monthLabel}${filterLabel}*\n\n`;
 
   for (const exp of expenses) {
-    const who = (exp.user || '?')[0].toUpperCase(); // первая буква имени: У / М
+    const who = (exp.user || '?')[0].toUpperCase();
     const fixed = exp.isFixed ? ' 📌' : '';
     text += `${exp.date.slice(0, 5)} *${who}*  ${exp.description}: ${fmt(exp.amount)}${fixed}\n`;
   }
 
   text += `\n💰 *Итого: ${fmt(total)}*`;
 
-  if (editMessage) return ctx.editMessageText(text, { parse_mode: 'Markdown', ...backBtn });
-  ctx.reply(text, { parse_mode: 'Markdown', ...backBtn });
+  if (editMessage) return ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+  ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
 }
 
 // Кнопка "📎 Экспорт"
