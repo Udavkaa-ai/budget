@@ -293,7 +293,7 @@ function formatDate(date) {
   return `${d}.${m}.${date.getFullYear()}`;
 }
 
-function getMonthName(month = null, year = null) {
+export function getMonthName(month = null, year = null) {
   const months = [
     'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
@@ -302,6 +302,32 @@ function getMonthName(month = null, year = null) {
   const m = month || (now.getMonth() + 1);
   const y = year || now.getFullYear();
   return `${months[m - 1]} ${y}`;
+}
+
+/**
+ * Все расходы за месяц, отсортированные по дате
+ */
+export function getExpensesForMonth(month = null, year = null) {
+  const now = new Date();
+  const m = month || (now.getMonth() + 1);
+  const y = year || now.getFullYear();
+  return data.expenses
+    .filter(exp => {
+      const [, em, ey] = exp.date.split('.').map(Number);
+      return em === m && ey === y;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Переключить isFixed для конкретной записи
+ */
+export async function toggleExpenseFixed(id) {
+  const exp = data.expenses.find(e => e.id === id);
+  if (!exp) return null;
+  exp.isFixed = !exp.isFixed;
+  debouncedSave();
+  return exp.isFixed;
 }
 
 /**

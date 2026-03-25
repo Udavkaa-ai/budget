@@ -6,6 +6,7 @@ import {
   getTodaySummary, getFamilyDay, getFamilyToday,
   getFamilySummary, getChartData, exportCSV, flushData,
   getSettings, updateSetting, retagFixedExpenses,
+  getExpensesForMonth, toggleExpenseFixed, getMonthName,
 } from './storage.js';
 import { initReminders, stopReminders } from './reminders.js';
 import { generateChartImage } from './chart.js';
@@ -434,6 +435,11 @@ bot.action('toggle_fixed', async (ctx) => {
   await showSettings(ctx, true);
 });
 
+bot.action('mark_fixed_open', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showMarkFixed(ctx, 0, null, null, true);
+});
+
 bot.action('retag_fixed', async (ctx) => {
   const count = await retagFixedExpenses();
   await ctx.answerCbQuery(count > 0 ? `📌 Помечено ${count} записей` : 'Новых записей не найдено');
@@ -460,7 +466,8 @@ async function showSettings(ctx, editMessage = false) {
       excludeFixed ? '✅ Включить постоянные' : '🚫 Исключить постоянные',
       'toggle_fixed'
     )],
-    [Markup.button.callback('🔄 Пересканировать старые записи', 'retag_fixed')],
+    [Markup.button.callback('📋 Разметить расходы вручную', 'mark_fixed_open')],
+    [Markup.button.callback('🔄 Пересканировать по ключевым словам', 'retag_fixed')],
   ]);
 
   if (editMessage) {
@@ -468,6 +475,100 @@ async function showSettings(ctx, editMessage = false) {
   }
   ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
 }
+
+// ============ РУЧНАЯ РАЗМЕТКА ПОСТОЯННЫХ РАСХОДОВ ============
+
+const MF_PAGE_SIZE = 8;
+
+bot.command('mark_fixed', (ctx) => showMarkFixed(ctx));
+
+// Пагинация списка
+bot.action(/^mf_page:(\d+)\.(\d+)\.(\d+)$/, async (ctx) => {
+  const [page, month, year] = ctx.match.slice(1).map(Number);
+  await ctx.answerCbQuery();
+  await showMarkFixed(ctx, page, month, year, true);
+});
+
+// Переключение конкретной записи: mf_tog:ID.page.month.year
+bot.action(/^mf_tog:([^.]+)\.(\d+)\.(\d+)\.(\d+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  const [page, month, year] = ctx.match.slice(2).map(Number);
+  await toggleExpenseFixed(id);
+  await ctx.answerCbQuery();
+  await showMarkFixed(ctx, page, month, year, true);
+});
+
+// Смена месяца в разметке
+bot.action(/^mf_month:(\d+)\.(\d+)$/, async (ctx) => {
+  const [month, year] = ctx.match.slice(1).map(Number);
+  await ctx.answerCbQuery();
+  await showMarkFixed(ctx, 0, month, year, true);
+});
+
+// Возврат в настройки из разметки
+bot.action('settings', async (ctx) => {
+  await ctx.answerCbQuery();
+  await showSettings(ctx, true);
+});
+
+async function showMarkFixed(ctx, page = 0, month = null, year = null, editMessage = false) {
+  const now = new Date();
+  const m = month || (now.getMonth() + 1);
+  const y = year || now.getFullYear();
+
+  const expenses = getExpensesForMonth(m, y);
+  const totalPages = Math.max(1, Math.ceil(expenses.length / MF_PAGE_SIZE));
+  const curPage = Math.min(page, totalPages - 1);
+  const pageItems = expenses.slice(curPage * MF_PAGE_SIZE, (curPage + 1) * MF_PAGE_SIZE);
+
+  const fixedCount = expenses.filter(e => e.isFixed).length;
+  const monthLabel = getMonthName(m, y);
+
+  let text = `📋 *Разметка постоянных — ${monthLabel}*\n`;
+  text += `_📌 помечено: ${fixedCount} из ${expenses.length}_\n\n`;
+  text += `Нажми на запись, чтобы пометить/снять как постоянную:`;
+
+  const rows = [];
+
+  if (expenses.length === 0) {
+    text = `📭 В ${monthLabel} записей нет.`;
+  } else {
+    for (const exp of pageItems) {
+      const icon = exp.isFixed ? '📌' : '⬜';
+      const desc = exp.description.length > 13 ? exp.description.slice(0, 13) + '…' : exp.description;
+      const amt = exp.amount.toLocaleString('ru-RU');
+      rows.push([Markup.button.callback(
+        `${icon} ${exp.date.slice(0, 5)} ${getEmoji(exp.category)} ${desc}: ${amt}₽`,
+        `mf_tog:${exp.id}.${curPage}.${m}.${y}`
+      )]);
+    }
+  }
+
+  // Навигация по страницам
+  const pageNav = [];
+  if (curPage > 0) pageNav.push(Markup.button.callback('◀', `mf_page:${curPage - 1}.${m}.${y}`));
+  if (totalPages > 1) pageNav.push(Markup.button.callback(`${curPage + 1}/${totalPages}`, 'noop'));
+  if (curPage < totalPages - 1) pageNav.push(Markup.button.callback('▶', `mf_page:${curPage + 1}.${m}.${y}`));
+  if (pageNav.length > 0) rows.push(pageNav);
+
+  // Навигация по месяцам
+  const prevM = m === 1 ? { m: 12, y: y - 1 } : { m: m - 1, y: y };
+  const nextM = m === 12 ? { m: 1, y: y + 1 } : { m: m + 1, y: y };
+  const isCurrentMonth = m === (now.getMonth() + 1) && y === now.getFullYear();
+  const monthNav = [Markup.button.callback('◀ Пред. мес.', `mf_month:${prevM.m}.${prevM.y}`)];
+  if (!isCurrentMonth) monthNav.push(Markup.button.callback('След. мес. ▶', `mf_month:${nextM.m}.${nextM.y}`));
+  rows.push(monthNav);
+
+  rows.push([Markup.button.callback('⬅️ Назад к настройкам', 'settings')]);
+
+  const keyboard = Markup.inlineKeyboard(rows);
+  if (editMessage) {
+    return ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+  }
+  ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+}
+
+bot.action('noop', (ctx) => ctx.answerCbQuery());
 
 // Кнопка "📎 Экспорт"
 bot.hears('📎 Экспорт', exportData);
