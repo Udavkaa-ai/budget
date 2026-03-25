@@ -20,15 +20,16 @@ function cumulative(arr) {
  * Генерирует PNG-диаграмму расходов семьи
  * Столбцы (stacked) — кумулятивные расходы по каждому члену семьи
  * Линия — кумулятивный план нарастающим итогом
+ * @param {boolean} excludeFixed - исключить постоянные расходы
  */
-export async function generateChartImage(month = null, year = null) {
-  const { labels, userExpenses, daysInMonth, monthName } = getChartData(month, year, config.trackingStartDay);
+export async function generateChartImage(month = null, year = null, excludeFixed = false) {
+  const { labels, userExpenses, daysInMonth, monthName } = getChartData(month, year, config.trackingStartDay, excludeFixed);
 
   if (labels.length === 0) {
     return null;
   }
 
-  // Дневная ставка переменных расходов = на весь месяц
+  // При исключении постоянных — план только по переменным расходам
   const variableMonthly = config.plannedMonthly - config.plannedFixed;
   const variableDaily = variableMonthly / daysInMonth;
   const fixedDay = config.fixedExpensesDay;
@@ -38,19 +39,22 @@ export async function generateChartImage(month = null, year = null) {
   let i = 0;
 
   for (const [user, amounts] of Object.entries(userExpenses)) {
+    // Сумма за период для подписи в легенде
+    const periodTotal = amounts.reduce((s, v) => s + v, 0);
     datasets.push({
-      label: user,
+      label: `${user}: ${periodTotal.toLocaleString('ru-RU')} ₽`,
       data: cumulative(amounts),
       backgroundColor: colors[i % colors.length],
     });
     i++;
   }
 
-  // Кумулятивная линия плана: переменные пропорционально дню месяца, фиксированные — скачком на fixedDay
+  // Кумулятивная линия плана
   const plannedCumulative = labels.map((dayLabel) => {
     const day = parseInt(dayLabel);
     let planned = Math.round(variableDaily * day);
-    if (day >= fixedDay) {
+    // Фиксированные расходы добавляем на линию плана только если не исключаем их
+    if (!excludeFixed && day >= fixedDay) {
       planned += config.plannedFixed;
     }
     return planned;
@@ -69,13 +73,15 @@ export async function generateChartImage(month = null, year = null) {
     pointBackgroundColor: '#e15759',
   });
 
+  const titleSuffix = excludeFixed ? ' (без постоянных)' : '';
+
   const chartConfig = {
     type: 'bar',
     data: { labels, datasets },
     options: {
       title: {
         display: true,
-        text: `Расходы семьи — ${monthName} (нарастающий итог)`,
+        text: `Расходы семьи — ${monthName}${titleSuffix} (нарастающий итог)`,
         fontSize: 16,
       },
       scales: {

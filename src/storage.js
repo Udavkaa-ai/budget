@@ -5,6 +5,7 @@ import { config } from './config.js';
 
 let data = {
   expenses: [],
+  settings: {},
   meta: { created: new Date().toISOString(), version: 1 }
 };
 
@@ -19,6 +20,7 @@ export async function loadData() {
     if (existsSync(config.dataFile)) {
       const raw = await readFile(config.dataFile, 'utf-8');
       data = JSON.parse(raw);
+      data.settings = data.settings || {};
       console.log(`📂 Загружено ${data.expenses.length} записей`);
     } else {
       await saveData();
@@ -56,11 +58,15 @@ async function saveData() {
 
 /**
  * Добавить расходы
+ * Автоматически помечает постоянные расходы по ключевым словам
  */
 export async function appendExpenses(expenses) {
   const timestamp = new Date().toISOString();
-  
+
   for (const exp of expenses) {
+    const descLower = (exp.description || '').toLowerCase();
+    const isFixed = config.fixedKeywords.some(kw => descLower.includes(kw));
+
     data.expenses.push({
       id: generateId(),
       date: exp.date,
@@ -68,10 +74,24 @@ export async function appendExpenses(expenses) {
       description: exp.description,
       amount: exp.amount,
       user: exp.user || '',
+      isFixed,
       createdAt: timestamp
     });
   }
-  
+
+  debouncedSave();
+}
+
+/**
+ * Настройки
+ */
+export function getSettings() {
+  return data.settings || {};
+}
+
+export async function updateSetting(key, value) {
+  data.settings = data.settings || {};
+  data.settings[key] = value;
   debouncedSave();
 }
 
@@ -88,7 +108,7 @@ export function getMonthSummary() {
 
   for (const exp of data.expenses) {
     const [day, month, year] = exp.date.split('.').map(Number);
-    
+
     if (month === curMonth && year === curYear) {
       byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
       total += exp.amount;
@@ -107,29 +127,28 @@ export function getMonthSummary() {
  */
 export function getTodaySummary(userName = null) {
   const today = formatDate(new Date());
-  
+
   let todayExpenses = data.expenses.filter(e => e.date === today);
-  
+
   if (userName) {
     todayExpenses = todayExpenses.filter(e => e.user === userName);
   }
-  
+
   const total = todayExpenses.reduce((sum, e) => sum + e.amount, 0);
-  
+
   return { expenses: todayExpenses, total, date: today };
 }
 
 /**
- * Расходы семьи за сегодня (сгруппированы по пользователям)
+ * Расходы семьи за конкретный день (сгруппированы по пользователям)
  */
-export function getFamilyToday() {
-  const today = formatDate(new Date());
-  const todayExpenses = data.expenses.filter(e => e.date === today);
-  
+export function getFamilyDay(dateStr) {
+  const expenses = data.expenses.filter(e => e.date === dateStr);
+
   const byUser = {};
   let total = 0;
-  
-  for (const exp of todayExpenses) {
+
+  for (const exp of expenses) {
     const user = exp.user || 'Неизвестно';
     if (!byUser[user]) {
       byUser[user] = { expenses: [], total: 0 };
@@ -138,16 +157,24 @@ export function getFamilyToday() {
     byUser[user].total += exp.amount;
     total += exp.amount;
   }
-  
-  return { byUser, total, date: today };
+
+  return { byUser, total, date: dateStr };
+}
+
+/**
+ * Расходы семьи за сегодня
+ */
+export function getFamilyToday() {
+  return getFamilyDay(formatDate(new Date()));
 }
 
 /**
  * Расходы семьи за месяц (сгруппированы по пользователям)
  * @param {number|null} targetMonth - месяц (1-12), null = текущий
  * @param {number|null} targetYear - год, null = текущий
+ * @param {boolean} excludeFixed - исключить постоянные расходы
  */
-export function getFamilySummary(targetMonth = null, targetYear = null) {
+export function getFamilySummary(targetMonth = null, targetYear = null, excludeFixed = false) {
   const now = new Date();
   const curMonth = targetMonth || (now.getMonth() + 1);
   const curYear = targetYear || now.getFullYear();
@@ -160,6 +187,8 @@ export function getFamilySummary(targetMonth = null, targetYear = null) {
     const [, month, year] = exp.date.split('.').map(Number);
 
     if (month === curMonth && year === curYear) {
+      if (excludeFixed && exp.isFixed) continue;
+
       const user = exp.user || 'Неизвестно';
 
       if (!byUser[user]) {
@@ -173,28 +202,30 @@ export function getFamilySummary(targetMonth = null, targetYear = null) {
     }
   }
 
-  return { byUser, byCategory, total, month: curMonth, year: curYear, monthName: getMonthName(curMonth, curYear) };
+  return {
+    byUser, byCategory, total,
+    month: curMonth, year: curYear,
+    monthName: getMonthName(curMonth, curYear),
+    excludeFixed,
+  };
 }
 
 /**
  * Данные для диаграммы: расходы по дням и пользователям
- */
-/**
  * @param {number|null} targetMonth - месяц (1-12), null = текущий
  * @param {number|null} targetYear - год, null = текущий
  * @param {number|null} startDayOverride - принудительный день начала
+ * @param {boolean} excludeFixed - исключить постоянные расходы
  */
-export function getChartData(targetMonth = null, targetYear = null, startDayOverride = null) {
+export function getChartData(targetMonth = null, targetYear = null, startDayOverride = null, excludeFixed = false) {
   const now = new Date();
   const curMonth = targetMonth || (now.getMonth() + 1);
   const curYear = targetYear || now.getFullYear();
   const daysInMonth = new Date(curYear, curMonth, 0).getDate();
 
-  // Для текущего месяца — до сегодня, для прошлых — весь месяц
   const isCurrentMonth = curMonth === (now.getMonth() + 1) && curYear === now.getFullYear();
   const endDay = isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
 
-  // Если override не задан — находим первый день с данными
   let startDay = startDayOverride;
   if (!startDay) {
     let minDay = endDay;
@@ -219,6 +250,7 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
   for (const exp of data.expenses) {
     const [day, month, year] = exp.date.split('.').map(Number);
     if (month === curMonth && year === curYear && day >= startDay && day <= endDay) {
+      if (excludeFixed && exp.isFixed) continue;
       const user = exp.user || 'Неизвестно';
       if (!dailyByUser[user]) dailyByUser[user] = {};
       dailyByUser[user][exp.date] = (dailyByUser[user][exp.date] || 0) + exp.amount;
@@ -232,16 +264,20 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
 
   const trackingDays = endDay - startDay + 1;
 
-  return { labels, userExpenses, trackingDays, daysInMonth, month: curMonth, year: curYear, monthName: getMonthName(curMonth, curYear) };
+  return {
+    labels, userExpenses, trackingDays, daysInMonth,
+    month: curMonth, year: curYear,
+    monthName: getMonthName(curMonth, curYear),
+  };
 }
 
 /**
  * Экспорт в CSV формате
  */
 export function exportCSV() {
-  const header = 'Дата;Категория;Описание;Сумма;Кто;Создано\n';
-  const rows = data.expenses.map(e => 
-    `${e.date};${e.category};${e.description};${e.amount};${e.user};${e.createdAt}`
+  const header = 'Дата;Категория;Описание;Сумма;Кто;Постоянный;Создано\n';
+  const rows = data.expenses.map(e =>
+    `${e.date};${e.category};${e.description};${e.amount};${e.user};${e.isFixed ? 'да' : 'нет'};${e.createdAt}`
   ).join('\n');
   return header + rows;
 }
