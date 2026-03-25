@@ -7,6 +7,7 @@ import {
   getFamilySummary, getChartData, exportCSV, flushData,
   getSettings, updateSetting, retagFixedExpenses,
   getExpensesForMonth, toggleExpenseFixed, getMonthName,
+  getCategoryExpenses,
 } from './storage.js';
 import { initReminders, stopReminders } from './reminders.js';
 import { generateChartImage } from './chart.js';
@@ -288,8 +289,8 @@ function parseMonthYear(str) {
   return { month: m, year: y };
 }
 
-// Клавиатура месяца + кнопка "без постоянных"
-function summaryKeyboard(month, year, excludeFixed) {
+// Клавиатура месяца + кнопка "без постоянных" + кнопки категорий
+function summaryKeyboard(month, year, excludeFixed, sortedCats) {
   const prev = month === 1 ? { m: 12, y: year - 1 } : { m: month - 1, y: year };
   const next = month === 12 ? { m: 1, y: year + 1 } : { m: month + 1, y: year };
 
@@ -306,7 +307,25 @@ function summaryKeyboard(month, year, excludeFixed) {
     `sum_fixed:${month}.${year}`
   )];
 
-  return Markup.inlineKeyboard([navRow, toggleRow]);
+  // Кнопки категорий (по 2 в ряд)
+  const catRows = [];
+  for (let i = 0; i < sortedCats.length; i += 2) {
+    const row = [
+      Markup.button.callback(
+        `${getEmoji(sortedCats[i][0])} ${sortedCats[i][0]}`,
+        `cat_detail:${sortedCats[i][0]}.${month}.${year}`
+      )
+    ];
+    if (sortedCats[i + 1]) {
+      row.push(Markup.button.callback(
+        `${getEmoji(sortedCats[i + 1][0])} ${sortedCats[i + 1][0]}`,
+        `cat_detail:${sortedCats[i + 1][0]}.${month}.${year}`
+      ));
+    }
+    catRows.push(row);
+  }
+
+  return Markup.inlineKeyboard([navRow, toggleRow, ...catRows]);
 }
 
 // Клавиатура навигации месяцев для диаграммы
@@ -348,7 +367,8 @@ async function sendMonthlySummary(ctx, month = null, year = null, editMessage = 
   const { excludeFixed } = getSettings();
   const summary = getFamilySummary(month, year, excludeFixed || false);
 
-  const nav = summaryKeyboard(summary.month, summary.year, excludeFixed || false);
+  const sortedCats = Object.entries(summary.byCategory).sort((a, b) => b[1] - a[1]);
+  const nav = summaryKeyboard(summary.month, summary.year, excludeFixed || false, sortedCats);
 
   if (summary.total === 0) {
     const msg = `📭 ${summary.monthName} — записей нет.`;
@@ -361,7 +381,6 @@ async function sendMonthlySummary(ctx, month = null, year = null, editMessage = 
   text += `\n\n`;
 
   text += `*По категориям:*\n`;
-  const sortedCats = Object.entries(summary.byCategory).sort((a, b) => b[1] - a[1]);
   for (const [cat, amount] of sortedCats) {
     text += `${getEmoji(cat)} ${cat}: ${fmt(amount)}\n`;
   }
@@ -372,6 +391,7 @@ async function sendMonthlySummary(ctx, month = null, year = null, editMessage = 
   }
 
   text += `\n💰 *Итого: ${fmt(summary.total)}*`;
+  text += `\n_↓ нажми категорию для детализации_`;
 
   if (editMessage) {
     return ctx.editMessageText(text, { parse_mode: 'Markdown', ...nav });
@@ -569,6 +589,46 @@ async function showMarkFixed(ctx, page = 0, month = null, year = null, editMessa
 }
 
 bot.action('noop', (ctx) => ctx.answerCbQuery());
+
+// ============ ДЕТАЛИЗАЦИЯ ПО КАТЕГОРИИ ============
+
+// cat_detail:Категория.месяц.год
+bot.action(/^cat_detail:(.+)\.(\d+)\.(\d+)$/, async (ctx) => {
+  const category = ctx.match[1];
+  const month = parseInt(ctx.match[2]);
+  const year = parseInt(ctx.match[3]);
+  await ctx.answerCbQuery();
+  await showCategoryDetail(ctx, category, month, year, true);
+});
+
+async function showCategoryDetail(ctx, category, month, year, editMessage = false) {
+  const expenses = getCategoryExpenses(category, month, year);
+  const monthLabel = getMonthName(month, year);
+  const backBtn = Markup.inlineKeyboard([
+    [Markup.button.callback('⬅️ Назад к месяцу', `sum:${month}.${year}`)]
+  ]);
+
+  if (expenses.length === 0) {
+    const msg = `📭 ${getEmoji(category)} ${category} — ${monthLabel}: записей нет.`;
+    if (editMessage) return ctx.editMessageText(msg, backBtn);
+    return ctx.reply(msg, backBtn);
+  }
+
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+
+  let text = `${getEmoji(category)} *${category} — ${monthLabel}*\n\n`;
+
+  for (const exp of expenses) {
+    const who = (exp.user || '?')[0].toUpperCase(); // первая буква имени: У / М
+    const fixed = exp.isFixed ? ' 📌' : '';
+    text += `${exp.date.slice(0, 5)} *${who}*  ${exp.description}: ${fmt(exp.amount)}${fixed}\n`;
+  }
+
+  text += `\n💰 *Итого: ${fmt(total)}*`;
+
+  if (editMessage) return ctx.editMessageText(text, { parse_mode: 'Markdown', ...backBtn });
+  ctx.reply(text, { parse_mode: 'Markdown', ...backBtn });
+}
 
 // Кнопка "📎 Экспорт"
 bot.hears('📎 Экспорт', exportData);

@@ -305,6 +305,21 @@ export function getMonthName(month = null, year = null) {
 }
 
 /**
+ * Все расходы по конкретной категории за месяц
+ */
+export function getCategoryExpenses(category, month = null, year = null) {
+  const now = new Date();
+  const m = month || (now.getMonth() + 1);
+  const y = year || now.getFullYear();
+  return data.expenses
+    .filter(exp => {
+      const [, em, ey] = exp.date.split('.').map(Number);
+      return exp.category === category && em === m && ey === y;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
  * Все расходы за месяц, отсортированные по дате
  */
 export function getExpensesForMonth(month = null, year = null) {
