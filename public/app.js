@@ -852,6 +852,35 @@ function setupEventListeners() {
     URL.revokeObjectURL(url);
   });
 
+  // Import CSV
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const resultEl = document.getElementById('import-result');
+    resultEl.className = '';
+    resultEl.textContent = '⏳ Импортирую...';
+
+    try {
+      const csv = await file.text();
+      const res = await apiJson('POST', '/api/import', { csv });
+      if (res.ok) {
+        resultEl.className = 'success-msg';
+        resultEl.textContent = `✅ Импортировано: ${res.imported}, пропущено дублей: ${res.skipped}`;
+        loadToday();
+      } else {
+        resultEl.className = 'error-msg';
+        resultEl.textContent = '❌ ' + (res.error || 'Ошибка импорта');
+      }
+    } catch {
+      resultEl.className = 'error-msg';
+      resultEl.textContent = '❌ Ошибка чтения файла';
+    }
+
+    // Сброс input чтобы можно было повторно загрузить тот же файл
+    e.target.value = '';
+  });
+
   // Reminder close
   document.getElementById('reminder-close').addEventListener('click', () => {
     document.getElementById('reminder-toast').classList.add('hidden');

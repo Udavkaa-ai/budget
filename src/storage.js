@@ -282,6 +282,52 @@ export function exportCSV() {
   return header + rows;
 }
 
+/**
+ * Импорт из CSV (формат экспорта бота)
+ * Возвращает { imported, skipped } — пропускает дубликаты по (date+category+amount+description)
+ */
+export async function importFromCSV(csvText) {
+  const lines = csvText.replace(/\r/g, '').split('\n').filter(Boolean);
+  // Пропускаем заголовок
+  const dataLines = lines[0].startsWith('Дата') ? lines.slice(1) : lines;
+
+  const existing = new Set(
+    data.expenses.map(e => `${e.date}|${e.category}|${e.amount}|${e.description}`)
+  );
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const line of dataLines) {
+    const parts = line.split(';');
+    if (parts.length < 4) { skipped++; continue; }
+
+    const [date, category, description, amountStr, user = '', fixedStr = 'нет', createdAt = ''] = parts;
+    const amount = parseFloat(amountStr);
+
+    if (!date || !category || isNaN(amount) || amount <= 0) { skipped++; continue; }
+
+    const key = `${date}|${category}|${amount}|${description}`;
+    if (existing.has(key)) { skipped++; continue; }
+
+    existing.add(key);
+    data.expenses.push({
+      id: generateId(),
+      date: date.trim(),
+      category: category.trim(),
+      description: description.trim(),
+      amount,
+      user: user.trim(),
+      isFixed: fixedStr.trim() === 'да',
+      createdAt: createdAt.trim() || new Date().toISOString(),
+    });
+    imported++;
+  }
+
+  if (imported > 0) debouncedSave();
+  return { imported, skipped };
+}
+
 // Helpers
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);

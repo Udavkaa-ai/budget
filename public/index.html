@@ -185,6 +185,13 @@
         <div class="settings-section">
           <div class="settings-title">Данные</div>
           <a id="btn-export" class="btn btn-outline btn-full" href="/api/export" download>📥 Экспорт CSV</a>
+          <div style="margin-top:8px">
+            <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
+              📤 Импорт CSV из бота
+              <input type="file" id="import-file" accept=".csv,text/csv" style="display:none" />
+            </label>
+          </div>
+          <div id="import-result" class="hidden" style="margin-top:8px"></div>
         </div>
 
         <div class="settings-section">

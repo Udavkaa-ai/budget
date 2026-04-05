@@ -16,6 +16,7 @@ import {
   getFamilySummary,
   getChartData,
   exportCSV,
+  importFromCSV,
   getSettings,
   updateSetting,
   toggleExpenseFixed,
@@ -193,6 +194,21 @@ app.get('/api/export', authMiddleware, (req, res) => {
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="expenses-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.send('\uFEFF' + csv); // BOM для Excel
+});
+
+// Импорт CSV
+app.post('/api/import', authMiddleware, async (req, res) => {
+  const { csv } = req.body || {};
+  if (!csv?.trim()) return res.status(400).json({ error: 'Пустой CSV' });
+
+  try {
+    const result = await importFromCSV(csv);
+    io.emit('expense:added', { expenses: [], by: req.user.name });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('Import error:', err);
+    res.status(500).json({ error: 'Ошибка импорта: ' + err.message });
+  }
 });
 
 // ─── Settings Routes ──────────────────────────────────────────────────────────
