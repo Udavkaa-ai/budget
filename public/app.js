@@ -240,7 +240,7 @@ function loadScreen(name) {
     case 'budget': loadBudget(); break;
     case 'summary': loadSummary(); break;
     case 'planning': loadPlanning(); break;
-    case 'chart': loadChart(); break;
+    case 'chart': loadChart(); loadCashflowSection(); break;
     case 'settings': loadSettingsScreen(); break;
   }
 }
@@ -1089,7 +1089,7 @@ function setupEventListeners() {
     const prev = new Date(y, m - 2, 1);
     chartMonth = prev.getMonth() + 1;
     chartYear = prev.getFullYear();
-    loadChart();
+    loadChart(); loadCashflowSection();
   });
   document.getElementById('chart-next').addEventListener('click', () => {
     const now = new Date();
@@ -1098,9 +1098,18 @@ function setupEventListeners() {
     const next = new Date(y, m, 1);
     chartMonth = next.getMonth() + 1;
     chartYear = next.getFullYear();
-    loadChart();
+    loadChart(); loadCashflowSection();
   });
   document.getElementById('chart-exclude-fixed').addEventListener('change', loadChart);
+
+  // Cashflow
+  ['cf-debit','cf-credit','cf-cash'].forEach(id =>
+    document.getElementById(id).addEventListener('input', updateCfTotal)
+  );
+  document.getElementById('btn-cf-add-day').addEventListener('click', () => {
+    document.getElementById('cf-income-days').appendChild(makeCfDayRow('', 0));
+  });
+  document.getElementById('btn-cf-save').addEventListener('click', saveCashflow);
 
   // Add tabs
   document.getElementById('tab-text').addEventListener('click', () => switchAddTab('text'));
@@ -1179,6 +1188,104 @@ function switchAddTab(tab) {
   document.getElementById('tab-form').classList.toggle('active', tab === 'form');
   document.getElementById('add-text-panel').classList.toggle('hidden', tab !== 'text');
   document.getElementById('add-form-panel').classList.toggle('hidden', tab !== 'form');
+}
+
+// ─── CASHFLOW ─────────────────────────────────────────────────────────────────
+
+function cfYm() {
+  const m = chartMonth || (new Date().getMonth() + 1);
+  const y = chartYear || new Date().getFullYear();
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
+function updateCfTotal() {
+  const debit  = parseInt(document.getElementById('cf-debit').value)  || 0;
+  const credit = parseInt(document.getElementById('cf-credit').value) || 0;
+  const cash   = parseInt(document.getElementById('cf-cash').value)   || 0;
+  document.getElementById('cf-total').textContent = fmt(debit + credit + cash);
+}
+
+function renderCfIncomeDays(incomeDays) {
+  const container = document.getElementById('cf-income-days');
+  container.innerHTML = '';
+  for (const [day, amt] of Object.entries(incomeDays)) {
+    container.appendChild(makeCfDayRow(day, amt));
+  }
+}
+
+function makeCfDayRow(day, amt) {
+  const row = document.createElement('div');
+  row.className = 'cf-day-row';
+  row.innerHTML = `
+    <span class="cf-day-label">День</span>
+    <input class="cf-day-num" type="number" value="${day}" min="1" max="31" inputmode="numeric" />
+    <input class="cf-day-amt" type="number" value="${amt || ''}" placeholder="0" inputmode="numeric" />
+    <span class="cf-day-currency">₽</span>
+    <button class="cf-day-remove icon-btn">✕</button>
+  `;
+  row.querySelector('.cf-day-remove').addEventListener('click', () => row.remove());
+  return row;
+}
+
+async function loadCashflowSection() {
+  const ym = cfYm();
+  try {
+    const cf = await apiJson('GET', `/api/cashflow/${ym}`);
+    document.getElementById('cf-debit').value  = cf.debit  || '';
+    document.getElementById('cf-credit').value = cf.credit || '';
+    document.getElementById('cf-cash').value   = cf.cash   || '';
+    updateCfTotal();
+    renderCfIncomeDays(cf.incomeDays || { '10': 0, '25': 0 });
+    await loadCfChart(ym);
+  } catch {
+    renderCfIncomeDays({ '10': 0, '25': 0 });
+  }
+}
+
+async function loadCfChart(ym) {
+  const container = document.getElementById('cf-chart-container');
+  container.innerHTML = '<div class="loading">Загрузка кэшфлоу</div>';
+  try {
+    const res = await api('GET', `/api/cashflow-chart/${ym}`);
+    if (!res.ok) {
+      const err = await res.json();
+      container.innerHTML = `<div class="empty-state">${err.error}</div>`;
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    container.innerHTML = `<img src="${url}" alt="Кэшфлоу" style="width:100%;border-radius:8px" />`;
+  } catch {
+    container.innerHTML = '<div class="empty-state">Ошибка загрузки графика</div>';
+  }
+}
+
+async function saveCashflow() {
+  const incomeDays = {};
+  document.querySelectorAll('.cf-day-row').forEach(row => {
+    const day = row.querySelector('.cf-day-num').value.trim();
+    const amt = parseInt(row.querySelector('.cf-day-amt').value) || 0;
+    if (day && amt > 0) incomeDays[day] = amt;
+  });
+
+  const body = {
+    debit:  parseInt(document.getElementById('cf-debit').value)  || 0,
+    credit: parseInt(document.getElementById('cf-credit').value) || 0,
+    cash:   parseInt(document.getElementById('cf-cash').value)   || 0,
+    incomeDays,
+  };
+
+  const btn = document.getElementById('btn-cf-save');
+  btn.disabled = true; btn.textContent = 'Сохраняю...';
+  try {
+    await apiJson('PUT', `/api/cashflow/${cfYm()}`, body);
+    showToastSuccess('Кэшфлоу сохранён');
+    await loadCfChart(cfYm());
+  } catch {
+    showToastError('Ошибка сохранения');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Сохранить';
+  }
 }
 
 // ─── PULL TO REFRESH ──────────────────────────────────────────────────────────

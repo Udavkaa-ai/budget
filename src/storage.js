@@ -472,6 +472,33 @@ export async function saveBudgetPlan(plan) {
   debouncedSave();
 }
 
+// ─── Cashflow ─────────────────────────────────────────────────────────────────
+
+export function getCashflow(ym) {
+  return data.settings?.cashflow?.[ym] || {};
+}
+
+export async function saveCashflow(ym, cfData) {
+  data.settings = data.settings || {};
+  data.settings.cashflow = data.settings.cashflow || {};
+  data.settings.cashflow[ym] = cfData;
+  debouncedSave();
+}
+
+/** Суммарные расходы за каждый день месяца: { '01.04.2026': 5200, ... } */
+export function getMonthDailyTotals(month, year) {
+  const result = {};
+  for (const exp of data.expenses) {
+    const parts = exp.date.split('.');
+    if (parts.length !== 3) continue;
+    const [d, m, y] = parts.map(Number);
+    if (m === month && y === year) {
+      result[exp.date] = (result[exp.date] || 0) + exp.amount;
+    }
+  }
+  return result;
+}
+
 /**
  * Принудительно сохранить данные (вызывается при завершении из index.js)
  */

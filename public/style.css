@@ -871,6 +871,70 @@ html, body {
   opacity: 0.75;
 }
 
+/* ═══════════════════════════════════════════ CASHFLOW ══ */
+.cf-balance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cf-balance-grid .form-group label {
+  font-size: 11px;
+}
+
+.cf-balance-grid input {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+  text-align: right;
+  color: var(--text);
+}
+.cf-balance-grid input:focus { outline: none; border-color: var(--primary); }
+
+.cf-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.cf-day-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cf-day-label { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+
+.cf-day-num {
+  width: 52px;
+  padding: 7px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: center;
+}
+
+.cf-day-amt {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: right;
+}
+
+.cf-day-num:focus, .cf-day-amt:focus { outline: none; border-color: var(--primary); }
+.cf-day-currency { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+
 /* ═══════════════════════════════════════════ PULL TO REFRESH ══ */
 .ptr-indicator {
   display: flex;

@@ -31,6 +31,9 @@ import {
   deleteGoal,
   getBudgetPlan,
   saveBudgetPlan,
+  getCashflow,
+  saveCashflow,
+  getMonthDailyTotals,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -292,6 +295,96 @@ app.put('/api/budget-plan', authMiddleware, async (req, res) => {
   await saveBudgetPlan(req.body);
   io.emit('budget-plan:updated');
   res.json({ ok: true });
+});
+
+// ─── Cashflow Routes ──────────────────────────────────────────────────────────
+
+app.get('/api/cashflow/:ym', authMiddleware, (req, res) => {
+  res.json(getCashflow(req.params.ym));
+});
+
+app.put('/api/cashflow/:ym', authMiddleware, async (req, res) => {
+  await saveCashflow(req.params.ym, req.body);
+  res.json({ ok: true });
+});
+
+app.get('/api/cashflow-chart/:ym', authMiddleware, async (req, res) => {
+  const { ym } = req.params;
+  const [yearStr, monthStr] = ym.split('-');
+  const year = parseInt(yearStr), month = parseInt(monthStr);
+
+  const cf = getCashflow(ym);
+  const startBalance = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
+  if (!startBalance && !Object.keys(cf.incomeDays || {}).length) {
+    return res.status(400).json({ error: 'Нет данных баланса. Заполните поля и сохраните.' });
+  }
+
+  const dailyTotals = getMonthDailyTotals(month, year);
+  const incomeDays = cf.incomeDays || {};
+
+  const now = new Date();
+  const isCurrentMonth = now.getMonth() + 1 === month && now.getFullYear() === year;
+  const lastDay = isCurrentMonth
+    ? now.getDate() - 1
+    : new Date(year, month, 0).getDate();
+
+  if (lastDay < 1) {
+    return res.status(400).json({ error: 'Нет завершённых дней для отображения' });
+  }
+
+  const labels = [], balances = [];
+  let balance = startBalance;
+
+  for (let d = 1; d <= lastDay; d++) {
+    const dd = String(d).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+    const dayKey = `${dd}.${mm}.${year}`;
+
+    if (incomeDays[String(d)]) balance += incomeDays[String(d)];
+    balance -= (dailyTotals[dayKey] || 0);
+
+    labels.push(String(d));
+    balances.push(Math.round(balance));
+  }
+
+  const minBal = Math.min(...balances);
+  const maxBal = Math.max(...balances);
+
+  const chartConfig = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: balances,
+        borderColor: minBal < 0 ? '#ef4444' : '#4f46e5',
+        backgroundColor: minBal < 0 ? 'rgba(239,68,68,0.08)' : 'rgba(79,70,229,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: labels.length > 20 ? 2 : 4,
+        pointBackgroundColor: balances.map(v => v < 0 ? '#ef4444' : '#4f46e5'),
+      }],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          ticks: { callback: 'function(v){return (v/1000).toFixed(0)+"к ₽";}' },
+          suggestedMin: minBal < 0 ? minBal * 1.1 : 0,
+        },
+      },
+    },
+  };
+
+  const url = `https://quickchart.io/chart?w=700&h=280&bkg=white&c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
+  try {
+    const imgRes = await fetch(url);
+    if (!imgRes.ok) throw new Error('QuickChart error');
+    res.set('Content-Type', 'image/png').set('Cache-Control', 'no-cache');
+    res.send(Buffer.from(await imgRes.arrayBuffer()));
+  } catch {
+    res.status(500).json({ error: 'Ошибка генерации графика' });
+  }
 });
 
 // ─── AI Parse Route ───────────────────────────────────────────────────────────
