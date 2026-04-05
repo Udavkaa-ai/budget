@@ -256,18 +256,33 @@ io.on('connection', (socket) => {
 
 let lastReminderDate = null;
 
+function getMoscowTime() {
+  const now = new Date();
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Moscow',
+      hour: 'numeric', minute: 'numeric',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour12: false,
+    }).formatToParts(now).map(p => [p.type, p.value])
+  );
+  return {
+    hours: parseInt(parts.hour, 10),
+    minutes: parseInt(parts.minute, 10),
+    today: `${parts.year}-${parts.month}-${parts.day}`,
+  };
+}
+
 function checkReminder() {
   if (!config.remindersEnabled) return;
 
-  const now = new Date();
-  const msk = new Date(now.getTime() + 3 * 60 * 60 * 1000);
-  const hours = msk.getUTCHours();
-  const minutes = msk.getUTCMinutes();
-  const today = msk.toISOString().slice(0, 10);
+  const { hours, minutes, today } = getMoscowTime();
 
+  // Окно ±1 минута на случай небольших задержек сервера
   if (
     hours === config.reminderHour &&
-    minutes === config.reminderMinute &&
+    minutes >= config.reminderMinute &&
+    minutes <= config.reminderMinute + 1 &&
     lastReminderDate !== today
   ) {
     lastReminderDate = today;

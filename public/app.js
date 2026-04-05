@@ -88,7 +88,11 @@ async function api(method, path, body) {
 
 async function apiJson(method, path, body) {
   const res = await api(method, path, body);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    return { error: 'Ошибка сервера', _status: res.status };
+  }
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -147,6 +151,7 @@ async function loginSubmit(e) {
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 
 function initSocket() {
+  if (socket) { socket.disconnect(); socket = null; }
   socket = io({ auth: { token } });
 
   socket.on('expense:added', ({ by }) => {
@@ -213,6 +218,7 @@ function loadScreen(name) {
   switch (name) {
     case 'today': loadToday(); break;
     case 'family': loadFamily(); break;
+    case 'add': resetAddForm(); break;
     case 'summary': loadSummary(); break;
     case 'chart': loadChart(); break;
     case 'settings': loadSettingsScreen(); break;
@@ -222,24 +228,28 @@ function loadScreen(name) {
 // ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
 
 async function loadToday() {
-  const [myData, familyData] = await Promise.all([
-    apiJson('GET', '/api/expenses/today'),
-    apiJson('GET', '/api/expenses/family'),
-  ]);
+  try {
+    const [myData, familyData] = await Promise.all([
+      apiJson('GET', '/api/expenses/today'),
+      apiJson('GET', '/api/expenses/family'),
+    ]);
 
-  document.getElementById('today-my-total').textContent = fmt(myData.total);
-  document.getElementById('today-family-total').textContent = fmt(familyData.total);
+    document.getElementById('today-my-total').textContent = fmt(myData.total || 0);
+    document.getElementById('today-family-total').textContent = fmt(familyData.total || 0);
 
-  const list = document.getElementById('today-expenses-list');
-  list.innerHTML = '';
+    const list = document.getElementById('today-expenses-list');
+    list.innerHTML = '';
 
-  if (myData.expenses.length === 0) {
-    list.innerHTML = '<div class="empty-state">Нет ваших расходов за сегодня</div>';
-    return;
-  }
+    if (!myData.expenses || myData.expenses.length === 0) {
+      list.innerHTML = '<div class="empty-state">Нет ваших расходов за сегодня</div>';
+      return;
+    }
 
-  for (const exp of [...myData.expenses].reverse()) {
-    list.appendChild(buildExpenseItem(exp, true));
+    for (const exp of [...myData.expenses].reverse()) {
+      list.appendChild(buildExpenseItem(exp, true));
+    }
+  } catch {
+    showToastError('Ошибка загрузки данных');
   }
 }
 
@@ -254,36 +264,40 @@ async function loadFamily() {
   const fd = new Date(familyDate); fd.setHours(0,0,0,0);
   document.getElementById('family-next').disabled = fd >= today;
 
-  const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
+  try {
+    const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
 
-  // Total bar
-  const totalBar = document.getElementById('family-total-bar');
-  totalBar.innerHTML = `<span>Итого за день</span><span class="total-amount">${fmt(data.total)}</span>`;
+    // Total bar
+    const totalBar = document.getElementById('family-total-bar');
+    totalBar.innerHTML = `<span>Итого за день</span><span class="total-amount">${fmt(data.total || 0)}</span>`;
 
-  const list = document.getElementById('family-expenses-list');
-  list.innerHTML = '';
+    const list = document.getElementById('family-expenses-list');
+    list.innerHTML = '';
 
-  if (data.total === 0) {
-    list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
-    return;
-  }
-
-  for (const [user, udata] of Object.entries(data.byUser)) {
-    const section = document.createElement('div');
-    section.className = 'user-section';
-    section.innerHTML = `
-      <div class="user-section-header">
-        <span class="user-section-name">${user}</span>
-        <span class="user-section-total">${fmt(udata.total)}</span>
-      </div>
-    `;
-    const expList = document.createElement('div');
-    expList.className = 'expenses-list';
-    for (const exp of udata.expenses) {
-      expList.appendChild(buildExpenseItem(exp, user === currentUser.name));
+    if (!data.byUser || data.total === 0) {
+      list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
+      return;
     }
-    section.appendChild(expList);
-    list.appendChild(section);
+
+    for (const [user, udata] of Object.entries(data.byUser)) {
+      const section = document.createElement('div');
+      section.className = 'user-section';
+      section.innerHTML = `
+        <div class="user-section-header">
+          <span class="user-section-name">${user}</span>
+          <span class="user-section-total">${fmt(udata.total)}</span>
+        </div>
+      `;
+      const expList = document.createElement('div');
+      expList.className = 'expenses-list';
+      for (const exp of udata.expenses) {
+        expList.appendChild(buildExpenseItem(exp, user === currentUser.name));
+      }
+      section.appendChild(expList);
+      list.appendChild(section);
+    }
+  } catch {
+    showToastError('Ошибка загрузки данных');
   }
 }
 
@@ -305,6 +319,7 @@ async function loadSummary() {
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
 
+  try {
   const data = await apiJson('GET', `/api/summary?${params}`);
 
   // Total bar
@@ -349,6 +364,9 @@ async function loadSummary() {
     item.addEventListener('click', () => loadCategoryDetail(cat, summaryMonth, summaryYear));
     catList.appendChild(item);
   }
+  } catch {
+    showToastError('Ошибка загрузки статистики');
+  }
 }
 
 async function loadCategoryDetail(cat, month, year) {
@@ -365,17 +383,23 @@ async function loadCategoryDetail(cat, month, year) {
   detail.classList.remove('hidden');
   document.getElementById('category-detail-title').textContent = `${CATEGORY_ICONS[cat] || ''} ${cat}`;
 
-  const expenses = await apiJson('GET', `/api/expenses/category/${encodeURIComponent(cat)}?${params}`);
   const listEl = document.getElementById('category-detail-list');
-  listEl.innerHTML = '';
+  listEl.innerHTML = '<div class="loading">Загрузка</div>';
 
-  if (expenses.length === 0) {
-    listEl.innerHTML = '<div class="empty-state">Нет расходов</div>';
-    return;
-  }
+  try {
+    const expenses = await apiJson('GET', `/api/expenses/category/${encodeURIComponent(cat)}?${params}`);
+    listEl.innerHTML = '';
 
-  for (const exp of [...expenses].reverse()) {
-    listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+    if (!Array.isArray(expenses) || expenses.length === 0) {
+      listEl.innerHTML = '<div class="empty-state">Нет расходов</div>';
+      return;
+    }
+
+    for (const exp of [...expenses].reverse()) {
+      listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+    }
+  } catch {
+    listEl.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
   }
 }
 
@@ -415,25 +439,29 @@ async function loadChart() {
 // ─── SETTINGS SCREEN ──────────────────────────────────────────────────────────
 
 async function loadSettingsScreen() {
-  const data = await apiJson('GET', '/api/settings');
-  appSettings = data;
+  try {
+    const data = await apiJson('GET', '/api/settings');
+    appSettings = data;
 
-  // Fixed expenses list
-  const fixedList = document.getElementById('fixed-list') || document.getElementById('fixed-expenses-list');
-  if (data.fixedExpensesList && fixedList) {
-    fixedList.innerHTML = data.fixedExpensesList.map(item => `
-      <div class="fixed-item">
-        <span>${item.name}</span>
-        <span class="fixed-item-amount">${fmt(item.amount)}</span>
-      </div>
-    `).join('');
+    // Fixed expenses list
+    const fixedList = document.getElementById('fixed-expenses-list');
+    if (data.fixedExpensesList && fixedList) {
+      fixedList.innerHTML = data.fixedExpensesList.map(item => `
+        <div class="fixed-item">
+          <span>${item.name}</span>
+          <span class="fixed-item-amount">${fmt(item.amount)}</span>
+        </div>
+      `).join('');
+    }
+
+    // Info
+    const infoPlanned = document.getElementById('info-planned');
+    const infoFixed = document.getElementById('info-fixed');
+    if (infoPlanned) infoPlanned.textContent = fmt(data.plannedMonthly || 0);
+    if (infoFixed) infoFixed.textContent = fmt(data.plannedFixed || 0);
+  } catch {
+    showToastError('Ошибка загрузки настроек');
   }
-
-  // Info
-  const infoPlanned = document.getElementById('info-planned');
-  const infoFixed = document.getElementById('info-fixed');
-  if (infoPlanned) infoPlanned.textContent = fmt(data.plannedMonthly || 0);
-  if (infoFixed) infoFixed.textContent = fmt(data.plannedFixed || 0);
 }
 
 async function loadSettings() {
@@ -464,8 +492,8 @@ function selectCategory(cat) {
 
 async function submitFormExpense() {
   if (!selectedCategory) { showToastError('Выберите категорию'); return; }
-  const amount = parseInt(document.getElementById('form-amount').value);
-  if (!amount || amount <= 0) { showToastError('Введите сумму'); return; }
+  const amount = parseInt(document.getElementById('form-amount').value, 10);
+  if (isNaN(amount) || amount <= 0) { showToastError('Введите сумму'); return; }
   const description = document.getElementById('form-description').value.trim() || selectedCategory;
   const dateInput = document.getElementById('form-date').value;
 
@@ -850,4 +878,11 @@ if (token && currentUser) {
 } else {
   showLogin();
   document.getElementById('login-form').addEventListener('submit', loginSubmit);
+}
+
+// ─── Service Worker ───────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(err =>
+    console.warn('Service Worker registration failed:', err)
+  );
 }
