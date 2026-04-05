@@ -40,6 +40,11 @@ let budgetFilter = 'all';
 let summaryMonth = null, summaryYear = null;
 let chartMonth = null, chartYear = null;
 
+// Request generation counters — отбрасываем устаревшие ответы
+let budgetGen = 0;
+let summaryGen = 0;
+let chartGen = 0;
+
 // Add form state
 let selectedCategory = null;
 
@@ -243,6 +248,7 @@ function loadScreen(name) {
 // ─── BUDGET SCREEN ────────────────────────────────────────────────────────────
 
 async function loadBudget() {
+  const gen = ++budgetGen;
   const dateStr = formatDate(budgetDate);
   document.getElementById('budget-date-label').textContent = dateLabel(budgetDate);
 
@@ -256,6 +262,7 @@ async function loadBudget() {
 
   try {
     const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
+    if (gen !== budgetGen) return; // устаревший ответ — выбрасываем
 
     const byUser = data.byUser || {};
     const total = data.total || 0;
@@ -338,6 +345,7 @@ function closeSheet() {
 // ─── SUMMARY SCREEN ───────────────────────────────────────────────────────────
 
 async function loadSummary() {
+  const gen = ++summaryGen;
   const excludeFixed = document.getElementById('summary-exclude-fixed').checked;
   const params = new URLSearchParams({
     ...(summaryMonth ? { month: summaryMonth } : {}),
@@ -355,6 +363,7 @@ async function loadSummary() {
 
   try {
     const data = await apiJson('GET', `/api/summary?${params}`);
+    if (gen !== summaryGen) return;
 
     // Total bar
     const totalBar = document.getElementById('summary-total-bar');
@@ -442,6 +451,7 @@ async function loadCategoryDetail(cat, month, year) {
 let chartImgUrl = null;
 
 async function loadChart() {
+  const gen = ++chartGen;
   const excludeFixed = document.getElementById('chart-exclude-fixed').checked;
   const params = new URLSearchParams({
     ...(chartMonth ? { month: chartMonth } : {}),
@@ -456,6 +466,7 @@ async function loadChart() {
 
   try {
     const res = await api('GET', `/api/chart?${params}`);
+    if (gen !== chartGen) return;
     if (!res.ok) {
       const err = await res.json();
       container.innerHTML = `<div class="empty-state">${err.error || 'Нет данных'}</div>`;
