@@ -143,14 +143,29 @@
 
       <!-- Breakdown -->
       <div class="card" id="plan-breakdown-card">
-        <div class="settings-title">Распределение — <span id="plan-month-label"></span></div>
+        <div class="settings-title">Бюджет по категориям — <span id="plan-month-label"></span></div>
         <div class="plan-table-header">
+          <span></span>
           <span>Категория</span>
-          <span>План</span>
+          <span>Бюджет ₽</span>
           <span>Факт</span>
-          <span>Разница</span>
+          <span>Остаток</span>
         </div>
         <div id="plan-table"></div>
+        <div class="plan-footer">
+          <div class="plan-footer-row">
+            <span class="plan-footer-label">Итого запланировано</span>
+            <span id="plan-total-planned">—</span>
+          </div>
+          <div class="plan-footer-row">
+            <span class="plan-footer-label">Потрачено в этом месяце</span>
+            <span id="plan-total-actual">—</span>
+          </div>
+          <div class="plan-footer-row plan-footer-savings">
+            <span class="plan-footer-label">Остаток / накопления</span>
+            <span id="plan-savings" class="plan-savings-amount">—</span>
+          </div>
+        </div>
       </div>
 
     </div>

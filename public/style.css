@@ -944,36 +944,83 @@ html, body {
 /* Plan breakdown table */
 .plan-table-header {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
-  gap: 4px 8px;
-  padding: 6px 4px 8px;
+  grid-template-columns: 26px 1fr 68px 58px 58px;
+  gap: 4px 6px;
+  padding: 6px 2px 8px;
   font-size: 10px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   border-bottom: 1px solid var(--border);
+  text-align: right;
 }
+.plan-table-header span:nth-child(2) { text-align: left; }
 
 .plan-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto auto auto;
+  grid-template-columns: 26px 1fr 68px 58px 58px;
   align-items: center;
-  gap: 4px 8px;
-  padding: 9px 4px;
+  gap: 4px 6px;
+  padding: 8px 2px;
   border-bottom: 1px solid var(--bg);
 }
 
-.plan-cat-icon { font-size: 20px; text-align: center; }
+.plan-cat-icon { font-size: 18px; text-align: center; }
+.plan-cat-name { font-size: 13px; font-weight: 500; }
 
-.plan-cat-info { display: flex; flex-direction: column; min-width: 0; }
-.plan-cat-name { font-size: 14px; font-weight: 500; }
-.plan-pct { font-size: 11px; color: var(--text-muted); }
+.plan-budget-input {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: right;
+  color: var(--text);
+  background: var(--bg);
+}
+.plan-budget-input:focus { outline: none; border-color: var(--primary); background: white; }
 
-.plan-planned { font-size: 13px; font-weight: 600; text-align: right; white-space: nowrap; }
 .plan-actual { font-size: 12px; color: var(--text-muted); text-align: right; white-space: nowrap; }
 
 .plan-diff { font-size: 11px; font-weight: 700; text-align: right; white-space: nowrap; }
 .plan-diff-ok { color: var(--accent); }
 .plan-diff-over { color: var(--danger); }
 .plan-diff-na { color: var(--text-muted); }
+
+/* Plan footer */
+.plan-footer {
+  margin-top: 12px;
+  border-top: 2px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.plan-footer-label { color: var(--text-muted); }
+
+.plan-footer-savings {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.plan-footer-savings .plan-footer-label {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.plan-savings-amount {
+  font-size: 20px;
+  font-weight: 800;
+}

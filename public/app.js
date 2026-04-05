@@ -3,20 +3,16 @@
 // ════════════════════════════════════════════════════════════════
 
 const PLAN_CATEGORIES = [
-  { key: 'Продукты',    icon: '🛒', pct: 15 },
-  { key: 'Постоянные',  icon: '📌', pct: 17, noActual: true },
-  { key: 'Инвестиции',  icon: '📈', pct: 15, noActual: true },
-  { key: 'Дети',        icon: '👶', pct:  9 },
-  { key: 'Подушка',     icon: '🛡', pct:  7, noActual: true },
-  { key: 'Цели',        icon: '🎯', pct:  7, noActual: true },
-  { key: 'Транспорт',   icon: '🚇', pct:  6 },
-  { key: 'Медицина',    icon: '💊', pct:  4 },
-  { key: 'Кафе',        icon: '🍽', pct:  4 },
-  { key: 'Одежда',      icon: '👗', pct:  4 },
-  { key: 'Прочее',      icon: '❓', pct:  4 },
-  { key: 'Развлечения', icon: '🎮', pct:  3 },
-  { key: 'Дом',         icon: '🏠', pct:  3 },
-  { key: 'Связь',       icon: '📱', pct:  2 },
+  { key: 'Продукты',    icon: '🛒' },
+  { key: 'Дом',         icon: '🏠' },
+  { key: 'Дети',        icon: '👶' },
+  { key: 'Медицина',    icon: '💊' },
+  { key: 'Транспорт',   icon: '🚇' },
+  { key: 'Кафе',        icon: '🍽' },
+  { key: 'Одежда',      icon: '👗' },
+  { key: 'Развлечения', icon: '🎮' },
+  { key: 'Прочее',      icon: '❓' },
+  { key: 'Связь',       icon: '📱' },
 ];
 
 const CATEGORY_ICONS = {
@@ -488,6 +484,7 @@ async function loadPlanning() {
     ]);
 
     const incomes = plan.incomes || {};
+    const categoryBudgets = plan.categoryBudgets || {};
     planPartnerName = (users || []).find(u => u.name !== currentUser.name)?.name || 'Партнёр';
 
     document.getElementById('plan-label-me').textContent = currentUser.name;
@@ -498,33 +495,43 @@ async function loadPlanning() {
     document.getElementById('plan-month-label').textContent = getMonthName();
 
     planActualByCategory = summaryData.byCategory || {};
-    const total = updatePlanTotal();
-    renderPlanBreakdown(total, planActualByCategory);
+    renderPlanBreakdown(categoryBudgets);
+    updatePlanTotals();
   } catch {
     showToastError('Ошибка загрузки планирования');
   }
 }
 
-function updatePlanTotal() {
-  const me = parseInt(document.getElementById('plan-income-me').value) || 0;
-  const partner = parseInt(document.getElementById('plan-income-partner').value) || 0;
-  const total = me + partner;
-  document.getElementById('plan-income-total').textContent = fmt(total);
-  return total;
+function updatePlanTotals() {
+  const myIncome = parseInt(document.getElementById('plan-income-me').value) || 0;
+  const partnerIncome = parseInt(document.getElementById('plan-income-partner').value) || 0;
+  const totalIncome = myIncome + partnerIncome;
+  document.getElementById('plan-income-total').textContent = fmt(totalIncome);
+
+  let totalPlanned = 0;
+  document.querySelectorAll('.plan-budget-input').forEach(inp => {
+    totalPlanned += parseInt(inp.value) || 0;
+  });
+
+  const totalActual = Object.values(planActualByCategory).reduce((s, v) => s + v, 0);
+  const savings = totalIncome - totalPlanned;
+
+  document.getElementById('plan-total-planned').textContent = fmt(totalPlanned);
+  document.getElementById('plan-total-actual').textContent = fmt(totalActual);
+
+  const savingsEl = document.getElementById('plan-savings');
+  savingsEl.textContent = fmt(savings);
+  savingsEl.className = 'plan-savings-amount ' + (savings >= 0 ? 'plan-diff-ok' : 'plan-diff-over');
 }
 
-function renderPlanBreakdown(totalIncome, actualByCategory) {
+function renderPlanBreakdown(categoryBudgets) {
   const table = document.getElementById('plan-table');
-  if (!totalIncome) {
-    table.innerHTML = '<div class="empty-state">Введите доходы для расчёта бюджета</div>';
-    return;
-  }
-
   table.innerHTML = '';
+
   for (const cat of PLAN_CATEGORIES) {
-    const planned = Math.round(totalIncome * cat.pct / 100);
-    const actual = cat.noActual ? null : (actualByCategory[cat.key] || 0);
-    const diff = actual !== null ? planned - actual : null;
+    const budgeted = categoryBudgets[cat.key] || 0;
+    const actual = planActualByCategory[cat.key] || 0;
+    const diff = budgeted > 0 ? budgeted - actual : null;
 
     const row = document.createElement('div');
     row.className = 'plan-row';
@@ -538,19 +545,24 @@ function renderPlanBreakdown(totalIncome, actualByCategory) {
 
     row.innerHTML = `
       <span class="plan-cat-icon">${cat.icon}</span>
-      <div class="plan-cat-info">
-        <span class="plan-cat-name">${cat.key}</span>
-        <span class="plan-pct">${cat.pct}%</span>
-      </div>
-      <span class="plan-planned">${fmt(planned)}</span>
-      <span class="plan-actual">${actual !== null ? fmt(actual) : '—'}</span>
+      <span class="plan-cat-name">${cat.key}</span>
+      <input class="plan-budget-input" type="number" data-cat="${cat.key}"
+             value="${budgeted || ''}" placeholder="0" inputmode="numeric" />
+      <span class="plan-actual">${fmt(actual)}</span>
       ${diffHtml}
     `;
+    row.querySelector('input').addEventListener('input', updatePlanTotals);
     table.appendChild(row);
   }
 }
 
 async function savePlan() {
+  const categoryBudgets = {};
+  document.querySelectorAll('.plan-budget-input').forEach(inp => {
+    const val = parseInt(inp.value) || 0;
+    if (val > 0) categoryBudgets[inp.dataset.cat] = val;
+  });
+
   const incomes = {
     [currentUser.name]: parseInt(document.getElementById('plan-income-me').value) || 0,
     [planPartnerName]: parseInt(document.getElementById('plan-income-partner').value) || 0,
@@ -561,10 +573,8 @@ async function savePlan() {
   btn.textContent = 'Сохраняю...';
 
   try {
-    await apiJson('PUT', '/api/budget-plan', { incomes });
+    await apiJson('PUT', '/api/budget-plan', { incomes, categoryBudgets });
     showToastSuccess('Бюджет сохранён');
-    const total = (incomes[currentUser.name] || 0) + (incomes[planPartnerName] || 0);
-    renderPlanBreakdown(total, planActualByCategory);
   } catch {
     showToastError('Ошибка сохранения');
   } finally {
@@ -1026,12 +1036,8 @@ function setupEventListeners() {
   });
 
   // Planning
-  document.getElementById('plan-income-me').addEventListener('input', () => {
-    renderPlanBreakdown(updatePlanTotal(), planActualByCategory);
-  });
-  document.getElementById('plan-income-partner').addEventListener('input', () => {
-    renderPlanBreakdown(updatePlanTotal(), planActualByCategory);
-  });
+  document.getElementById('plan-income-me').addEventListener('input', updatePlanTotals);
+  document.getElementById('plan-income-partner').addEventListener('input', updatePlanTotals);
   document.getElementById('btn-save-plan').addEventListener('click', savePlan);
 
   // Summary navigation
