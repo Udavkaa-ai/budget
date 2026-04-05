@@ -57,12 +57,12 @@ export const config = {
     {
       login: process.env.USER1_LOGIN || 'user1',
       password: process.env.USER1_PASSWORD || 'pass1',
-      name: process.env.USER1_NAME || 'Муж',
+      name: process.env.USER1_NAME || 'Удав',
     },
     {
       login: process.env.USER2_LOGIN || 'user2',
       password: process.env.USER2_PASSWORD || 'pass2',
-      name: process.env.USER2_NAME || 'Жена',
+      name: process.env.USER2_NAME || 'Марина',
     },
   ],
 };
