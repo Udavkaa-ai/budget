@@ -332,6 +332,7 @@ function openSheet() {
 }
 
 function closeSheet() {
+  if (recognition && isRecording) recognition.stop();
   document.getElementById('add-sheet').classList.remove('open');
   document.getElementById('sheet-overlay').classList.add('hidden');
   document.body.style.overflow = '';
@@ -812,6 +813,104 @@ async function deleteExpenseUI(id, itemEl) {
   }
 }
 
+// ─── VOICE INPUT ──────────────────────────────────────────────────────────────
+
+let recognition = null;
+let isRecording = false;
+
+function initVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return false;
+  recognition = new SR();
+  recognition.lang = 'ru-RU';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    const transcript = Array.from(event.results).map(r => r[0].transcript).join('');
+    document.getElementById('expense-text').value = transcript;
+  };
+
+  recognition.onend = () => {
+    isRecording = false;
+    setVoiceBtn(false);
+    const text = document.getElementById('expense-text').value.trim();
+    if (text) parseText(); // auto-parse after voice
+  };
+
+  recognition.onerror = (event) => {
+    isRecording = false;
+    setVoiceBtn(false);
+    if (event.error !== 'no-speech') showToastError('Ошибка микрофона: ' + event.error);
+  };
+
+  return true;
+}
+
+function setVoiceBtn(recording) {
+  const btn = document.getElementById('btn-voice');
+  if (!btn) return;
+  btn.textContent = recording ? '🔴 Слушаю...' : '🎤 Голос';
+  btn.classList.toggle('recording', recording);
+}
+
+function toggleVoice() {
+  if (!recognition && !initVoice()) {
+    showToastError('Голосовой ввод не поддерживается в этом браузере');
+    return;
+  }
+  if (isRecording) {
+    recognition.stop();
+  } else {
+    isRecording = true;
+    setVoiceBtn(true);
+    document.getElementById('expense-text').value = '';
+    document.getElementById('parse-result').classList.add('hidden');
+    recognition.start();
+  }
+}
+
+// ─── PHOTO PARSING ────────────────────────────────────────────────────────────
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handlePhotoInput(file) {
+  if (!file) return;
+  const btn = document.getElementById('btn-photo');
+  const resultEl = document.getElementById('parse-result');
+  resultEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = '⏳ Читаю...';
+
+  try {
+    const base64 = await fileToBase64(file);
+    const data = await apiJson('POST', '/api/parse-image', {
+      base64,
+      mimeType: file.type || 'image/jpeg',
+    });
+    if (data.error) { showToastError(data.error); return; }
+    parsedExpenses = data.expenses || [];
+    if (parsedExpenses.length === 0) {
+      showToastError('Не удалось распознать расходы на фото');
+      return;
+    }
+    renderParseResult(parsedExpenses);
+    resultEl.classList.remove('hidden');
+  } catch {
+    showToastError('Ошибка обработки изображения');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📷 Фото / чек';
+  }
+}
+
 // ─── TOASTS ───────────────────────────────────────────────────────────────────
 
 let toastTimer = null;
@@ -893,6 +992,18 @@ function setupEventListeners() {
   // Sheet close
   document.getElementById('sheet-close').addEventListener('click', closeSheet);
   document.getElementById('sheet-overlay').addEventListener('click', closeSheet);
+
+  // Voice
+  document.getElementById('btn-voice').addEventListener('click', toggleVoice);
+
+  // Photo
+  document.getElementById('btn-photo').addEventListener('click', () => {
+    document.getElementById('photo-input').click();
+  });
+  document.getElementById('photo-input').addEventListener('change', (e) => {
+    handlePhotoInput(e.target.files[0]);
+    e.target.value = '';
+  });
 
   // Filter pills
   document.querySelectorAll('.pill').forEach(pill => {

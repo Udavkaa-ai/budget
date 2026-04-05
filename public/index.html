@@ -234,6 +234,11 @@
         <div class="hint-text">Напишите расходы в свободной форме, AI разберёт их автоматически</div>
         <textarea id="expense-text" rows="4" placeholder="Пример: продукты 2300, вчера такси 450, кофе 180"></textarea>
         <button id="btn-parse" class="btn btn-primary btn-full">🤖 Разобрать</button>
+        <div class="quick-input-btns">
+          <button id="btn-voice" class="btn btn-outline">🎤 Голос</button>
+          <button id="btn-photo" class="btn btn-outline">📷 Фото / чек</button>
+          <input type="file" id="photo-input" accept="image/*" style="display:none" />
+        </div>
         <div id="parse-result" class="parse-result hidden"></div>
       </div>
 
