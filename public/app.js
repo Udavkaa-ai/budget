@@ -994,6 +994,7 @@ async function initApp() {
   setupEventListeners();
 
   await loadSettings();
+  initPullToRefresh();
   navigate('budget');
 }
 
@@ -1178,6 +1179,55 @@ function switchAddTab(tab) {
   document.getElementById('tab-form').classList.toggle('active', tab === 'form');
   document.getElementById('add-text-panel').classList.toggle('hidden', tab !== 'text');
   document.getElementById('add-form-panel').classList.toggle('hidden', tab !== 'form');
+}
+
+// ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
+
+function initPullToRefresh() {
+  const content = document.querySelector('.main-content');
+  const indicator = document.getElementById('ptr-indicator');
+  const THRESHOLD = 64;
+  let startY = 0;
+  let pulling = false;
+
+  content.addEventListener('touchstart', (e) => {
+    if (content.scrollTop === 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const delta = e.touches[0].clientY - startY;
+    if (delta <= 0) { pulling = false; return; }
+    e.preventDefault();
+    const pull = Math.min(delta * 0.5, THRESHOLD);
+    indicator.style.height = pull + 'px';
+    indicator.style.opacity = delta / THRESHOLD;
+    indicator.querySelector('.ptr-icon').style.transform =
+      `rotate(${Math.min(delta / THRESHOLD, 1) * 180}deg)`;
+  }, { passive: false });
+
+  content.addEventListener('touchend', (e) => {
+    if (!pulling) return;
+    pulling = false;
+    const delta = e.changedTouches[0].clientY - startY;
+    if (delta >= THRESHOLD) {
+      indicator.classList.add('ptr-spinning');
+      refreshCurrentScreen();
+      setTimeout(() => {
+        indicator.style.height = '0';
+        indicator.style.opacity = '0';
+        indicator.classList.remove('ptr-spinning');
+        indicator.querySelector('.ptr-icon').style.transform = '';
+      }, 700);
+    } else {
+      indicator.style.height = '0';
+      indicator.style.opacity = '0';
+      indicator.querySelector('.ptr-icon').style.transform = '';
+    }
+  }, { passive: true });
 }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
