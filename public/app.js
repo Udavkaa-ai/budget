@@ -22,7 +22,8 @@ let socket = null;
 let appSettings = {};
 
 // Navigation state
-let familyDate = new Date();
+let budgetDate = new Date();
+let budgetFilter = 'all';
 let summaryMonth = null, summaryYear = null;
 let chartMonth = null, chartYear = null;
 
@@ -183,18 +184,15 @@ function initSocket() {
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 const SCREEN_TITLES = {
-  today: 'Сегодня',
-  family: 'Семья',
-  add: 'Добавить',
+  budget: 'Бюджет',
   summary: 'Статистика',
   chart: 'График',
   settings: 'Настройки',
 };
 
-let currentScreen = 'today';
+let currentScreen = 'budget';
 
 function navigate(screenName) {
-  // Hide all screens
   document.querySelectorAll('.main-content .screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
 
@@ -216,89 +214,105 @@ function refreshCurrentScreen() {
 
 function loadScreen(name) {
   switch (name) {
-    case 'today': loadToday(); break;
-    case 'family': loadFamily(); break;
-    case 'add': resetAddForm(); break;
+    case 'budget': loadBudget(); break;
     case 'summary': loadSummary(); break;
     case 'chart': loadChart(); break;
     case 'settings': loadSettingsScreen(); break;
   }
 }
 
-// ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
+// ─── BUDGET SCREEN ────────────────────────────────────────────────────────────
 
-async function loadToday() {
+async function loadBudget() {
+  const dateStr = formatDate(budgetDate);
+  document.getElementById('budget-date-label').textContent = dateLabel(budgetDate);
+
+  // Disable "next" if today
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const bd = new Date(budgetDate); bd.setHours(0, 0, 0, 0);
+  document.getElementById('budget-next').disabled = bd >= today;
+
+  const list = document.getElementById('budget-expenses-list');
+  list.innerHTML = '<div class="loading">Загрузка</div>';
+
   try {
-    const [myData, familyData] = await Promise.all([
-      apiJson('GET', '/api/expenses/today'),
-      apiJson('GET', '/api/expenses/family'),
-    ]);
+    const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
 
-    document.getElementById('today-my-total').textContent = fmt(myData.total || 0);
-    document.getElementById('today-family-total').textContent = fmt(familyData.total || 0);
+    const byUser = data.byUser || {};
+    const total = data.total || 0;
+    const myTotal = byUser[currentUser.name]?.total || 0;
+    const partnerTotal = total - myTotal;
+    const partnerName = Object.keys(byUser).find(u => u !== currentUser.name) || 'Партнёр';
 
-    const list = document.getElementById('today-expenses-list');
+    // Update pills with amounts
+    document.getElementById('pill-all-amt').textContent = total > 0 ? fmt(total) : '';
+    document.getElementById('pill-me-amt').textContent = myTotal > 0 ? fmt(myTotal) : '';
+    document.getElementById('pill-partner-label').textContent = partnerName;
+    document.getElementById('pill-partner-amt').textContent = partnerTotal > 0 ? fmt(partnerTotal) : '';
+
     list.innerHTML = '';
 
-    if (!myData.expenses || myData.expenses.length === 0) {
-      list.innerHTML = '<div class="empty-state">Нет ваших расходов за сегодня</div>';
+    if (total === 0) {
+      document.getElementById('budget-total-bar').innerHTML =
+        `<span>Итого за день</span><span class="total-amount">${fmt(0)}</span>`;
+      list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
       return;
     }
 
-    for (const exp of [...myData.expenses].reverse()) {
-      list.appendChild(buildExpenseItem(exp, true));
+    let filteredTotal = total;
+
+    if (budgetFilter === 'all') {
+      for (const [user, udata] of Object.entries(byUser)) {
+        const section = document.createElement('div');
+        section.className = 'user-section';
+        section.innerHTML = `
+          <div class="user-section-header">
+            <span class="user-section-name">${user}</span>
+            <span class="user-section-total">${fmt(udata.total)}</span>
+          </div>
+        `;
+        const expList = document.createElement('div');
+        expList.className = 'expenses-list';
+        for (const exp of udata.expenses) {
+          expList.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+        }
+        section.appendChild(expList);
+        list.appendChild(section);
+      }
+    } else {
+      const userName = budgetFilter === 'me' ? currentUser.name : partnerName;
+      const udata = byUser[userName];
+      filteredTotal = udata?.total || 0;
+      if (!udata || udata.expenses.length === 0) {
+        list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
+      } else {
+        for (const exp of udata.expenses) {
+          list.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+        }
+      }
     }
+
+    document.getElementById('budget-total-bar').innerHTML =
+      `<span>Итого за день</span><span class="total-amount">${fmt(filteredTotal)}</span>`;
+
   } catch {
     showToastError('Ошибка загрузки данных');
   }
 }
 
-// ─── FAMILY SCREEN ────────────────────────────────────────────────────────────
+// ─── BOTTOM SHEET ─────────────────────────────────────────────────────────────
 
-async function loadFamily() {
-  const dateStr = formatDate(familyDate);
-  document.getElementById('family-date-label').textContent = dateLabel(familyDate);
+function openSheet() {
+  document.getElementById('add-sheet').classList.add('open');
+  document.getElementById('sheet-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
 
-  // Disable "next" if today
-  const today = new Date(); today.setHours(0,0,0,0);
-  const fd = new Date(familyDate); fd.setHours(0,0,0,0);
-  document.getElementById('family-next').disabled = fd >= today;
-
-  try {
-    const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
-
-    // Total bar
-    const totalBar = document.getElementById('family-total-bar');
-    totalBar.innerHTML = `<span>Итого за день</span><span class="total-amount">${fmt(data.total || 0)}</span>`;
-
-    const list = document.getElementById('family-expenses-list');
-    list.innerHTML = '';
-
-    if (!data.byUser || data.total === 0) {
-      list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
-      return;
-    }
-
-    for (const [user, udata] of Object.entries(data.byUser)) {
-      const section = document.createElement('div');
-      section.className = 'user-section';
-      section.innerHTML = `
-        <div class="user-section-header">
-          <span class="user-section-name">${user}</span>
-          <span class="user-section-total">${fmt(udata.total)}</span>
-        </div>
-      `;
-      const expList = document.createElement('div');
-      expList.className = 'expenses-list';
-      for (const exp of udata.expenses) {
-        expList.appendChild(buildExpenseItem(exp, user === currentUser.name));
-      }
-      section.appendChild(expList);
-      list.appendChild(section);
-    }
-  } catch {
-    showToastError('Ошибка загрузки данных');
-  }
+function closeSheet() {
+  document.getElementById('add-sheet').classList.remove('open');
+  document.getElementById('sheet-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+  resetAddForm();
 }
 
 // ─── SUMMARY SCREEN ───────────────────────────────────────────────────────────
@@ -320,50 +334,50 @@ async function loadSummary() {
   document.getElementById('summary-total-bar').classList.remove('hidden');
 
   try {
-  const data = await apiJson('GET', `/api/summary?${params}`);
+    const data = await apiJson('GET', `/api/summary?${params}`);
 
-  // Total bar
-  const totalBar = document.getElementById('summary-total-bar');
-  totalBar.innerHTML = `<span>Итого за месяц</span><span class="highlight-total">${fmt(data.total)}</span>`;
+    // Total bar
+    const totalBar = document.getElementById('summary-total-bar');
+    totalBar.innerHTML = `<span>Итого за месяц</span><span class="highlight-total">${fmt(data.total)}</span>`;
 
-  // By user
-  const byUserEl = document.getElementById('summary-by-user');
-  byUserEl.innerHTML = '';
-  for (const [user, udata] of Object.entries(data.byUser)) {
-    byUserEl.innerHTML += `
-      <div class="user-stat-chip">
-        <div class="user-stat-name">${user}</div>
-        <div class="user-stat-amount">${fmt(udata.total)}</div>
-      </div>
-    `;
-  }
+    // By user
+    const byUserEl = document.getElementById('summary-by-user');
+    byUserEl.innerHTML = '';
+    for (const [user, udata] of Object.entries(data.byUser)) {
+      byUserEl.innerHTML += `
+        <div class="user-stat-chip">
+          <div class="user-stat-name">${user}</div>
+          <div class="user-stat-amount">${fmt(udata.total)}</div>
+        </div>
+      `;
+    }
 
-  // Categories
-  const catList = document.getElementById('summary-categories');
-  catList.innerHTML = '';
+    // Categories
+    const catList = document.getElementById('summary-categories');
+    catList.innerHTML = '';
 
-  if (Object.keys(data.byCategory).length === 0) {
-    catList.innerHTML = '<div class="empty-state">Нет данных за этот месяц</div>';
-    return;
-  }
+    if (Object.keys(data.byCategory).length === 0) {
+      catList.innerHTML = '<div class="empty-state">Нет данных за этот месяц</div>';
+      return;
+    }
 
-  const maxAmt = Math.max(...Object.values(data.byCategory));
+    const maxAmt = Math.max(...Object.values(data.byCategory));
 
-  for (const [cat, amount] of Object.entries(data.byCategory).sort((a, b) => b[1] - a[1])) {
-    const pct = maxAmt > 0 ? Math.round((amount / maxAmt) * 100) : 0;
-    const item = document.createElement('div');
-    item.className = 'category-item';
-    item.innerHTML = `
-      <span class="cat-bar-icon">${CATEGORY_ICONS[cat] || '❓'}</span>
-      <div class="cat-bar-info">
-        <div class="cat-bar-name">${cat}</div>
-        <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
-      </div>
-      <span class="cat-bar-amount">${fmt(amount)}</span>
-    `;
-    item.addEventListener('click', () => loadCategoryDetail(cat, summaryMonth, summaryYear));
-    catList.appendChild(item);
-  }
+    for (const [cat, amount] of Object.entries(data.byCategory).sort((a, b) => b[1] - a[1])) {
+      const pct = maxAmt > 0 ? Math.round((amount / maxAmt) * 100) : 0;
+      const item = document.createElement('div');
+      item.className = 'category-item';
+      item.innerHTML = `
+        <span class="cat-bar-icon">${CATEGORY_ICONS[cat] || '❓'}</span>
+        <div class="cat-bar-info">
+          <div class="cat-bar-name">${cat}</div>
+          <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <span class="cat-bar-amount">${fmt(amount)}</span>
+      `;
+      item.addEventListener('click', () => loadCategoryDetail(cat, summaryMonth, summaryYear));
+      catList.appendChild(item);
+    }
   } catch {
     showToastError('Ошибка загрузки статистики');
   }
@@ -515,8 +529,8 @@ async function submitFormExpense() {
     });
     if (res.ok) {
       showToastSuccess('Расход добавлен');
-      resetAddForm();
-      navigate('today');
+      closeSheet();
+      loadBudget();
     } else {
       showToastError(res.error || 'Ошибка');
     }
@@ -533,9 +547,10 @@ function resetAddForm() {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('form-amount').value = '';
   document.getElementById('form-description').value = '';
-  document.getElementById('form-date').value = '';
+  document.getElementById('form-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('parse-result').classList.add('hidden');
   document.getElementById('expense-text').value = '';
+  switchAddTab('text');
 }
 
 // ─── AI TEXT PARSING ──────────────────────────────────────────────────────────
@@ -613,10 +628,9 @@ async function confirmParsedExpenses() {
     const res = await apiJson('POST', '/api/expenses', { expenses: parsedExpenses });
     if (res.ok) {
       showToastSuccess(`Сохранено ${res.count} записей`);
-      document.getElementById('expense-text').value = '';
-      document.getElementById('parse-result').classList.add('hidden');
       parsedExpenses = [];
-      navigate('today');
+      closeSheet();
+      loadBudget();
     } else {
       showToastError(res.error || 'Ошибка');
     }
@@ -737,11 +751,8 @@ async function initApp() {
   initCategoryGrid();
   setupEventListeners();
 
-  // Set today's date in form
-  document.getElementById('form-date').value = new Date().toISOString().slice(0, 10);
-
   await loadSettings();
-  navigate('today');
+  navigate('budget');
 }
 
 function setupEventListeners() {
@@ -754,14 +765,31 @@ function setupEventListeners() {
     btn.addEventListener('click', () => navigate(btn.dataset.screen));
   });
 
-  // Family navigation
-  document.getElementById('family-prev').addEventListener('click', () => {
-    familyDate = new Date(familyDate - 86400000);
-    loadFamily();
+  // FAB — open add sheet
+  document.getElementById('fab-add').addEventListener('click', openSheet);
+
+  // Sheet close
+  document.getElementById('sheet-close').addEventListener('click', closeSheet);
+  document.getElementById('sheet-overlay').addEventListener('click', closeSheet);
+
+  // Filter pills
+  document.querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      budgetFilter = pill.dataset.filter;
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      loadBudget();
+    });
   });
-  document.getElementById('family-next').addEventListener('click', () => {
-    familyDate = new Date(+familyDate + 86400000);
-    loadFamily();
+
+  // Budget date navigation
+  document.getElementById('budget-prev').addEventListener('click', () => {
+    budgetDate = new Date(budgetDate - 86400000);
+    loadBudget();
+  });
+  document.getElementById('budget-next').addEventListener('click', () => {
+    budgetDate = new Date(+budgetDate + 86400000);
+    loadBudget();
   });
 
   // Summary navigation
@@ -838,7 +866,7 @@ function setupEventListeners() {
     refreshCurrentScreen();
   });
 
-  // Export button — update href with auth
+  // Export button — download with auth
   document.getElementById('btn-export').addEventListener('click', async (e) => {
     e.preventDefault();
     const res = await api('GET', '/api/export');
@@ -867,7 +895,7 @@ function setupEventListeners() {
       if (res.ok) {
         resultEl.className = 'success-msg';
         resultEl.textContent = `✅ Импортировано: ${res.imported}, пропущено дублей: ${res.skipped}`;
-        loadToday();
+        loadBudget();
       } else {
         resultEl.className = 'error-msg';
         resultEl.textContent = '❌ ' + (res.error || 'Ошибка импорта');
@@ -877,7 +905,6 @@ function setupEventListeners() {
       resultEl.textContent = '❌ Ошибка чтения файла';
     }
 
-    // Сброс input чтобы можно было повторно загрузить тот же файл
     e.target.value = '';
   });
 
@@ -896,7 +923,6 @@ function switchAddTab(tab) {
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 
-// Try to restore session from localStorage
 const savedUser = localStorage.getItem('budget_user');
 if (savedUser) {
   try { currentUser = JSON.parse(savedUser); } catch {}

@@ -43,7 +43,7 @@
   <!-- Top Bar -->
   <header class="topbar">
     <div class="topbar-left">
-      <span id="topbar-title">Сегодня</span>
+      <span id="topbar-title">Бюджет</span>
     </div>
     <div class="topbar-right">
       <span id="topbar-user" class="user-chip"></span>
@@ -54,38 +54,133 @@
   <!-- Screens -->
   <main class="main-content">
 
-    <!-- ── TODAY ─────────────────────────────────────────────────── -->
-    <div id="screen-today" class="screen active">
-      <div class="today-summary card">
-        <div class="today-my">
-          <div class="today-label">Мои расходы сегодня</div>
-          <div id="today-my-total" class="today-amount">0 ₽</div>
-        </div>
-        <div class="divider-v"></div>
-        <div class="today-family">
-          <div class="today-label">Семья сегодня</div>
-          <div id="today-family-total" class="today-amount">0 ₽</div>
-        </div>
-      </div>
-
-      <div id="today-expenses-list" class="expenses-list">
-        <div class="empty-state">Нет расходов за сегодня</div>
-      </div>
-    </div>
-
-    <!-- ── FAMILY ─────────────────────────────────────────────────── -->
-    <div id="screen-family" class="screen">
+    <!-- ── BUDGET ──────────────────────────────────────────────────── -->
+    <div id="screen-budget" class="screen active">
       <div class="nav-date-row">
-        <button id="family-prev" class="icon-btn">◀</button>
-        <span id="family-date-label" class="nav-date-label"></span>
-        <button id="family-next" class="icon-btn">▶</button>
+        <button id="budget-prev" class="icon-btn">◀</button>
+        <span id="budget-date-label" class="nav-date-label"></span>
+        <button id="budget-next" class="icon-btn">▶</button>
       </div>
-      <div id="family-total-bar" class="total-bar card"></div>
-      <div id="family-expenses-list" class="expenses-list"></div>
+
+      <div class="filter-bar">
+        <button class="pill active" data-filter="all">Все <span class="pill-amt" id="pill-all-amt"></span></button>
+        <button class="pill" data-filter="me">Я <span class="pill-amt" id="pill-me-amt"></span></button>
+        <button class="pill" data-filter="partner"><span id="pill-partner-label">Партнёр</span> <span class="pill-amt" id="pill-partner-amt"></span></button>
+      </div>
+
+      <div id="budget-total-bar" class="total-bar card"></div>
+      <div id="budget-expenses-list" class="expenses-list"></div>
     </div>
 
-    <!-- ── ADD ────────────────────────────────────────────────────── -->
-    <div id="screen-add" class="screen">
+    <!-- ── SUMMARY ───────────────────────────────────────────────────── -->
+    <div id="screen-summary" class="screen">
+      <div class="nav-date-row">
+        <button id="summary-prev" class="icon-btn">◀</button>
+        <span id="summary-month-label" class="nav-date-label"></span>
+        <button id="summary-next" class="icon-btn">▶</button>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="summary-exclude-fixed" />
+          <span>Без постоянных</span>
+        </label>
+      </div>
+      <div id="summary-total-bar" class="total-bar card"></div>
+      <div id="summary-by-user" class="summary-by-user"></div>
+      <div id="summary-categories" class="category-list"></div>
+      <!-- Category drill-down panel -->
+      <div id="category-detail" class="hidden">
+        <div class="category-detail-header">
+          <button id="category-detail-back" class="icon-btn">← Назад</button>
+          <span id="category-detail-title"></span>
+        </div>
+        <div id="category-detail-list" class="expenses-list"></div>
+      </div>
+    </div>
+
+    <!-- ── CHART ──────────────────────────────────────────────────────── -->
+    <div id="screen-chart" class="screen">
+      <div class="nav-date-row">
+        <button id="chart-prev" class="icon-btn">◀</button>
+        <span id="chart-month-label" class="nav-date-label"></span>
+        <button id="chart-next" class="icon-btn">▶</button>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="chart-exclude-fixed" />
+          <span>Без постоянных</span>
+        </label>
+      </div>
+      <div id="chart-container" class="chart-container">
+        <div class="loading">Загрузка...</div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
+    <div id="screen-settings" class="screen">
+      <div class="settings-list">
+        <div class="settings-section">
+          <div class="settings-title">Постоянные расходы</div>
+          <div id="fixed-expenses-list" class="fixed-list"></div>
+          <button id="btn-retag" class="btn btn-outline btn-full">🔄 Перепометить по ключевым словам</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">Данные</div>
+          <a id="btn-export" class="btn btn-outline btn-full" href="/api/export" download>📥 Экспорт CSV</a>
+          <div style="margin-top:8px">
+            <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
+              📤 Импорт CSV из бота
+              <input type="file" id="import-file" accept=".csv,text/csv" style="display:none" />
+            </label>
+          </div>
+          <div id="import-result" class="hidden" style="margin-top:8px"></div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">О приложении</div>
+          <div class="settings-info">
+            <div>Плановые расходы: <strong id="info-planned"></strong></div>
+            <div>Постоянные расходы: <strong id="info-fixed"></strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FAB -->
+  <button id="fab-add" class="fab">+</button>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-screen="budget">
+      <span class="nav-icon">💰</span>
+      <span class="nav-label">Бюджет</span>
+    </button>
+    <button class="nav-btn" data-screen="summary">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Месяц</span>
+    </button>
+    <button class="nav-btn" data-screen="chart">
+      <span class="nav-icon">📉</span>
+      <span class="nav-label">График</span>
+    </button>
+    <button class="nav-btn" data-screen="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Настройки</span>
+    </button>
+  </nav>
+
+  <!-- Bottom Sheet (Add Expense) -->
+  <div id="sheet-overlay" class="sheet-overlay hidden"></div>
+  <div id="add-sheet" class="bottom-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title">Добавить расход</span>
+      <button id="sheet-close" class="icon-btn">✕</button>
+    </div>
+    <div class="sheet-body">
       <div class="add-tabs">
         <button id="tab-text" class="tab-btn active" data-tab="text">✍️ Текстом</button>
         <button id="tab-form" class="tab-btn" data-tab="form">📋 Форма</button>
@@ -128,111 +223,7 @@
         <button id="btn-add-form" class="btn btn-primary btn-full">Добавить расход</button>
       </div>
     </div>
-
-    <!-- ── SUMMARY ────────────────────────────────────────────────── -->
-    <div id="screen-summary" class="screen">
-      <div class="nav-date-row">
-        <button id="summary-prev" class="icon-btn">◀</button>
-        <span id="summary-month-label" class="nav-date-label"></span>
-        <button id="summary-next" class="icon-btn">▶</button>
-      </div>
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="summary-exclude-fixed" />
-          <span>Без постоянных</span>
-        </label>
-      </div>
-      <div id="summary-total-bar" class="total-bar card"></div>
-      <div id="summary-by-user" class="summary-by-user"></div>
-      <div id="summary-categories" class="category-list"></div>
-      <!-- Category drill-down panel -->
-      <div id="category-detail" class="hidden">
-        <div class="category-detail-header">
-          <button id="category-detail-back" class="icon-btn">← Назад</button>
-          <span id="category-detail-title"></span>
-        </div>
-        <div id="category-detail-list" class="expenses-list"></div>
-      </div>
-    </div>
-
-    <!-- ── CHART ──────────────────────────────────────────────────── -->
-    <div id="screen-chart" class="screen">
-      <div class="nav-date-row">
-        <button id="chart-prev" class="icon-btn">◀</button>
-        <span id="chart-month-label" class="nav-date-label"></span>
-        <button id="chart-next" class="icon-btn">▶</button>
-      </div>
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="chart-exclude-fixed" />
-          <span>Без постоянных</span>
-        </label>
-      </div>
-      <div id="chart-container" class="chart-container">
-        <div class="loading">Загрузка...</div>
-      </div>
-    </div>
-
-    <!-- ── SETTINGS ───────────────────────────────────────────────── -->
-    <div id="screen-settings" class="screen">
-      <div class="settings-list">
-        <div class="settings-section">
-          <div class="settings-title">Постоянные расходы</div>
-          <div id="fixed-expenses-list" class="fixed-list"></div>
-          <button id="btn-retag" class="btn btn-outline btn-full">🔄 Перепометить по ключевым словам</button>
-        </div>
-
-        <div class="settings-section">
-          <div class="settings-title">Данные</div>
-          <a id="btn-export" class="btn btn-outline btn-full" href="/api/export" download>📥 Экспорт CSV</a>
-          <div style="margin-top:8px">
-            <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
-              📤 Импорт CSV из бота
-              <input type="file" id="import-file" accept=".csv,text/csv" style="display:none" />
-            </label>
-          </div>
-          <div id="import-result" class="hidden" style="margin-top:8px"></div>
-        </div>
-
-        <div class="settings-section">
-          <div class="settings-title">О приложении</div>
-          <div class="settings-info">
-            <div>Плановые расходы: <strong id="info-planned"></strong></div>
-            <div>Постоянные расходы: <strong id="info-fixed"></strong></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- Bottom Nav -->
-  <nav class="bottom-nav">
-    <button class="nav-btn active" data-screen="today">
-      <span class="nav-icon">📊</span>
-      <span class="nav-label">Сегодня</span>
-    </button>
-    <button class="nav-btn" data-screen="family">
-      <span class="nav-icon">👨‍👩‍👧</span>
-      <span class="nav-label">Семья</span>
-    </button>
-    <button class="nav-btn nav-btn-add" data-screen="add">
-      <span class="nav-icon">➕</span>
-      <span class="nav-label">Добавить</span>
-    </button>
-    <button class="nav-btn" data-screen="summary">
-      <span class="nav-icon">📈</span>
-      <span class="nav-label">Месяц</span>
-    </button>
-    <button class="nav-btn" data-screen="chart">
-      <span class="nav-icon">📉</span>
-      <span class="nav-label">График</span>
-    </button>
-    <button class="nav-btn" data-screen="settings">
-      <span class="nav-icon">⚙️</span>
-      <span class="nav-label">Настройки</span>
-    </button>
-  </nav>
+  </div>
 
   <!-- Reminder Toast -->
   <div id="reminder-toast" class="reminder-toast hidden">
