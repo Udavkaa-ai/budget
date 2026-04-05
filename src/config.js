@@ -14,7 +14,7 @@ export const config = {
   openRouterKey: process.env.OPENROUTER_API_KEY,
 
   // Модели AI — цепочка fallback (через запятую)
-  aiModels: (process.env.AI_MODELS || 'google/gemini-2.0-flash-001,google/gemini-1.5-flash,google/gemma-3-27b-it')
+  aiModels: (process.env.AI_MODELS || 'google/gemma-4-31b-it,google/gemma-3-27b-it')
     .split(',')
     .map(m => m.trim())
     .filter(Boolean),
