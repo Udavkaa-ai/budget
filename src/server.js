@@ -25,8 +25,14 @@ import {
   getExpensesForMonth,
   deleteExpense,
   flushData,
+  getGoals,
+  addGoal,
+  contributeToGoal,
+  deleteGoal,
+  getBudgetPlan,
+  saveBudgetPlan,
 } from './storage.js';
-import { parseExpenses, CATEGORIES } from './parser.js';
+import { parseExpenses, parseImageExpenses, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -91,6 +97,11 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/me', authMiddleware, (req, res) => {
   res.json({ name: req.user.name, login: req.user.login });
+});
+
+// Список пользователей приложения (имена — для фильтров и целей)
+app.get('/api/users', authMiddleware, (_req, res) => {
+  res.json(config.webUsers.map(u => ({ name: u.name, login: u.login })));
 });
 
 // ─── Expense Routes ───────────────────────────────────────────────────────────
@@ -239,6 +250,50 @@ app.post('/api/settings/retag', authMiddleware, async (req, res) => {
   res.json({ ok: true, count });
 });
 
+// ─── Goals Routes ─────────────────────────────────────────────────────────────
+
+app.get('/api/goals', authMiddleware, (_req, res) => {
+  res.json(getGoals());
+});
+
+app.post('/api/goals', authMiddleware, async (req, res) => {
+  const { name, targetAmount, emoji } = req.body || {};
+  if (!name?.trim() || !targetAmount || targetAmount <= 0) {
+    return res.status(400).json({ error: 'Укажите название и сумму цели' });
+  }
+  const goal = await addGoal({ name: name.trim(), targetAmount, emoji, createdBy: req.user.name });
+  io.emit('goals:updated');
+  res.json({ ok: true, goal });
+});
+
+app.post('/api/goals/:id/contribute', authMiddleware, async (req, res) => {
+  const { amount } = req.body || {};
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Укажите сумму' });
+  const goal = await contributeToGoal(req.params.id, req.user.name, amount);
+  if (!goal) return res.status(404).json({ error: 'Цель не найдена' });
+  io.emit('goals:updated');
+  res.json({ ok: true, goal });
+});
+
+app.delete('/api/goals/:id', authMiddleware, async (req, res) => {
+  const deleted = await deleteGoal(req.params.id);
+  if (!deleted) return res.status(404).json({ error: 'Цель не найдена' });
+  io.emit('goals:updated');
+  res.json({ ok: true });
+});
+
+// ─── Budget Plan Routes ────────────────────────────────────────────────────────
+
+app.get('/api/budget-plan', authMiddleware, (_req, res) => {
+  res.json(getBudgetPlan());
+});
+
+app.put('/api/budget-plan', authMiddleware, async (req, res) => {
+  await saveBudgetPlan(req.body);
+  io.emit('budget-plan:updated');
+  res.json({ ok: true });
+});
+
 // ─── AI Parse Route ───────────────────────────────────────────────────────────
 
 app.post('/api/parse', authMiddleware, async (req, res) => {
@@ -251,6 +306,25 @@ app.post('/api/parse', authMiddleware, async (req, res) => {
 
   try {
     const result = await parseExpenses(text);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Парсинг изображений (банковские уведомления, чеки, скриншоты)
+app.post('/api/parse-image', authMiddleware, async (req, res) => {
+  const { base64, mimeType } = req.body || {};
+  if (!base64) return res.status(400).json({ error: 'Нет изображения' });
+  if (!config.openRouterKey) return res.status(503).json({ error: 'AI недоступен' });
+
+  // Ограничение размера ~4MB base64
+  if (base64.length > 5_500_000) {
+    return res.status(413).json({ error: 'Изображение слишком большое (макс. 4 МБ)' });
+  }
+
+  try {
+    const result = await parseImageExpenses(base64, mimeType || 'image/jpeg');
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

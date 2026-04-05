@@ -171,3 +171,66 @@ function formatDate(date) {
 }
 
 export { CATEGORIES };
+
+/**
+ * Парсинг расходов из изображения (банковские уведомления, скриншоты)
+ * Использует vision-модель через OpenRouter
+ */
+export async function parseImageExpenses(base64, mimeType = 'image/jpeg') {
+  if (!config.openRouterKey) {
+    return { expenses: [], error: 'Нет API ключа' };
+  }
+
+  const todayStr = formatDate(new Date());
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.aiTimeout * 2);
+
+  const visionModels = [
+    'google/gemini-flash-1.5',
+    'google/gemini-pro-vision',
+    'anthropic/claude-3-haiku',
+  ];
+
+  for (const model of visionModels) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.openRouterKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+              { type: 'text', text: `Сегодня: ${todayStr}\n\nЭто банковское уведомление, чек или скриншот с расходами. Извлеки список трат.\n\n${SYSTEM_PROMPT}\n\nОтветь ТОЛЬКО валидным JSON массивом, без markdown.` },
+            ],
+          }],
+          temperature: 0.1,
+          max_tokens: 1000,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      if (data.error) continue;
+
+      const content = data.choices?.[0]?.message?.content?.trim();
+      if (!content) continue;
+
+      const expenses = parseJson(content);
+      console.log(`✅ Vision ${model}: ${expenses.length} записей`);
+      return { expenses, model };
+    } catch {
+      continue;
+    }
+  }
+
+  clearTimeout(timeout);
+  return { expenses: [], error: 'Не удалось распознать изображение' };
+}

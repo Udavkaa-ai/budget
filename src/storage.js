@@ -6,6 +6,7 @@ import { config } from './config.js';
 let data = {
   expenses: [],
   settings: {},
+  goals: [],
   meta: { created: new Date().toISOString(), version: 1 }
 };
 
@@ -21,7 +22,8 @@ export async function loadData() {
       const raw = await readFile(config.dataFile, 'utf-8');
       data = JSON.parse(raw);
       data.settings = data.settings || {};
-      console.log(`📂 Загружено ${data.expenses.length} записей`);
+      data.goals = data.goals || [];
+      console.log(`📂 Загружено ${data.expenses.length} записей, ${data.goals.length} целей`);
     } else {
       await saveData();
       console.log('📂 Создан новый файл данных');
@@ -418,6 +420,56 @@ export async function deleteExpense(id) {
   const [deleted] = data.expenses.splice(index, 1);
   debouncedSave();
   return deleted;
+}
+
+// ─── Goals ────────────────────────────────────────────────────────────────────
+
+export function getGoals() {
+  return data.goals || [];
+}
+
+export async function addGoal({ name, targetAmount, emoji = '🎯', createdBy = '' }) {
+  if (!data.goals) data.goals = [];
+  const goal = {
+    id: generateId(),
+    name,
+    targetAmount,
+    emoji,
+    contributions: [],
+    createdAt: new Date().toISOString(),
+    createdBy,
+  };
+  data.goals.push(goal);
+  debouncedSave();
+  return goal;
+}
+
+export async function contributeToGoal(goalId, user, amount) {
+  const goal = (data.goals || []).find(g => g.id === goalId);
+  if (!goal) return null;
+  goal.contributions.push({ user, amount: Number(amount), addedAt: new Date().toISOString() });
+  debouncedSave();
+  return goal;
+}
+
+export async function deleteGoal(goalId) {
+  const idx = (data.goals || []).findIndex(g => g.id === goalId);
+  if (idx === -1) return null;
+  const [deleted] = data.goals.splice(idx, 1);
+  debouncedSave();
+  return deleted;
+}
+
+// ─── Budget plan ──────────────────────────────────────────────────────────────
+
+export function getBudgetPlan() {
+  return data.settings?.budgetPlan || {};
+}
+
+export async function saveBudgetPlan(plan) {
+  data.settings = data.settings || {};
+  data.settings.budgetPlan = plan;
+  debouncedSave();
 }
 
 /**
