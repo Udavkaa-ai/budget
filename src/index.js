@@ -1,5 +1,13 @@
 import { Telegraf, Markup } from 'telegraf';
 import { config } from './config.js';
+
+if (!config.telegramToken) {
+  console.error('❌ Не задана переменная: TELEGRAM_BOT_TOKEN');
+  process.exit(1);
+}
+if (config.allowedUsers.length === 0) {
+  console.warn('⚠️  ALLOWED_USERS пуст — бот будет отклонять все запросы');
+}
 import { parseExpenses, CATEGORIES } from './parser.js';
 import {
   loadData, appendExpenses,

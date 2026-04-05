@@ -1,30 +1,30 @@
 import 'dotenv/config';
 
 export const config = {
-  // Telegram
+  // Telegram (только для Telegram-бота)
   telegramToken: process.env.TELEGRAM_BOT_TOKEN,
-  
+
   // Разрешённые пользователи (Telegram user ID)
   allowedUsers: (process.env.ALLOWED_USERS || '')
     .split(',')
     .map(id => parseInt(id.trim()))
     .filter(id => !isNaN(id)),
-  
+
   // OpenRouter
   openRouterKey: process.env.OPENROUTER_API_KEY,
-  
+
   // Модели AI — цепочка fallback (через запятую)
   aiModels: (process.env.AI_MODELS || 'google/gemini-flash-1.5,google/gemma-3-27b-it,meta-llama/llama-3.1-8b-instruct')
     .split(',')
     .map(m => m.trim())
     .filter(Boolean),
-  
+
   // Таймаут запроса к модели (мс)
   aiTimeout: parseInt(process.env.AI_TIMEOUT) || 15000,
-  
+
   // Хранилище данных (JSON)
   dataFile: process.env.DATA_FILE || './data/expenses.json',
-  
+
   // Напоминания (время по Москве)
   reminderHour: parseInt(process.env.REMINDER_HOUR) || 20,
   reminderMinute: parseInt(process.env.REMINDER_MINUTE) || 0,
@@ -48,19 +48,28 @@ export const config = {
   // Ключевые слова для авто-пометки постоянных расходов при вводе
   fixedKeywords: (process.env.FIXED_KEYWORDS || 'ипотека,жкх,коммунальн,садик,допурок,кружок')
     .split(',').map(s => s.trim().toLowerCase()),
+
+  // === Веб-приложение ===
+  port: parseInt(process.env.PORT) || 3000,
+  jwtSecret: process.env.JWT_SECRET || 'change-me-in-production-please',
+  // Пользователи веб-приложения (два человека — муж и жена)
+  webUsers: [
+    {
+      login: process.env.USER1_LOGIN || 'user1',
+      password: process.env.USER1_PASSWORD || 'pass1',
+      name: process.env.USER1_NAME || 'Муж',
+    },
+    {
+      login: process.env.USER2_LOGIN || 'user2',
+      password: process.env.USER2_PASSWORD || 'pass2',
+      name: process.env.USER2_NAME || 'Жена',
+    },
+  ],
 };
 
-// Проверка конфигурации
-const required = ['telegramToken', 'openRouterKey'];
-for (const key of required) {
-  if (!config[key]) {
-    console.error(`❌ Не задана переменная: ${key}`);
-    process.exit(1);
-  }
-}
-
-if (config.allowedUsers.length === 0) {
-  console.warn('⚠️  ALLOWED_USERS пуст — бот будет отклонять все запросы');
+// Предупреждения при старте
+if (!config.openRouterKey) {
+  console.warn('⚠️  OPENROUTER_API_KEY не задан — AI-парсинг недоступен');
 }
 
 console.log(`🤖 Модели AI: ${config.aiModels.join(' → ')}`);

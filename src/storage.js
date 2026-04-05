@@ -364,6 +364,17 @@ export async function retagFixedExpenses() {
 }
 
 /**
+ * Удалить расход по id
+ */
+export async function deleteExpense(id) {
+  const index = data.expenses.findIndex(e => e.id === id);
+  if (index === -1) return null;
+  const [deleted] = data.expenses.splice(index, 1);
+  debouncedSave();
+  return deleted;
+}
+
+/**
  * Принудительно сохранить данные (вызывается при завершении из index.js)
  */
 export async function flushData() {
