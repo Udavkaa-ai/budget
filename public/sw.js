@@ -1,5 +1,5 @@
 // Service Worker — кэширование статических ресурсов для работы офлайн
-const CACHE = 'budget-v1';
+const CACHE = 'budget-v2';
 const STATIC = ['/', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {
