@@ -186,8 +186,8 @@ export async function parseImageExpenses(base64, mimeType = 'image/jpeg') {
   const timeout = setTimeout(() => controller.abort(), config.aiTimeout * 2);
 
   const visionModels = [
-    'google/gemini-flash-1.5',
-    'google/gemini-pro-vision',
+    'google/gemini-2.0-flash-001',
+    'google/gemini-1.5-flash',
     'anthropic/claude-3-haiku',
   ];
 
