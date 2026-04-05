@@ -2,6 +2,23 @@
 //  Семейный бюджет — PWA Frontend
 // ════════════════════════════════════════════════════════════════
 
+const PLAN_CATEGORIES = [
+  { key: 'Продукты',    icon: '🛒', pct: 15 },
+  { key: 'Постоянные',  icon: '📌', pct: 17, noActual: true },
+  { key: 'Инвестиции',  icon: '📈', pct: 15, noActual: true },
+  { key: 'Дети',        icon: '👶', pct:  9 },
+  { key: 'Подушка',     icon: '🛡', pct:  7, noActual: true },
+  { key: 'Цели',        icon: '🎯', pct:  7, noActual: true },
+  { key: 'Транспорт',   icon: '🚇', pct:  6 },
+  { key: 'Медицина',    icon: '💊', pct:  4 },
+  { key: 'Кафе',        icon: '🍽', pct:  4 },
+  { key: 'Одежда',      icon: '👗', pct:  4 },
+  { key: 'Прочее',      icon: '❓', pct:  4 },
+  { key: 'Развлечения', icon: '🎮', pct:  3 },
+  { key: 'Дом',         icon: '🏠', pct:  3 },
+  { key: 'Связь',       icon: '📱', pct:  2 },
+];
+
 const CATEGORY_ICONS = {
   'Продукты':     '🛒',
   'Кафе':         '🍽',
@@ -176,6 +193,10 @@ function initSocket() {
     showReminder(body);
   });
 
+  socket.on('budget-plan:updated', () => {
+    if (currentScreen === 'planning') loadPlanning();
+  });
+
   socket.on('connect_error', (err) => {
     console.warn('Socket error:', err.message);
   });
@@ -186,6 +207,7 @@ function initSocket() {
 const SCREEN_TITLES = {
   budget: 'Бюджет',
   summary: 'Статистика',
+  planning: 'Планирование',
   chart: 'График',
   settings: 'Настройки',
 };
@@ -216,6 +238,7 @@ function loadScreen(name) {
   switch (name) {
     case 'budget': loadBudget(); break;
     case 'summary': loadSummary(); break;
+    case 'planning': loadPlanning(); break;
     case 'chart': loadChart(); break;
     case 'settings': loadSettingsScreen(); break;
   }
@@ -447,6 +470,105 @@ async function loadChart() {
     container.innerHTML = `<img src="${chartImgUrl}" alt="График расходов" />`;
   } catch {
     container.innerHTML = '<div class="empty-state">Ошибка загрузки графика</div>';
+  }
+}
+
+// ─── PLANNING SCREEN ──────────────────────────────────────────────────────────
+
+let planPartnerName = 'Партнёр';
+let planActualByCategory = {};
+
+async function loadPlanning() {
+  try {
+    const [plan, summaryData, users] = await Promise.all([
+      apiJson('GET', '/api/budget-plan'),
+      apiJson('GET', '/api/summary'),
+      apiJson('GET', '/api/users'),
+    ]);
+
+    const incomes = plan.incomes || {};
+    planPartnerName = (users || []).find(u => u.name !== currentUser.name)?.name || 'Партнёр';
+
+    document.getElementById('plan-label-me').textContent = currentUser.name;
+    document.getElementById('plan-label-partner').textContent = planPartnerName;
+    document.getElementById('plan-income-me').value = incomes[currentUser.name] || '';
+    document.getElementById('plan-income-partner').value = incomes[planPartnerName] || '';
+
+    document.getElementById('plan-month-label').textContent = getMonthName();
+
+    planActualByCategory = summaryData.byCategory || {};
+    const total = updatePlanTotal();
+    renderPlanBreakdown(total, planActualByCategory);
+  } catch {
+    showToastError('Ошибка загрузки планирования');
+  }
+}
+
+function updatePlanTotal() {
+  const me = parseInt(document.getElementById('plan-income-me').value) || 0;
+  const partner = parseInt(document.getElementById('plan-income-partner').value) || 0;
+  const total = me + partner;
+  document.getElementById('plan-income-total').textContent = fmt(total);
+  return total;
+}
+
+function renderPlanBreakdown(totalIncome, actualByCategory) {
+  const table = document.getElementById('plan-table');
+  if (!totalIncome) {
+    table.innerHTML = '<div class="empty-state">Введите доходы для расчёта бюджета</div>';
+    return;
+  }
+
+  table.innerHTML = '';
+  for (const cat of PLAN_CATEGORIES) {
+    const planned = Math.round(totalIncome * cat.pct / 100);
+    const actual = cat.noActual ? null : (actualByCategory[cat.key] || 0);
+    const diff = actual !== null ? planned - actual : null;
+
+    const row = document.createElement('div');
+    row.className = 'plan-row';
+
+    let diffHtml = '<span class="plan-diff plan-diff-na">—</span>';
+    if (diff !== null) {
+      const cls = diff >= 0 ? 'plan-diff-ok' : 'plan-diff-over';
+      const sign = diff >= 0 ? '+' : '';
+      diffHtml = `<span class="plan-diff ${cls}">${sign}${fmt(diff)}</span>`;
+    }
+
+    row.innerHTML = `
+      <span class="plan-cat-icon">${cat.icon}</span>
+      <div class="plan-cat-info">
+        <span class="plan-cat-name">${cat.key}</span>
+        <span class="plan-pct">${cat.pct}%</span>
+      </div>
+      <span class="plan-planned">${fmt(planned)}</span>
+      <span class="plan-actual">${actual !== null ? fmt(actual) : '—'}</span>
+      ${diffHtml}
+    `;
+    table.appendChild(row);
+  }
+}
+
+async function savePlan() {
+  const incomes = {
+    [currentUser.name]: parseInt(document.getElementById('plan-income-me').value) || 0,
+    [planPartnerName]: parseInt(document.getElementById('plan-income-partner').value) || 0,
+  };
+
+  const btn = document.getElementById('btn-save-plan');
+  btn.disabled = true;
+  btn.textContent = 'Сохраняю...';
+
+  try {
+    await apiJson('PUT', '/api/budget-plan', { incomes });
+    showToastSuccess('Бюджет сохранён');
+    const total = (incomes[currentUser.name] || 0) + (incomes[planPartnerName] || 0);
+    renderPlanBreakdown(total, planActualByCategory);
+  } catch {
+    showToastError('Ошибка сохранения');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Сохранить';
   }
 }
 
@@ -791,6 +913,15 @@ function setupEventListeners() {
     budgetDate = new Date(+budgetDate + 86400000);
     loadBudget();
   });
+
+  // Planning
+  document.getElementById('plan-income-me').addEventListener('input', () => {
+    renderPlanBreakdown(updatePlanTotal(), planActualByCategory);
+  });
+  document.getElementById('plan-income-partner').addEventListener('input', () => {
+    renderPlanBreakdown(updatePlanTotal(), planActualByCategory);
+  });
+  document.getElementById('btn-save-plan').addEventListener('click', savePlan);
 
   // Summary navigation
   document.getElementById('summary-prev').addEventListener('click', () => {

@@ -116,6 +116,45 @@
       </div>
     </div>
 
+    <!-- ── PLANNING ─────────────────────────────────────────────────── -->
+    <div id="screen-planning" class="screen">
+
+      <!-- Income inputs -->
+      <div class="card">
+        <div class="settings-title">Доходы на месяц</div>
+        <div class="income-inputs">
+          <div class="income-row">
+            <span class="income-label" id="plan-label-me">Я</span>
+            <input type="number" id="plan-income-me" inputmode="numeric" placeholder="0" min="0" />
+            <span class="income-currency">₽</span>
+          </div>
+          <div class="income-row">
+            <span class="income-label" id="plan-label-partner">Партнёр</span>
+            <input type="number" id="plan-income-partner" inputmode="numeric" placeholder="0" min="0" />
+            <span class="income-currency">₽</span>
+          </div>
+        </div>
+        <div class="income-total-row">
+          <span class="income-total-label">Итого семейный бюджет</span>
+          <span class="income-total-amount" id="plan-income-total">0 ₽</span>
+        </div>
+        <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
+      </div>
+
+      <!-- Breakdown -->
+      <div class="card" id="plan-breakdown-card">
+        <div class="settings-title">Распределение — <span id="plan-month-label"></span></div>
+        <div class="plan-table-header">
+          <span>Категория</span>
+          <span>План</span>
+          <span>Факт</span>
+          <span>Разница</span>
+        </div>
+        <div id="plan-table"></div>
+      </div>
+
+    </div>
+
     <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
     <div id="screen-settings" class="screen">
       <div class="settings-list">
@@ -161,6 +200,10 @@
     <button class="nav-btn" data-screen="summary">
       <span class="nav-icon">📋</span>
       <span class="nav-label">Месяц</span>
+    </button>
+    <button class="nav-btn" data-screen="planning">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">План</span>
     </button>
     <button class="nav-btn" data-screen="chart">
       <span class="nav-icon">📉</span>
