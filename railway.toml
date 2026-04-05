@@ -3,7 +3,8 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "APP_MODE=web node src/server.js"
-healthcheckPath = "/"
-healthcheckTimeout = 30
+# /health отвечает сразу, без ожидания статических файлов
+healthcheckPath = "/health"
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5

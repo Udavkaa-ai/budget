@@ -34,9 +34,18 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' },
+  // Явно указываем транспорты для надёжной работы за Railway-прокси
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 app.use(express.json());
+
+// Health check для Railway (должен отвечать до загрузки статики)
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
 app.use(express.static(join(__dirname, '../public')));
 
 // ─── JWT Auth Middleware ───────────────────────────────────────────────────────
@@ -302,8 +311,9 @@ setInterval(checkReminder, 60 * 1000);
 async function start() {
   await loadData();
 
-  httpServer.listen(config.port, () => {
-    console.log(`🌐 Веб-приложение запущено: http://localhost:${config.port}`);
+  // '0.0.0.0' обязательно для Railway — слушаем на всех интерфейсах
+  httpServer.listen(config.port, '0.0.0.0', () => {
+    console.log(`🌐 Запущено на порту ${config.port}`);
     console.log(`⏰ Напоминания: ${config.reminderHour}:${String(config.reminderMinute).padStart(2, '0')} MSK`);
   });
 }
