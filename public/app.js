@@ -258,11 +258,12 @@ async function loadBudget() {
   document.getElementById('budget-next').disabled = bd >= today;
 
   const list = document.getElementById('budget-expenses-list');
-  list.innerHTML = '<div class="loading">Загрузка</div>';
+  list.style.opacity = '0.4';
 
   try {
     const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
     if (gen !== budgetGen) return; // устаревший ответ — выбрасываем
+    list.style.opacity = '';
 
     const byUser = data.byUser || {};
     const total = data.total || 0;
@@ -322,6 +323,7 @@ async function loadBudget() {
       `<span>Итого за день</span><span class="total-amount">${fmt(filteredTotal)}</span>`;
 
   } catch {
+    list.style.opacity = '';
     showToastError('Ошибка загрузки данных');
   }
 }
@@ -1047,6 +1049,55 @@ function setupEventListeners() {
     loadBudget();
   });
 
+  // Swipe navigation
+  setupSwipe(document.getElementById('screen-budget'), {
+    onLeft: () => {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const bd = new Date(budgetDate); bd.setHours(0,0,0,0);
+      if (bd < today) { budgetDate = new Date(+budgetDate + 86400000); loadBudget(); }
+    },
+    onRight: () => {
+      budgetDate = new Date(budgetDate - 86400000);
+      loadBudget();
+    },
+  });
+  setupSwipe(document.getElementById('screen-summary'), {
+    onLeft: () => {
+      const now = new Date();
+      const m = summaryMonth || (now.getMonth() + 1);
+      const y = summaryYear || now.getFullYear();
+      const next = new Date(y, m, 1);
+      summaryMonth = next.getMonth() + 1; summaryYear = next.getFullYear();
+      loadSummary();
+    },
+    onRight: () => {
+      const now = new Date();
+      const m = summaryMonth || (now.getMonth() + 1);
+      const y = summaryYear || now.getFullYear();
+      const prev = new Date(y, m - 2, 1);
+      summaryMonth = prev.getMonth() + 1; summaryYear = prev.getFullYear();
+      loadSummary();
+    },
+  });
+  setupSwipe(document.getElementById('screen-chart'), {
+    onLeft: () => {
+      const now = new Date();
+      const m = chartMonth || (now.getMonth() + 1);
+      const y = chartYear || now.getFullYear();
+      const next = new Date(y, m, 1);
+      chartMonth = next.getMonth() + 1; chartYear = next.getFullYear();
+      loadChart(); loadCashflowSection();
+    },
+    onRight: () => {
+      const now = new Date();
+      const m = chartMonth || (now.getMonth() + 1);
+      const y = chartYear || now.getFullYear();
+      const prev = new Date(y, m - 2, 1);
+      chartMonth = prev.getMonth() + 1; chartYear = prev.getFullYear();
+      loadChart(); loadCashflowSection();
+    },
+  });
+
   // Planning
   document.getElementById('plan-income-me').addEventListener('input', updatePlanTotals);
   document.getElementById('plan-income-partner').addEventListener('input', updatePlanTotals);
@@ -1181,6 +1232,20 @@ function setupEventListeners() {
   document.getElementById('reminder-close').addEventListener('click', () => {
     document.getElementById('reminder-toast').classList.add('hidden');
   });
+}
+
+function setupSwipe(el, { onLeft, onRight }) {
+  let startX = 0, startY = 0;
+  el.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  el.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+    if (dx < 0) onLeft(); else onRight();
+  }, { passive: true });
 }
 
 function switchAddTab(tab) {
