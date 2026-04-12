@@ -39,6 +39,8 @@ import {
   addUser,
   updateUser,
   deleteUser,
+  getFamilyBudgetSettings,
+  saveFamilyBudgetSettings,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -230,12 +232,14 @@ app.post('/api/import', authMiddleware, async (req, res) => {
 // ─── Settings Routes ──────────────────────────────────────────────────────────
 
 app.get('/api/settings', authMiddleware, (req, res) => {
+  const budget = getFamilyBudgetSettings(req.user.family);
   res.json({
     ...getSettings(req.user.family),
     categories: CATEGORIES,
-    plannedMonthly: config.plannedMonthly,
-    plannedFixed: config.plannedFixed,
-    fixedExpensesList: config.fixedExpensesList,
+    plannedMonthly:    budget.plannedMonthly,
+    plannedFixed:      budget.plannedFixed,
+    fixedExpensesDay:  budget.fixedExpensesDay,
+    fixedExpensesList: budget.fixedExpensesList,
   });
 });
 
@@ -296,6 +300,22 @@ app.delete('/api/admin/users/:login', authMiddleware, adminMiddleware, async (re
   }
   const deleted = await deleteUser(req.params.login);
   if (!deleted) return res.status(404).json({ error: 'Пользователь не найден' });
+  res.json({ ok: true });
+});
+
+// Бюджетные настройки конкретной группы (семьи)
+app.get('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware, (req, res) => {
+  res.json(getFamilyBudgetSettings(req.params.familyId));
+});
+
+app.put('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware, async (req, res) => {
+  const { plannedMonthly, plannedFixed, fixedExpensesDay, fixedExpensesList } = req.body || {};
+  await saveFamilyBudgetSettings(req.params.familyId, {
+    plannedMonthly:    plannedMonthly    !== undefined ? Number(plannedMonthly)    : undefined,
+    plannedFixed:      plannedFixed      !== undefined ? Number(plannedFixed)      : undefined,
+    fixedExpensesDay:  fixedExpensesDay  !== undefined ? Number(fixedExpensesDay)  : undefined,
+    fixedExpensesList: fixedExpensesList,
+  });
   res.json({ ok: true });
 });
 

@@ -262,6 +262,50 @@
             </div>
           </div>
         </div>
+
+        <!-- Бюджетные настройки групп — только для администраторов -->
+        <div class="settings-section hidden" id="admin-budget-section">
+          <div class="settings-title">Бюджет по группам</div>
+          <div id="admin-families-list"></div>
+        </div>
+
+        <!-- Шаблон карточки группы (клонируется через JS) -->
+        <template id="tmpl-family-budget">
+          <div class="family-budget-card">
+            <div class="family-budget-header">
+              <span class="family-budget-id"></span>
+            </div>
+            <div class="form-group">
+              <label>Плановые расходы на месяц, ₽</label>
+              <input class="fb-planned-monthly" type="number" inputmode="numeric" placeholder="0" min="0" />
+            </div>
+            <div class="form-group">
+              <label>Постоянные расходы (итого), ₽</label>
+              <input class="fb-planned-fixed" type="number" inputmode="numeric" placeholder="0" min="0" />
+            </div>
+            <div class="form-group">
+              <label>День списания постоянных</label>
+              <input class="fb-fixed-day" type="number" inputmode="numeric" placeholder="15" min="1" max="31" />
+            </div>
+            <div class="form-group">
+              <label>Список постоянных расходов</label>
+              <div class="fb-fixed-list"></div>
+              <button class="btn btn-outline fb-add-item" style="margin-top:6px;font-size:13px">+ Добавить статью</button>
+            </div>
+            <div class="admin-form-btns">
+              <button class="btn btn-primary fb-save">Сохранить</button>
+            </div>
+          </div>
+        </template>
+
+        <template id="tmpl-fixed-item">
+          <div class="fb-item-row">
+            <input class="fb-item-name" type="text" placeholder="Название" />
+            <input class="fb-item-amount" type="number" inputmode="numeric" placeholder="0" min="0" />
+            <button class="fb-item-del icon-btn">✕</button>
+          </div>
+        </template>
+
       </div>
     </div>
 
