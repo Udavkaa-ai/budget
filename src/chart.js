@@ -1,4 +1,4 @@
-import { getChartData } from './storage.js';
+import { getChartData, getFamilyBudgetSettings } from './storage.js';
 import { config } from './config.js';
 
 const QUICKCHART_URL = 'https://quickchart.io/chart';
@@ -29,10 +29,13 @@ export async function generateChartImage(month = null, year = null, excludeFixed
     return null;
   }
 
+  // Бюджетные настройки конкретной семьи (с fallback на глобальный конфиг)
+  const { plannedMonthly, plannedFixed, fixedExpensesDay } = getFamilyBudgetSettings(familyId);
+
   // При исключении постоянных — план только по переменным расходам
-  const variableMonthly = config.plannedMonthly - config.plannedFixed;
+  const variableMonthly = plannedMonthly - plannedFixed;
   const variableDaily = variableMonthly / daysInMonth;
-  const fixedDay = config.fixedExpensesDay;
+  const fixedDay = fixedExpensesDay;
 
   const datasets = [];
   const colors = ['#4e79a7', '#f28e2b', '#76b7b2', '#59a14f'];
@@ -55,7 +58,7 @@ export async function generateChartImage(month = null, year = null, excludeFixed
     let planned = Math.round(variableDaily * day);
     // Фиксированные расходы добавляем на линию плана только если не исключаем их
     if (!excludeFixed && day >= fixedDay) {
-      planned += config.plannedFixed;
+      planned += plannedFixed;
     }
     return planned;
   });

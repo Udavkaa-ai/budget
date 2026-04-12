@@ -26,6 +26,30 @@ function familySettings(familyId) {
 }
 
 /**
+ * Бюджетные настройки семьи (план, постоянные расходы).
+ * Берём из family settings, иначе — из глобального конфига.
+ */
+export function getFamilyBudgetSettings(familyId) {
+  const fs = familySettings(familyId);
+  return {
+    plannedMonthly:    fs.plannedMonthly    ?? config.plannedMonthly,
+    plannedFixed:      fs.plannedFixed      ?? config.plannedFixed,
+    fixedExpensesDay:  fs.fixedExpensesDay  ?? config.fixedExpensesDay,
+    fixedExpensesList: fs.fixedExpensesList ?? config.fixedExpensesList,
+  };
+}
+
+/** Сохранить бюджетные настройки семьи */
+export async function saveFamilyBudgetSettings(familyId, { plannedMonthly, plannedFixed, fixedExpensesDay, fixedExpensesList }) {
+  const fs = familySettings(familyId);
+  if (plannedMonthly   !== undefined) fs.plannedMonthly   = plannedMonthly;
+  if (plannedFixed     !== undefined) fs.plannedFixed     = plannedFixed;
+  if (fixedExpensesDay !== undefined) fs.fixedExpensesDay = fixedExpensesDay;
+  if (fixedExpensesList !== undefined) fs.fixedExpensesList = fixedExpensesList;
+  debouncedSave();
+}
+
+/**
  * Загрузка данных при старте + миграция старого формата
  */
 export async function loadData() {

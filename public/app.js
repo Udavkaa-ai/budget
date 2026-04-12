@@ -626,6 +626,7 @@ async function loadSettingsScreen() {
   // Admin panel — загружаем только если текущий пользователь администратор
   if (currentUser?.isAdmin) {
     document.getElementById('admin-section').classList.remove('hidden');
+    document.getElementById('admin-budget-section').classList.remove('hidden');
     loadAdminUsers();
   }
 }
@@ -638,9 +639,10 @@ async function loadAdminUsers() {
 
   const list = document.getElementById('admin-users-list');
 
-  // Собираем уникальные семьи для select'а в форме создания
+  // Собираем уникальные семьи для select'а и для раздела бюджетных настроек
   const families = [...new Set(users.map(u => u.family || 'family1'))];
   renderAdminFamilySelect(families);
+  loadAdminFamilies(families);
 
   list.innerHTML = '';
   for (const u of users) {
@@ -675,6 +677,61 @@ function renderAdminFamilySelect(families) {
 
 function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── ADMIN: BUDGET SETTINGS PER FAMILY ───────────────────────────────────────
+
+async function loadAdminFamilies(families) {
+  const container = document.getElementById('admin-families-list');
+  container.innerHTML = '';
+  const tmplCard = document.getElementById('tmpl-family-budget');
+  const tmplItem = document.getElementById('tmpl-fixed-item');
+
+  for (const familyId of families) {
+    const settings = await apiJson('GET', `/api/admin/family-settings/${encodeURIComponent(familyId)}`);
+
+    const card = tmplCard.content.cloneNode(true).firstElementChild;
+    card.querySelector('.family-budget-id').textContent = familyId;
+    card.querySelector('.fb-planned-monthly').value = settings.plannedMonthly || '';
+    card.querySelector('.fb-planned-fixed').value   = settings.plannedFixed   || '';
+    card.querySelector('.fb-fixed-day').value        = settings.fixedExpensesDay || '';
+
+    const fixedList = card.querySelector('.fb-fixed-list');
+
+    function addFixedItem(name = '', amount = '') {
+      const row = tmplItem.content.cloneNode(true).firstElementChild;
+      row.querySelector('.fb-item-name').value   = name;
+      row.querySelector('.fb-item-amount').value = amount || '';
+      row.querySelector('.fb-item-del').addEventListener('click', () => row.remove());
+      fixedList.appendChild(row);
+    }
+
+    for (const item of (settings.fixedExpensesList || [])) {
+      addFixedItem(item.name, item.amount);
+    }
+
+    card.querySelector('.fb-add-item').addEventListener('click', () => addFixedItem());
+
+    card.querySelector('.fb-save').addEventListener('click', async () => {
+      const items = [...fixedList.querySelectorAll('.fb-item-row')].map(row => ({
+        name:   row.querySelector('.fb-item-name').value.trim(),
+        amount: parseInt(row.querySelector('.fb-item-amount').value) || 0,
+      })).filter(i => i.name);
+
+      const body = {
+        plannedMonthly:    parseInt(card.querySelector('.fb-planned-monthly').value) || 0,
+        plannedFixed:      parseInt(card.querySelector('.fb-planned-fixed').value)   || 0,
+        fixedExpensesDay:  parseInt(card.querySelector('.fb-fixed-day').value)        || 15,
+        fixedExpensesList: items,
+      };
+
+      const res = await apiJson('PUT', `/api/admin/family-settings/${encodeURIComponent(familyId)}`, body);
+      if (res.ok) showToastSuccess(`Настройки группы «${familyId}» сохранены`);
+      else showToastError(res.error || 'Ошибка сохранения');
+    });
+
+    container.appendChild(card);
+  }
 }
 
 async function loadSettings() {

@@ -1201,3 +1201,64 @@ html, body {
 .admin-form-btns { display: flex; gap: 8px; margin-top: 4px; }
 .admin-form-btns .btn { flex: 1; }
 
+.family-budget-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.family-budget-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.family-budget-id {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--primary);
+  background: var(--primary-light);
+  border-radius: 20px;
+  padding: 3px 12px;
+}
+
+.family-budget-card .form-group { display: flex; flex-direction: column; gap: 4px; }
+.family-budget-card label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.family-budget-card input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 15px;
+  background: var(--bg);
+}
+.family-budget-card input:focus { outline: none; border-color: var(--primary); background: white; }
+
+.fb-item-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.fb-item-name {
+  flex: 2;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 14px;
+  background: var(--bg);
+}
+.fb-item-amount {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 14px;
+  background: var(--bg);
+}
+.fb-item-del { color: var(--danger); font-size: 16px; padding: 4px; flex-shrink: 0; }
+
