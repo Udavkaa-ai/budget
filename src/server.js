@@ -90,7 +90,7 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   const token = jwt.sign(
-    { login: user.login, name: user.name },
+    { login: user.login, name: user.name, family: user.family || 'family1' },
     config.jwtSecret,
     { expiresIn: '30d' }
   );
@@ -117,29 +117,29 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   }
 
   const withUser = expenses.map(e => ({ ...e, user: req.user.name }));
-  await appendExpenses(withUser);
+  await appendExpenses(withUser, req.user.family);
 
-  // Уведомляем всех подключённых клиентов
-  io.emit('expense:added', { expenses: withUser, by: req.user.name });
+  // Уведомляем только пользователей той же семьи
+  io.to(req.user.family).emit('expense:added', { expenses: withUser, by: req.user.name });
 
   res.json({ ok: true, count: withUser.length });
 });
 
 // Удалить расход
 app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
-  const deleted = await deleteExpense(req.params.id);
+  const deleted = await deleteExpense(req.params.id, req.user.family);
   if (!deleted) return res.status(404).json({ error: 'Не найдено' });
 
-  io.emit('expense:deleted', { id: req.params.id, by: req.user.name });
+  io.to(req.user.family).emit('expense:deleted', { id: req.params.id, by: req.user.name });
   res.json({ ok: true });
 });
 
 // Переключить isFixed
 app.post('/api/expenses/:id/toggle-fixed', authMiddleware, async (req, res) => {
-  const result = await toggleExpenseFixed(req.params.id);
+  const result = await toggleExpenseFixed(req.params.id, req.user.family);
   if (result === null) return res.status(404).json({ error: 'Не найдено' });
 
-  io.emit('expense:updated', { id: req.params.id, isFixed: result, by: req.user.name });
+  io.to(req.user.family).emit('expense:updated', { id: req.params.id, isFixed: result, by: req.user.name });
   res.json({ ok: true, isFixed: result });
 });
 
@@ -147,17 +147,16 @@ app.post('/api/expenses/:id/toggle-fixed', authMiddleware, async (req, res) => {
 
 // Мои расходы сегодня
 app.get('/api/expenses/today', authMiddleware, (req, res) => {
-  const data = getTodaySummary(req.user.name);
-  res.json(data);
+  res.json(getTodaySummary(req.user.name, req.user.family));
 });
 
 // Расходы семьи за день
 app.get('/api/expenses/family', authMiddleware, (req, res) => {
   const { date } = req.query;
   if (date) {
-    res.json(getFamilyDay(date));
+    res.json(getFamilyDay(date, req.user.family));
   } else {
-    res.json(getFamilyToday());
+    res.json(getFamilyToday(req.user.family));
   }
 });
 
@@ -165,14 +164,14 @@ app.get('/api/expenses/family', authMiddleware, (req, res) => {
 app.get('/api/expenses/month', authMiddleware, (req, res) => {
   const month = req.query.month ? parseInt(req.query.month) : null;
   const year = req.query.year ? parseInt(req.query.year) : null;
-  res.json(getExpensesForMonth(month, year));
+  res.json(getExpensesForMonth(month, year, req.user.family));
 });
 
 // Расходы по категории
 app.get('/api/expenses/category/:cat', authMiddleware, (req, res) => {
   const month = req.query.month ? parseInt(req.query.month) : null;
   const year = req.query.year ? parseInt(req.query.year) : null;
-  res.json(getCategoryExpenses(req.params.cat, month, year));
+  res.json(getCategoryExpenses(req.params.cat, month, year, req.user.family));
 });
 
 // Сводка за месяц (статистика)
@@ -180,7 +179,7 @@ app.get('/api/summary', authMiddleware, (req, res) => {
   const month = req.query.month ? parseInt(req.query.month) : null;
   const year = req.query.year ? parseInt(req.query.year) : null;
   const excludeFixed = req.query.excludeFixed === 'true';
-  res.json(getFamilySummary(month, year, excludeFixed));
+  res.json(getFamilySummary(month, year, excludeFixed, req.user.family));
 });
 
 // Данные для диаграммы (PNG)
@@ -190,7 +189,7 @@ app.get('/api/chart', authMiddleware, async (req, res) => {
     const year = req.query.year ? parseInt(req.query.year) : null;
     const excludeFixed = req.query.excludeFixed === 'true';
 
-    const img = await generateChartImage(month, year, excludeFixed);
+    const img = await generateChartImage(month, year, excludeFixed, req.user.family);
     if (!img) return res.status(404).json({ error: 'Нет данных для диаграммы' });
 
     res.set('Content-Type', 'image/png');
@@ -204,7 +203,7 @@ app.get('/api/chart', authMiddleware, async (req, res) => {
 
 // Экспорт CSV
 app.get('/api/export', authMiddleware, (req, res) => {
-  const csv = exportCSV();
+  const csv = exportCSV(req.user.family);
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="expenses-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.send('\uFEFF' + csv); // BOM для Excel
@@ -216,8 +215,8 @@ app.post('/api/import', authMiddleware, async (req, res) => {
   if (!csv?.trim()) return res.status(400).json({ error: 'Пустой CSV' });
 
   try {
-    const result = await importFromCSV(csv);
-    io.emit('expense:added', { expenses: [], by: req.user.name });
+    const result = await importFromCSV(csv, req.user.family);
+    io.to(req.user.family).emit('expense:added', { expenses: [], by: req.user.name });
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('Import error:', err);
@@ -229,7 +228,7 @@ app.post('/api/import', authMiddleware, async (req, res) => {
 
 app.get('/api/settings', authMiddleware, (req, res) => {
   res.json({
-    ...getSettings(),
+    ...getSettings(req.user.family),
     categories: CATEGORIES,
     plannedMonthly: config.plannedMonthly,
     plannedFixed: config.plannedFixed,
@@ -241,22 +240,22 @@ app.put('/api/settings', authMiddleware, async (req, res) => {
   const { key, value } = req.body || {};
   if (!key) return res.status(400).json({ error: 'Не указан ключ настройки' });
 
-  await updateSetting(key, value);
-  io.emit('settings:updated', { key, value, by: req.user.name });
+  await updateSetting(key, value, req.user.family);
+  io.to(req.user.family).emit('settings:updated', { key, value, by: req.user.name });
   res.json({ ok: true });
 });
 
 // Перепометить постоянные расходы
 app.post('/api/settings/retag', authMiddleware, async (req, res) => {
-  const count = await retagFixedExpenses();
-  io.emit('expense:retagged', { count, by: req.user.name });
+  const count = await retagFixedExpenses(req.user.family);
+  io.to(req.user.family).emit('expense:retagged', { count, by: req.user.name });
   res.json({ ok: true, count });
 });
 
 // ─── Goals Routes ─────────────────────────────────────────────────────────────
 
-app.get('/api/goals', authMiddleware, (_req, res) => {
-  res.json(getGoals());
+app.get('/api/goals', authMiddleware, (req, res) => {
+  res.json(getGoals(req.user.family));
 });
 
 app.post('/api/goals', authMiddleware, async (req, res) => {
@@ -264,47 +263,47 @@ app.post('/api/goals', authMiddleware, async (req, res) => {
   if (!name?.trim() || !targetAmount || targetAmount <= 0) {
     return res.status(400).json({ error: 'Укажите название и сумму цели' });
   }
-  const goal = await addGoal({ name: name.trim(), targetAmount, emoji, createdBy: req.user.name });
-  io.emit('goals:updated');
+  const goal = await addGoal({ name: name.trim(), targetAmount, emoji, createdBy: req.user.name, familyId: req.user.family });
+  io.to(req.user.family).emit('goals:updated');
   res.json({ ok: true, goal });
 });
 
 app.post('/api/goals/:id/contribute', authMiddleware, async (req, res) => {
   const { amount } = req.body || {};
   if (!amount || amount <= 0) return res.status(400).json({ error: 'Укажите сумму' });
-  const goal = await contributeToGoal(req.params.id, req.user.name, amount);
+  const goal = await contributeToGoal(req.params.id, req.user.name, amount, req.user.family);
   if (!goal) return res.status(404).json({ error: 'Цель не найдена' });
-  io.emit('goals:updated');
+  io.to(req.user.family).emit('goals:updated');
   res.json({ ok: true, goal });
 });
 
 app.delete('/api/goals/:id', authMiddleware, async (req, res) => {
-  const deleted = await deleteGoal(req.params.id);
+  const deleted = await deleteGoal(req.params.id, req.user.family);
   if (!deleted) return res.status(404).json({ error: 'Цель не найдена' });
-  io.emit('goals:updated');
+  io.to(req.user.family).emit('goals:updated');
   res.json({ ok: true });
 });
 
 // ─── Budget Plan Routes ────────────────────────────────────────────────────────
 
-app.get('/api/budget-plan', authMiddleware, (_req, res) => {
-  res.json(getBudgetPlan());
+app.get('/api/budget-plan', authMiddleware, (req, res) => {
+  res.json(getBudgetPlan(req.user.family));
 });
 
 app.put('/api/budget-plan', authMiddleware, async (req, res) => {
-  await saveBudgetPlan(req.body);
-  io.emit('budget-plan:updated');
+  await saveBudgetPlan(req.body, req.user.family);
+  io.to(req.user.family).emit('budget-plan:updated');
   res.json({ ok: true });
 });
 
 // ─── Cashflow Routes ──────────────────────────────────────────────────────────
 
 app.get('/api/cashflow/:ym', authMiddleware, (req, res) => {
-  res.json(getCashflow(req.params.ym));
+  res.json(getCashflow(req.params.ym, req.user.family));
 });
 
 app.put('/api/cashflow/:ym', authMiddleware, async (req, res) => {
-  await saveCashflow(req.params.ym, req.body);
+  await saveCashflow(req.params.ym, req.body, req.user.family);
   res.json({ ok: true });
 });
 
@@ -313,13 +312,13 @@ app.get('/api/cashflow-chart/:ym', authMiddleware, async (req, res) => {
   const [yearStr, monthStr] = ym.split('-');
   const year = parseInt(yearStr), month = parseInt(monthStr);
 
-  const cf = getCashflow(ym);
+  const cf = getCashflow(ym, req.user.family);
   const startBalance = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
   if (!startBalance && !Object.keys(cf.incomeDays || {}).length) {
     return res.status(400).json({ error: 'Нет данных баланса. Заполните поля и сохраните.' });
   }
 
-  const dailyTotals = getMonthDailyTotals(month, year);
+  const dailyTotals = getMonthDailyTotals(month, year, req.user.family);
   const incomeDays = cf.incomeDays || {};
 
   const now = new Date();
@@ -438,9 +437,11 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log(`🔌 ${socket.user.name} подключился`);
+  const family = socket.user.family || 'family1';
+  socket.join(family);
+  console.log(`🔌 ${socket.user.name} [${family}] подключился`);
   socket.on('disconnect', () => {
-    console.log(`🔌 ${socket.user.name} отключился`);
+    console.log(`🔌 ${socket.user.name} [${family}] отключился`);
   });
 });
 
@@ -478,11 +479,15 @@ function checkReminder() {
     lastReminderDate !== today
   ) {
     lastReminderDate = today;
-    const familyToday = getFamilyToday();
-    io.emit('reminder', {
-      total: familyToday.total,
-      byUser: familyToday.byUser,
-    });
+    // Отправляем напоминание каждой семье отдельно
+    const families = [...new Set(config.webUsers.map(u => u.family || 'family1'))];
+    for (const fid of families) {
+      const familyToday = getFamilyToday(fid);
+      io.to(fid).emit('reminder', {
+        total: familyToday.total,
+        byUser: familyToday.byUser,
+      });
+    }
     console.log('📨 Напоминание отправлено в приложение');
   }
 }

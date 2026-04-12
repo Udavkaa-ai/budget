@@ -22,8 +22,8 @@ function cumulative(arr) {
  * Линия — кумулятивный план нарастающим итогом
  * @param {boolean} excludeFixed - исключить постоянные расходы
  */
-export async function generateChartImage(month = null, year = null, excludeFixed = false) {
-  const { labels, userExpenses, daysInMonth, monthName } = getChartData(month, year, config.trackingStartDay, excludeFixed);
+export async function generateChartImage(month = null, year = null, excludeFixed = false, familyId) {
+  const { labels, userExpenses, daysInMonth, monthName } = getChartData(month, year, config.trackingStartDay, excludeFixed, familyId);
 
   if (labels.length === 0) {
     return null;
