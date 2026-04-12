@@ -1235,16 +1235,68 @@ function setupEventListeners() {
 }
 
 function setupSwipe(el, { onLeft, onRight }) {
-  let startX = 0, startY = 0;
+  let startX = 0, startY = 0, active = false;
+
   el.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
+    active = true;
+    el.style.transition = 'none';
   }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (!active) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    // Cancel tracking if clearly a vertical scroll
+    if (Math.abs(dy) > 20 && Math.abs(dy) > Math.abs(dx)) {
+      active = false;
+      el.style.transition = 'transform 0.2s ease';
+      el.style.transform = '';
+      return;
+    }
+    // Follow finger with dampening (rubber-band feel)
+    el.style.transform = `translateX(${dx * 0.35}px)`;
+  }, { passive: true });
+
+  function finish(dx, dy) {
+    if (!active) return;
+    active = false;
+    const isHorizontal = Math.abs(dx) >= 55 && Math.abs(dx) >= Math.abs(dy) * 1.3;
+    if (isHorizontal) {
+      const goLeft = dx < 0;
+      // Slide screen out
+      el.style.transition = 'transform 0.2s ease-in';
+      el.style.transform = `translateX(${goLeft ? '-105%' : '105%'})`;
+      setTimeout(() => {
+        // Instantly jump to opposite side, fire data load
+        el.style.transition = 'none';
+        el.style.transform = `translateX(${goLeft ? '60%' : '-60%'})`;
+        if (goLeft) onLeft(); else onRight();
+        // Slide back to center
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          el.style.transition = 'transform 0.22s ease-out';
+          el.style.transform = '';
+        }));
+      }, 200);
+    } else {
+      // Not a valid swipe — snap back
+      el.style.transition = 'transform 0.25s ease';
+      el.style.transform = '';
+    }
+  }
+
   el.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - startX;
-    const dy = e.changedTouches[0].clientY - startY;
-    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0) onLeft(); else onRight();
+    finish(
+      e.changedTouches[0].clientX - startX,
+      e.changedTouches[0].clientY - startY,
+    );
+  }, { passive: true });
+
+  el.addEventListener('touchcancel', () => {
+    active = false;
+    el.style.transition = 'transform 0.25s ease';
+    el.style.transform = '';
   }, { passive: true });
 }
 
