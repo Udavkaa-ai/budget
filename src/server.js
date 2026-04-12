@@ -460,6 +460,69 @@ app.get('/api/cashflow-chart/:ym', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── Unified Chart Data ───────────────────────────────────────────────────────
+
+app.get('/api/unified-chart-data/:ym', authMiddleware, (req, res) => {
+  const { ym } = req.params;
+  const [yearStr, monthStr] = ym.split('-');
+  const year = parseInt(yearStr), month = parseInt(monthStr);
+  if (isNaN(month) || isNaN(year)) return res.status(400).json({ error: 'Неверный формат месяца' });
+
+  const excludeFixed = req.query.excludeFixed === 'true';
+  const family = req.user.family;
+
+  // Expense data: per user per day, starting from day 1
+  const chartData = getChartData(month, year, 1, excludeFixed, family);
+
+  // Cashflow data
+  const cf = getCashflow(ym, family);
+  const startBalance = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
+  const incomeDays = cf.incomeDays || {};
+  const hasBalance = startBalance > 0 || Object.keys(incomeDays).length > 0;
+
+  // Days to show: 1 through yesterday (current month) or full month
+  const now = new Date();
+  const isCurrentMonth = now.getMonth() + 1 === month && now.getFullYear() === year;
+  const lastDay = isCurrentMonth ? now.getDate() : new Date(year, month, 0).getDate();
+
+  // Labels: 1..lastDay
+  const labels = [];
+  for (let d = 1; d <= lastDay; d++) labels.push(String(d));
+
+  // Rebuild per-user expense arrays aligned to labels (chartData may have different range)
+  const userExpenses = {};
+  for (const [user, amounts] of Object.entries(chartData.userExpenses || {})) {
+    // chartData was built with startDay=1, so amounts are aligned 1..lastDay already
+    userExpenses[user] = labels.map((d, i) => amounts[i] || 0);
+  }
+
+  // Balance line
+  let balanceLine = null;
+  if (hasBalance) {
+    const dailyTotals = getMonthDailyTotals(month, year, family);
+    balanceLine = [];
+    let balance = startBalance;
+    for (let d = 1; d <= lastDay; d++) {
+      const dd = String(d).padStart(2, '0');
+      const mm = String(month).padStart(2, '0');
+      const dayKey = `${dd}.${mm}.${year}`;
+      if (incomeDays[String(d)]) balance += incomeDays[String(d)];
+      balance -= (dailyTotals[dayKey] || 0);
+      balanceLine.push(Math.round(balance));
+    }
+  }
+
+  res.json({
+    labels,
+    userExpenses,
+    incomeDays,
+    balanceLine,
+    startBalance,
+    hasBalance,
+    monthName: chartData.monthName,
+  });
+});
+
 // ─── AI Parse Route ───────────────────────────────────────────────────────────
 
 app.post('/api/parse', authMiddleware, async (req, res) => {

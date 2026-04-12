@@ -455,37 +455,243 @@ async function loadCategoryDetail(cat, month, year) {
 
 // ─── CHART SCREEN ─────────────────────────────────────────────────────────────
 
-let chartImgUrl = null;
+// Colors per user index
+const USER_CHART_COLORS = [
+  { bg: 'rgba(79,70,229,0.75)',  border: '#4f46e5' },
+  { bg: 'rgba(239,68,68,0.75)', border: '#ef4444' },
+  { bg: 'rgba(245,158,11,0.75)',border: '#f59e0b' },
+  { bg: 'rgba(16,185,129,0.75)',border: '#10b981' },
+];
+
+let mainChart = null;     // Chart.js instance for inline chart
+let mainChartFs = null;   // Chart.js instance for fullscreen chart
+
+function buildChartConfig(chartData) {
+  const { labels, userExpenses, incomeDays, balanceLine, hasBalance } = chartData;
+  const datasets = [];
+
+  // Income bars (UP, positive)
+  const incomeArr = labels.map(d => incomeDays[d] || 0);
+  if (incomeArr.some(v => v > 0)) {
+    datasets.push({
+      type: 'bar',
+      label: 'Доход',
+      data: incomeArr,
+      backgroundColor: 'rgba(34,197,94,0.75)',
+      borderColor: '#16a34a',
+      borderWidth: 1,
+      stack: 'income',
+      order: 2,
+      yAxisID: 'y',
+    });
+  }
+
+  // Expense bars (DOWN, negative) — one dataset per user
+  Object.entries(userExpenses).forEach(([user, amounts], i) => {
+    const col = USER_CHART_COLORS[i % USER_CHART_COLORS.length];
+    datasets.push({
+      type: 'bar',
+      label: user,
+      data: amounts.map(v => -v),
+      backgroundColor: col.bg,
+      borderColor: col.border,
+      borderWidth: 1,
+      stack: 'expenses',
+      order: 2,
+      yAxisID: 'y',
+    });
+  });
+
+  // Balance line
+  if (hasBalance && balanceLine) {
+    datasets.push({
+      type: 'line',
+      label: 'Баланс',
+      data: balanceLine,
+      borderWidth: 2,
+      pointRadius: labels.length > 20 ? 2 : 4,
+      pointHoverRadius: 6,
+      tension: 0.3,
+      order: 1,
+      yAxisID: 'yBalance',
+      fill: false,
+      segment: {
+        borderColor: ctx => ctx.p1.parsed.y < 0 ? '#ef4444' : '#4f46e5',
+        backgroundColor: ctx => ctx.p1.parsed.y < 0
+          ? 'rgba(239,68,68,0.08)' : 'rgba(79,70,229,0.08)',
+      },
+      pointBackgroundColor: balanceLine.map(v => v < 0 ? '#ef4444' : '#4f46e5'),
+    });
+  }
+
+  const scales = {
+    x: {
+      grid: { display: false },
+      stacked: true,
+      ticks: { maxTicksLimit: 15 },
+    },
+    y: {
+      stacked: true,
+      ticks: {
+        callback: v => {
+          const abs = Math.abs(v);
+          return abs >= 1000 ? (v < 0 ? '-' : '') + (abs/1000).toFixed(0) + 'к' : String(v);
+        },
+      },
+      grid: { color: 'rgba(0,0,0,0.05)' },
+    },
+  };
+
+  if (hasBalance && balanceLine) {
+    scales.yBalance = {
+      position: 'right',
+      grid: { display: false },
+      ticks: {
+        callback: v => {
+          const abs = Math.abs(v);
+          return abs >= 1000 ? (v < 0 ? '-' : '') + (abs/1000).toFixed(0) + 'к' : String(v);
+        },
+        color: '#4f46e5',
+      },
+    };
+  }
+
+  return {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales,
+      plugins: {
+        legend: {
+          display: datasets.length > 1,
+          labels: { boxWidth: 12, padding: 10, font: { size: 11 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const val = Math.abs(ctx.parsed.y);
+              return `${ctx.dataset.label}: ${val.toLocaleString('ru')} ₽`;
+            },
+          },
+        },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x',
+          },
+          pan: {
+            enabled: true,
+            mode: 'x',
+          },
+        },
+      },
+    },
+  };
+}
+
+let lastChartData = null; // store for fullscreen reuse
 
 async function loadChart() {
   const gen = ++chartGen;
   const excludeFixed = document.getElementById('chart-exclude-fixed').checked;
-  const params = new URLSearchParams({
-    ...(chartMonth ? { month: chartMonth } : {}),
-    ...(chartYear ? { year: chartYear } : {}),
-    excludeFixed,
-  });
+  const ym = cfYm();
 
   document.getElementById('chart-month-label').textContent = getMonthName(chartMonth, chartYear);
 
   const container = document.getElementById('chart-container');
-  container.innerHTML = '<div class="loading">Загрузка графика</div>';
+  // Show loading, keep expand button
+  container.querySelector('.chart-canvas-wrapper')?.remove();
+  container.querySelector('.chart-zoom-hint')?.remove();
+  container.querySelector('.empty-state')?.remove();
+  container.querySelector('.loading')?.remove();
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'loading';
+  loadingEl.textContent = 'Загрузка графика';
+  container.insertBefore(loadingEl, document.getElementById('chart-expand-btn'));
 
   try {
-    const res = await api('GET', `/api/chart?${params}`);
+    const data = await apiJson('GET', `/api/unified-chart-data/${ym}?excludeFixed=${excludeFixed}`);
     if (gen !== chartGen) return;
-    if (!res.ok) {
-      const err = await res.json();
-      container.innerHTML = `<div class="empty-state">${err.error || 'Нет данных'}</div>`;
+
+    lastChartData = data;
+
+    // Clear loading
+    loadingEl.remove();
+
+    if (!data.labels?.length) {
+      const emp = document.createElement('div');
+      emp.className = 'empty-state';
+      emp.textContent = 'Нет данных за этот месяц';
+      container.insertBefore(emp, document.getElementById('chart-expand-btn'));
       return;
     }
-    const blob = await res.blob();
-    if (chartImgUrl) URL.revokeObjectURL(chartImgUrl);
-    chartImgUrl = URL.createObjectURL(blob);
-    container.innerHTML = `<img src="${chartImgUrl}" alt="График расходов" />`;
-  } catch {
-    container.innerHTML = '<div class="empty-state">Ошибка загрузки графика</div>';
+
+    // Create canvas wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chart-canvas-wrapper';
+    const canvas = document.createElement('canvas');
+    canvas.id = 'main-chart';
+    wrapper.appendChild(canvas);
+    container.insertBefore(wrapper, document.getElementById('chart-expand-btn'));
+
+    // Zoom hint
+    const hint = document.createElement('div');
+    hint.className = 'chart-zoom-hint';
+    hint.textContent = 'Свайп/колесо мыши — масштаб • Двойной тап — сброс';
+    container.appendChild(hint);
+
+    // Destroy previous chart
+    if (mainChart) { mainChart.destroy(); mainChart = null; }
+
+    const cfg = buildChartConfig(data);
+    mainChart = new Chart(canvas, cfg);
+
+    // Double-tap resets zoom
+    let lastTap = 0;
+    canvas.addEventListener('touchend', () => {
+      const now = Date.now();
+      if (now - lastTap < 300) mainChart?.resetZoom();
+      lastTap = now;
+    }, { passive: true });
+    canvas.addEventListener('dblclick', () => mainChart?.resetZoom());
+
+  } catch (e) {
+    loadingEl.remove();
+    const emp = document.createElement('div');
+    emp.className = 'empty-state';
+    emp.textContent = 'Ошибка загрузки графика';
+    container.insertBefore(emp, document.getElementById('chart-expand-btn'));
   }
+}
+
+function openChartFullscreen() {
+  if (!lastChartData) return;
+  const overlay = document.getElementById('chart-fullscreen');
+  overlay.classList.remove('hidden');
+
+  // Destroy previous fullscreen chart
+  if (mainChartFs) { mainChartFs.destroy(); mainChartFs = null; }
+
+  const canvas = document.getElementById('main-chart-fs');
+  const cfg = buildChartConfig(lastChartData);
+  mainChartFs = new Chart(canvas, cfg);
+
+  let lastTapFs = 0;
+  canvas.addEventListener('touchend', () => {
+    const now = Date.now();
+    if (now - lastTapFs < 300) mainChartFs?.resetZoom();
+    lastTapFs = now;
+  }, { passive: true });
+  canvas.addEventListener('dblclick', () => mainChartFs?.resetZoom());
+}
+
+function closeChartFullscreen() {
+  document.getElementById('chart-fullscreen').classList.add('hidden');
+  if (mainChartFs) { mainChartFs.destroy(); mainChartFs = null; }
 }
 
 // ─── PLANNING SCREEN ──────────────────────────────────────────────────────────
@@ -1269,6 +1475,13 @@ function setupEventListeners() {
   });
   document.getElementById('chart-exclude-fixed').addEventListener('change', loadChart);
 
+  // Chart expand / fullscreen
+  document.getElementById('chart-expand-btn').addEventListener('click', openChartFullscreen);
+  document.getElementById('chart-fs-close').addEventListener('click', closeChartFullscreen);
+  document.getElementById('chart-fullscreen').addEventListener('dblclick', e => {
+    if (e.target === document.getElementById('chart-fullscreen')) closeChartFullscreen();
+  });
+
   // Cashflow
   ['cf-debit','cf-credit','cf-cash'].forEach(id =>
     document.getElementById(id).addEventListener('input', updateCfTotal)
@@ -1546,27 +1759,8 @@ async function loadCashflowSection() {
     document.getElementById('cf-cash').value   = cf.cash   || '';
     updateCfTotal();
     renderCfIncomeDays(cf.incomeDays || { '10': 0, '25': 0 });
-    await loadCfChart(ym);
   } catch {
     renderCfIncomeDays({ '10': 0, '25': 0 });
-  }
-}
-
-async function loadCfChart(ym) {
-  const container = document.getElementById('cf-chart-container');
-  container.innerHTML = '<div class="loading">Загрузка кэшфлоу</div>';
-  try {
-    const res = await api('GET', `/api/cashflow-chart/${ym}`);
-    if (!res.ok) {
-      const err = await res.json();
-      container.innerHTML = `<div class="empty-state">${err.error}</div>`;
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    container.innerHTML = `<img src="${url}" alt="Кэшфлоу" style="width:100%;border-radius:8px" />`;
-  } catch {
-    container.innerHTML = '<div class="empty-state">Ошибка загрузки графика</div>';
   }
 }
 
@@ -1590,7 +1784,7 @@ async function saveCashflow() {
   try {
     await apiJson('PUT', `/api/cashflow/${cfYm()}`, body);
     showToastSuccess('Кэшфлоу сохранён');
-    await loadCfChart(cfYm());
+    await loadChart(); // refresh unified chart with updated cashflow
   } catch {
     showToastError('Ошибка сохранения');
   } finally {
