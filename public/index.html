@@ -112,8 +112,15 @@
           <span>Без постоянных</span>
         </label>
       </div>
-      <div id="chart-container" class="chart-container">
+      <div id="chart-container" class="chart-container chart-interactive">
         <div class="loading">Загрузка...</div>
+        <button id="chart-expand-btn" class="chart-expand-btn" title="Развернуть">⛶</button>
+      </div>
+
+      <!-- Fullscreen overlay -->
+      <div id="chart-fullscreen" class="chart-fullscreen hidden">
+        <button id="chart-fs-close" class="chart-fs-close">✕</button>
+        <canvas id="main-chart-fs"></canvas>
       </div>
 
       <!-- Cashflow -->
@@ -146,7 +153,7 @@
         <button id="btn-cf-save" class="btn btn-primary btn-full" style="margin-top:14px">Сохранить</button>
       </div>
 
-      <div id="cf-chart-container" class="chart-container" style="margin-top:12px"></div>
+      <div id="cf-chart-container" class="hidden"></div>
     </div>
 
     <!-- ── PLANNING ─────────────────────────────────────────────────── -->
@@ -419,6 +426,10 @@
 
 </div>
 
+<!-- Chart.js + zoom plugin -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1/dist/chartjs-plugin-zoom.min.js"></script>
 <!-- Socket.io client -->
 <script src="/socket.io/socket.io.js"></script>
 <script src="/app.js" type="module"></script>
