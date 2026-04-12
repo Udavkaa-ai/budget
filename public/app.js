@@ -1811,7 +1811,7 @@ async function saveCashflow() {
   document.querySelectorAll('.cf-day-row').forEach(row => {
     const day = row.querySelector('.cf-day-num').value.trim();
     const amt = parseInt(row.querySelector('.cf-day-amt').value) || 0;
-    if (day && amt > 0) incomeDays[day] = amt;
+    if (day && amt > 0) incomeDays[day] = (incomeDays[day] || 0) + amt;
   });
 
   const body = {
