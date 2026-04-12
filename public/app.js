@@ -1505,6 +1505,10 @@ function setupEventListeners() {
   document.getElementById('chart-fullscreen').addEventListener('dblclick', e => {
     if (e.target === document.getElementById('chart-fullscreen')) closeChartFullscreen();
   });
+  // Prevent fullscreen touch events from bubbling to the screen-chart swipe handler
+  ['touchstart', 'touchmove', 'touchend'].forEach(type => {
+    document.getElementById('chart-fullscreen').addEventListener(type, e => e.stopPropagation(), { passive: true });
+  });
 
   // Cashflow
   ['cf-debit','cf-credit','cf-cash'].forEach(id =>
