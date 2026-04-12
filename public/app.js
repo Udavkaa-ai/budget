@@ -532,6 +532,7 @@ function buildChartConfig(chartData) {
     },
     y: {
       stacked: true,
+      title: { display: true, text: 'Расходы / Доход, ₽', font: { size: 10 }, color: '#6b7280' },
       ticks: {
         callback: v => {
           const abs = Math.abs(v);
@@ -546,6 +547,7 @@ function buildChartConfig(chartData) {
     scales.yBalance = {
       position: 'right',
       grid: { display: false },
+      title: { display: true, text: 'Баланс, ₽', font: { size: 10 }, color: '#4f46e5' },
       ticks: {
         callback: v => {
           const abs = Math.abs(v);
@@ -578,8 +580,11 @@ function buildChartConfig(chartData) {
           },
         },
         zoom: {
+          limits: {
+            x: { minRange: 7 }, // can't zoom in more than 7 days at once
+          },
           zoom: {
-            wheel: { enabled: true },
+            wheel: { enabled: true, speed: 0.04 },
             pinch: { enabled: true },
             mode: 'x',
           },
@@ -1367,23 +1372,34 @@ function setupEventListeners() {
     loadBudget();
   });
   document.getElementById('budget-next').addEventListener('click', () => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const bd = new Date(budgetDate); bd.setHours(0,0,0,0);
+    if (bd >= today) return;
     budgetDate = new Date(+budgetDate + 86400000);
     loadBudget();
   });
 
   // Swipe navigation
   setupSwipe(document.getElementById('screen-budget'), {
-    onLeft: () => {
+    canLeft: () => {
       const today = new Date(); today.setHours(0,0,0,0);
       const bd = new Date(budgetDate); bd.setHours(0,0,0,0);
-      if (bd < today) { budgetDate = new Date(+budgetDate + 86400000); loadBudget(); }
+      return bd < today;
+    },
+    onLeft: () => {
+      budgetDate = new Date(+budgetDate + 86400000); loadBudget();
     },
     onRight: () => {
-      budgetDate = new Date(budgetDate - 86400000);
-      loadBudget();
+      budgetDate = new Date(budgetDate - 86400000); loadBudget();
     },
   });
   setupSwipe(document.getElementById('screen-summary'), {
+    canLeft: () => {
+      const now = new Date();
+      const m = summaryMonth || (now.getMonth() + 1);
+      const y = summaryYear || now.getFullYear();
+      return y < now.getFullYear() || (y === now.getFullYear() && m < now.getMonth() + 1);
+    },
     onLeft: () => {
       const now = new Date();
       const m = summaryMonth || (now.getMonth() + 1);
@@ -1402,6 +1418,12 @@ function setupEventListeners() {
     },
   });
   setupSwipe(document.getElementById('screen-chart'), {
+    canLeft: () => {
+      const now = new Date();
+      const m = chartMonth || (now.getMonth() + 1);
+      const y = chartYear || now.getFullYear();
+      return y < now.getFullYear() || (y === now.getFullYear() && m < now.getMonth() + 1);
+    },
     onLeft: () => {
       const now = new Date();
       const m = chartMonth || (now.getMonth() + 1);
@@ -1439,6 +1461,7 @@ function setupEventListeners() {
     const now = new Date();
     const m = summaryMonth || (now.getMonth() + 1);
     const y = summaryYear || now.getFullYear();
+    if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth() + 1)) return;
     const next = new Date(y, m, 1);
     summaryMonth = next.getMonth() + 1;
     summaryYear = next.getFullYear();
@@ -1468,6 +1491,7 @@ function setupEventListeners() {
     const now = new Date();
     const m = chartMonth || (now.getMonth() + 1);
     const y = chartYear || now.getFullYear();
+    if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth() + 1)) return;
     const next = new Date(y, m, 1);
     chartMonth = next.getMonth() + 1;
     chartYear = next.getFullYear();
@@ -1480,6 +1504,10 @@ function setupEventListeners() {
   document.getElementById('chart-fs-close').addEventListener('click', closeChartFullscreen);
   document.getElementById('chart-fullscreen').addEventListener('dblclick', e => {
     if (e.target === document.getElementById('chart-fullscreen')) closeChartFullscreen();
+  });
+  // Prevent fullscreen touch events from bubbling to the screen-chart swipe handler
+  ['touchstart', 'touchmove', 'touchend'].forEach(type => {
+    document.getElementById('chart-fullscreen').addEventListener(type, e => e.stopPropagation(), { passive: true });
   });
 
   // Cashflow
@@ -1640,7 +1668,7 @@ function clearAdminForm() {
   document.getElementById('admin-create-error').classList.add('hidden');
 }
 
-function setupSwipe(el, { onLeft, onRight }) {
+function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
   let startX = 0, startY = 0, active = false;
 
   el.addEventListener('touchstart', e => {
@@ -1671,6 +1699,20 @@ function setupSwipe(el, { onLeft, onRight }) {
     const isHorizontal = Math.abs(dx) >= 55 && Math.abs(dx) >= Math.abs(dy) * 1.3;
     if (isHorizontal) {
       const goLeft = dx < 0;
+      const canProceed = goLeft ? (!canLeft || canLeft()) : (!canRight || canRight());
+
+      if (!canProceed) {
+        // Boundary reached — rubber-band bounce
+        const bump = goLeft ? '-28px' : '28px';
+        el.style.transition = 'transform 0.12s ease-out';
+        el.style.transform = `translateX(${bump})`;
+        setTimeout(() => {
+          el.style.transition = 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)';
+          el.style.transform = '';
+        }, 120);
+        return;
+      }
+
       // Slide screen out
       el.style.transition = 'transform 0.2s ease-in';
       el.style.transform = `translateX(${goLeft ? '-105%' : '105%'})`;
