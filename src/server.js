@@ -303,6 +303,13 @@ app.delete('/api/admin/users/:login', authMiddleware, adminMiddleware, async (re
   res.json({ ok: true });
 });
 
+// Принудительное обновление всех клиентов (или только одной семьи)
+app.post('/api/admin/force-update', authMiddleware, adminMiddleware, (req, res) => {
+  io.emit('app:update');
+  console.log(`🔄 Принудительное обновление инициировано пользователем ${req.user.name}`);
+  res.json({ ok: true });
+});
+
 // Бюджетные настройки конкретной группы (семьи)
 app.get('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware, (req, res) => {
   res.json(getFamilyBudgetSettings(req.params.familyId));

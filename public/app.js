@@ -194,6 +194,11 @@ function initSocket() {
     showReminder(body);
   });
 
+  socket.on('app:update', () => {
+    // Небольшая задержка — чтобы инициатор успел получить ответ от сервера
+    setTimeout(() => window.location.reload(), 300);
+  });
+
   socket.on('budget-plan:updated', () => {
     if (currentScreen === 'planning') loadPlanning();
   });
@@ -626,6 +631,7 @@ async function loadSettingsScreen() {
   // Admin panel — загружаем только если текущий пользователь администратор
   if (currentUser?.isAdmin) {
     document.getElementById('admin-section').classList.remove('hidden');
+    document.getElementById('admin-update-section').classList.remove('hidden');
     document.getElementById('admin-budget-section').classList.remove('hidden');
     loadAdminUsers();
   }
@@ -1343,6 +1349,21 @@ function setupEventListeners() {
     document.getElementById('reminder-toast').classList.add('hidden');
   });
 
+  // Принудительное обновление у всех пользователей
+  document.getElementById('btn-force-update').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-force-update');
+    btn.disabled = true;
+    btn.textContent = 'Отправляю...';
+    const res = await apiJson('POST', '/api/admin/force-update');
+    if (res.ok) {
+      showToastSuccess('Обновление отправлено — все пользователи перезагрузят страницу');
+    } else {
+      showToastError('Ошибка');
+    }
+    // Через 1с перезагружаем и сами
+    setTimeout(() => window.location.reload(), 1000);
+  });
+
   // Admin panel — кнопка показа формы создания
   document.getElementById('btn-admin-add').addEventListener('click', () => {
     document.getElementById('admin-create-form').classList.remove('hidden');
@@ -1645,4 +1666,12 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(err =>
     console.warn('Service Worker registration failed:', err)
   );
+
+  // Когда новый SW активируется (после деплоя) — перезагружаем страницу автоматически
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swRefreshing) return;
+    swRefreshing = true;
+    window.location.reload();
+  });
 }
