@@ -190,6 +190,7 @@ html, body {
 .main-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 16px);
 }
