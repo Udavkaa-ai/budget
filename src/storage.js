@@ -36,8 +36,21 @@ export async function loadData() {
       data.settings = data.settings || {};
       data.goals = data.goals || [];
 
-      // ── Миграция: добавить поле family к расходам без него ──
       let migrated = false;
+
+      // ── Миграция: перенести пользователей из config в data.users ──
+      if (!data.users) {
+        data.users = config.webUsers.map((u, i) => ({
+          login: u.login,
+          password: u.password,
+          name: u.name,
+          family: u.family || 'family1',
+          isAdmin: i === 0, // первый пользователь становится администратором
+        }));
+        migrated = true;
+      }
+
+      // ── Миграция: добавить поле family к расходам без него ──
       for (const exp of data.expenses) {
         if (!exp.family) { exp.family = 'family1'; migrated = true; }
       }
@@ -539,6 +552,59 @@ export async function flushData() {
     clearTimeout(saveTimeout);
     await saveData();
   }
+}
+
+// ─── User management ──────────────────────────────────────────────────────────
+
+/** Найти пользователя по логину (включая пароль — для авторизации) */
+export function getUserByLogin(login) {
+  return (data.users || []).find(u => u.login === login) || null;
+}
+
+/** Список всех пользователей без паролей */
+export function getUsers() {
+  return (data.users || []).map(({ password: _p, ...u }) => u);
+}
+
+/** Создать нового пользователя */
+export async function addUser({ login, password, name, family, isAdmin = false }) {
+  if (!data.users) data.users = [];
+  if (data.users.find(u => u.login === login)) {
+    throw new Error('Логин уже занят');
+  }
+  const user = {
+    login: login.trim(),
+    password,
+    name: name.trim(),
+    family: (family || 'family1').trim(),
+    isAdmin,
+  };
+  data.users.push(user);
+  debouncedSave();
+  const { password: _p, ...safe } = user;
+  return safe;
+}
+
+/** Обновить данные пользователя */
+export async function updateUser(login, { password, name, family }) {
+  const user = (data.users || []).find(u => u.login === login);
+  if (!user) return null;
+  if (password) user.password = password;
+  if (name)     user.name = name.trim();
+  if (family)   user.family = family.trim();
+  debouncedSave();
+  const { password: _p, ...safe } = user;
+  return safe;
+}
+
+/** Удалить пользователя */
+export async function deleteUser(login) {
+  if (!data.users) return null;
+  const idx = data.users.findIndex(u => u.login === login);
+  if (idx === -1) return null;
+  const [deleted] = data.users.splice(idx, 1);
+  debouncedSave();
+  return deleted;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

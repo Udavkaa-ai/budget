@@ -157,7 +157,7 @@ async function loginSubmit(e) {
       return;
     }
     token = data.token;
-    currentUser = { name: data.name, login: data.login };
+    currentUser = { name: data.name, login: data.login, isAdmin: data.isAdmin || false };
     localStorage.setItem('budget_token', token);
     localStorage.setItem('budget_user', JSON.stringify(currentUser));
     initApp();
@@ -622,6 +622,59 @@ async function loadSettingsScreen() {
   } catch {
     showToastError('Ошибка загрузки настроек');
   }
+
+  // Admin panel — загружаем только если текущий пользователь администратор
+  if (currentUser?.isAdmin) {
+    document.getElementById('admin-section').classList.remove('hidden');
+    loadAdminUsers();
+  }
+}
+
+// ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
+
+async function loadAdminUsers() {
+  const users = await apiJson('GET', '/api/admin/users');
+  if (!Array.isArray(users)) return;
+
+  const list = document.getElementById('admin-users-list');
+
+  // Собираем уникальные семьи для select'а в форме создания
+  const families = [...new Set(users.map(u => u.family || 'family1'))];
+  renderAdminFamilySelect(families);
+
+  list.innerHTML = '';
+  for (const u of users) {
+    const row = document.createElement('div');
+    row.className = 'admin-user-row';
+    row.innerHTML = `
+      <div class="admin-user-info">
+        <div class="admin-user-name">${esc(u.name)}</div>
+        <div class="admin-user-meta">${esc(u.login)}</div>
+      </div>
+      <span class="admin-family-badge">${esc(u.family || 'family1')}</span>
+      ${u.isAdmin ? '<span class="admin-badge-admin">admin</span>' : ''}
+      <button class="admin-user-del" data-login="${esc(u.login)}" title="Удалить"
+        ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
+    `;
+    row.querySelector('.admin-user-del').addEventListener('click', async () => {
+      if (!confirm(`Удалить пользователя ${u.name} (${u.login})?`)) return;
+      const res = await apiJson('DELETE', `/api/admin/users/${encodeURIComponent(u.login)}`);
+      if (res.ok) { showToastSuccess('Пользователь удалён'); loadAdminUsers(); }
+      else showToastError(res.error || 'Ошибка');
+    });
+    list.appendChild(row);
+  }
+}
+
+function renderAdminFamilySelect(families) {
+  const sel = document.getElementById('admin-new-family');
+  if (!sel) return;
+  sel.innerHTML = families.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  sel.insertAdjacentHTML('beforeend', '<option value="__new__">+ Новая группа…</option>');
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 async function loadSettings() {
@@ -1232,6 +1285,68 @@ function setupEventListeners() {
   document.getElementById('reminder-close').addEventListener('click', () => {
     document.getElementById('reminder-toast').classList.add('hidden');
   });
+
+  // Admin panel — кнопка показа формы создания
+  document.getElementById('btn-admin-add').addEventListener('click', () => {
+    document.getElementById('admin-create-form').classList.remove('hidden');
+    document.getElementById('btn-admin-add').classList.add('hidden');
+    document.getElementById('admin-new-name').focus();
+  });
+
+  document.getElementById('btn-admin-cancel').addEventListener('click', () => {
+    document.getElementById('admin-create-form').classList.add('hidden');
+    document.getElementById('btn-admin-add').classList.remove('hidden');
+    clearAdminForm();
+  });
+
+  // Если выбрана "Новая группа" — заменяем select на текстовый input
+  document.getElementById('admin-new-family').addEventListener('change', (e) => {
+    if (e.target.value !== '__new__') return;
+    const name = prompt('Название новой группы (например: family2):');
+    if (!name?.trim()) { e.target.value = e.target.options[0]?.value || 'family1'; return; }
+    const opt = document.createElement('option');
+    opt.value = name.trim(); opt.textContent = name.trim(); opt.selected = true;
+    e.target.insertBefore(opt, e.target.lastElementChild);
+    e.target.value = name.trim();
+  });
+
+  document.getElementById('btn-admin-create').addEventListener('click', async () => {
+    const name   = document.getElementById('admin-new-name').value.trim();
+    const login  = document.getElementById('admin-new-login').value.trim();
+    const pass   = document.getElementById('admin-new-password').value.trim();
+    const family = document.getElementById('admin-new-family').value;
+    const errEl  = document.getElementById('admin-create-error');
+    errEl.classList.add('hidden');
+
+    if (!name || !login || !pass) {
+      errEl.textContent = 'Заполните имя, логин и пароль';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    const btn = document.getElementById('btn-admin-create');
+    btn.disabled = true;
+    const res = await apiJson('POST', '/api/admin/users', { name, login, password: pass, family });
+    btn.disabled = false;
+
+    if (res.ok) {
+      showToastSuccess(`Пользователь ${name} создан`);
+      document.getElementById('admin-create-form').classList.add('hidden');
+      document.getElementById('btn-admin-add').classList.remove('hidden');
+      clearAdminForm();
+      loadAdminUsers();
+    } else {
+      errEl.textContent = res.error || 'Ошибка';
+      errEl.classList.remove('hidden');
+    }
+  });
+}
+
+function clearAdminForm() {
+  ['admin-new-name','admin-new-login','admin-new-password'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('admin-create-error').classList.add('hidden');
 }
 
 function setupSwipe(el, { onLeft, onRight }) {

@@ -34,6 +34,11 @@ import {
   getCashflow,
   saveCashflow,
   getMonthDailyTotals,
+  getUserByLogin,
+  getUsers,
+  addUser,
+  updateUser,
+  deleteUser,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -81,30 +86,28 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ error: 'Введите логин и пароль' });
   }
 
-  const user = config.webUsers.find(
-    u => u.login === login && u.password === password
-  );
-
-  if (!user) {
+  const user = getUserByLogin(login);
+  if (!user || user.password !== password) {
     return res.status(401).json({ error: 'Неверный логин или пароль' });
   }
 
   const token = jwt.sign(
-    { login: user.login, name: user.name, family: user.family || 'family1' },
+    { login: user.login, name: user.name, family: user.family || 'family1', isAdmin: user.isAdmin || false },
     config.jwtSecret,
     { expiresIn: '30d' }
   );
 
-  res.json({ token, name: user.name, login: user.login });
+  res.json({ token, name: user.name, login: user.login, isAdmin: user.isAdmin || false });
 });
 
 app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ name: req.user.name, login: req.user.login });
+  res.json({ name: req.user.name, login: req.user.login, isAdmin: req.user.isAdmin || false });
 });
 
-// Список пользователей приложения (имена — для фильтров и целей)
-app.get('/api/users', authMiddleware, (_req, res) => {
-  res.json(config.webUsers.map(u => ({ name: u.name, login: u.login })));
+// Список пользователей в той же семье (для фильтров и партнёрских меток)
+app.get('/api/users', authMiddleware, (req, res) => {
+  const users = getUsers().filter(u => (u.family || 'family1') === req.user.family);
+  res.json(users);
 });
 
 // ─── Expense Routes ───────────────────────────────────────────────────────────
@@ -250,6 +253,50 @@ app.post('/api/settings/retag', authMiddleware, async (req, res) => {
   const count = await retagFixedExpenses(req.user.family);
   io.to(req.user.family).emit('expense:retagged', { count, by: req.user.name });
   res.json({ ok: true, count });
+});
+
+// ─── Admin Routes ─────────────────────────────────────────────────────────────
+
+function adminMiddleware(req, res, next) {
+  if (!req.user.isAdmin) return res.status(403).json({ error: 'Нет доступа' });
+  next();
+}
+
+// Список всех пользователей (без паролей)
+app.get('/api/admin/users', authMiddleware, adminMiddleware, (_req, res) => {
+  res.json(getUsers());
+});
+
+// Создать пользователя
+app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+  const { login, password, name, family } = req.body || {};
+  if (!login?.trim() || !password?.trim() || !name?.trim()) {
+    return res.status(400).json({ error: 'Укажите логин, пароль и имя' });
+  }
+  try {
+    const user = await addUser({ login, password, name, family });
+    res.json({ ok: true, user });
+  } catch (err) {
+    res.status(409).json({ error: err.message });
+  }
+});
+
+// Обновить пользователя (пароль, имя, семья)
+app.patch('/api/admin/users/:login', authMiddleware, adminMiddleware, async (req, res) => {
+  const { password, name, family } = req.body || {};
+  const updated = await updateUser(req.params.login, { password, name, family });
+  if (!updated) return res.status(404).json({ error: 'Пользователь не найден' });
+  res.json({ ok: true, user: updated });
+});
+
+// Удалить пользователя
+app.delete('/api/admin/users/:login', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.params.login === req.user.login) {
+    return res.status(400).json({ error: 'Нельзя удалить себя' });
+  }
+  const deleted = await deleteUser(req.params.login);
+  if (!deleted) return res.status(404).json({ error: 'Пользователь не найден' });
+  res.json({ ok: true });
 });
 
 // ─── Goals Routes ─────────────────────────────────────────────────────────────
