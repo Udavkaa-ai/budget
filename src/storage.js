@@ -13,8 +13,20 @@ let data = {
 let saveTimeout = null;
 const DEBOUNCE_MS = 2000;
 
+// Нормализует familyId — если не задан, возвращает 'family1' (обратная совместимость)
+function fam(familyId) {
+  return familyId || 'family1';
+}
+
+// Возвращает family-специфичный раздел settings
+function familySettings(familyId) {
+  const f = fam(familyId);
+  if (!data.settings[f]) data.settings[f] = {};
+  return data.settings[f];
+}
+
 /**
- * Загрузка данных при старте
+ * Загрузка данных при старте + миграция старого формата
  */
 export async function loadData() {
   try {
@@ -23,6 +35,46 @@ export async function loadData() {
       data = JSON.parse(raw);
       data.settings = data.settings || {};
       data.goals = data.goals || [];
+
+      let migrated = false;
+
+      // ── Миграция: перенести пользователей из config в data.users ──
+      if (!data.users) {
+        data.users = config.webUsers.map((u, i) => ({
+          login: u.login,
+          password: u.password,
+          name: u.name,
+          family: u.family || 'family1',
+          isAdmin: i === 0, // первый пользователь становится администратором
+        }));
+        migrated = true;
+      }
+
+      // ── Миграция: добавить поле family к расходам без него ──
+      for (const exp of data.expenses) {
+        if (!exp.family) { exp.family = 'family1'; migrated = true; }
+      }
+      for (const goal of data.goals) {
+        if (!goal.family) { goal.family = 'family1'; migrated = true; }
+      }
+
+      // ── Миграция: перенести budgetPlan/cashflow из root settings в family1 ──
+      const s = data.settings;
+      if ((s.budgetPlan !== undefined || s.cashflow !== undefined) && !s.family1) {
+        s.family1 = {
+          budgetPlan: s.budgetPlan,
+          cashflow: s.cashflow || {},
+        };
+        delete s.budgetPlan;
+        delete s.cashflow;
+        migrated = true;
+      }
+
+      if (migrated) {
+        console.log('📦 Данные мигрированы в формат multi-family');
+        await saveData();
+      }
+
       console.log(`📂 Загружено ${data.expenses.length} записей, ${data.goals.length} целей`);
     } else {
       await saveData();
@@ -60,10 +112,10 @@ async function saveData() {
 
 /**
  * Добавить расходы
- * Автоматически помечает постоянные расходы по ключевым словам
  */
-export async function appendExpenses(expenses) {
+export async function appendExpenses(expenses, familyId) {
   const timestamp = new Date().toISOString();
+  const f = fam(familyId);
 
   for (const exp of expenses) {
     const descLower = (exp.description || '').toLowerCase();
@@ -76,6 +128,7 @@ export async function appendExpenses(expenses) {
       description: exp.description,
       amount: exp.amount,
       user: exp.user || '',
+      family: f,
       isFixed,
       createdAt: timestamp
     });
@@ -85,22 +138,28 @@ export async function appendExpenses(expenses) {
 }
 
 /**
- * Настройки
+ * Настройки (общие — без family scope)
  */
-export function getSettings() {
-  return data.settings || {};
+export function getSettings(familyId) {
+  // Возвращаем family-специфичные настройки плюс базовые поля
+  const fs = familySettings(familyId);
+  return {
+    ...(data.settings._global || {}),
+    ...fs,
+  };
 }
 
-export async function updateSetting(key, value) {
-  data.settings = data.settings || {};
-  data.settings[key] = value;
+export async function updateSetting(key, value, familyId) {
+  const fs = familySettings(familyId);
+  fs[key] = value;
   debouncedSave();
 }
 
 /**
- * Статистика за текущий месяц
+ * Статистика за текущий месяц (используется Telegram-ботом)
  */
-export function getMonthSummary() {
+export function getMonthSummary(familyId) {
+  const f = fam(familyId);
   const now = new Date();
   const curMonth = now.getMonth() + 1;
   const curYear = now.getFullYear();
@@ -109,8 +168,8 @@ export function getMonthSummary() {
   let total = 0;
 
   for (const exp of data.expenses) {
-    const [day, month, year] = exp.date.split('.').map(Number);
-
+    if (fam(exp.family) !== f) continue;
+    const [, month, year] = exp.date.split('.').map(Number);
     if (month === curMonth && year === curYear) {
       byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
       total += exp.amount;
@@ -127,34 +186,37 @@ export function getMonthSummary() {
 /**
  * Расходы за сегодня
  */
-export function getTodaySummary(userName = null) {
+export function getTodaySummary(userName = null, familyId) {
+  const f = fam(familyId);
   const today = formatDate(new Date());
 
-  let todayExpenses = data.expenses.filter(e => e.date === today);
+  let todayExpenses = data.expenses.filter(
+    e => e.date === today && fam(e.family) === f
+  );
 
   if (userName) {
     todayExpenses = todayExpenses.filter(e => e.user === userName);
   }
 
   const total = todayExpenses.reduce((sum, e) => sum + e.amount, 0);
-
   return { expenses: todayExpenses, total, date: today };
 }
 
 /**
- * Расходы семьи за конкретный день (сгруппированы по пользователям)
+ * Расходы семьи за конкретный день
  */
-export function getFamilyDay(dateStr) {
-  const expenses = data.expenses.filter(e => e.date === dateStr);
+export function getFamilyDay(dateStr, familyId) {
+  const f = fam(familyId);
+  const expenses = data.expenses.filter(
+    e => e.date === dateStr && fam(e.family) === f
+  );
 
   const byUser = {};
   let total = 0;
 
   for (const exp of expenses) {
     const user = exp.user || 'Неизвестно';
-    if (!byUser[user]) {
-      byUser[user] = { expenses: [], total: 0 };
-    }
+    if (!byUser[user]) byUser[user] = { expenses: [], total: 0 };
     byUser[user].expenses.push(exp);
     byUser[user].total += exp.amount;
     total += exp.amount;
@@ -166,17 +228,15 @@ export function getFamilyDay(dateStr) {
 /**
  * Расходы семьи за сегодня
  */
-export function getFamilyToday() {
-  return getFamilyDay(formatDate(new Date()));
+export function getFamilyToday(familyId) {
+  return getFamilyDay(formatDate(new Date()), familyId);
 }
 
 /**
- * Расходы семьи за месяц (сгруппированы по пользователям)
- * @param {number|null} targetMonth - месяц (1-12), null = текущий
- * @param {number|null} targetYear - год, null = текущий
- * @param {boolean} excludeFixed - исключить постоянные расходы
+ * Расходы семьи за месяц (сводка)
  */
-export function getFamilySummary(targetMonth = null, targetYear = null, excludeFixed = false) {
+export function getFamilySummary(targetMonth = null, targetYear = null, excludeFixed = false, familyId) {
+  const f = fam(familyId);
   const now = new Date();
   const curMonth = targetMonth || (now.getMonth() + 1);
   const curYear = targetYear || now.getFullYear();
@@ -186,22 +246,18 @@ export function getFamilySummary(targetMonth = null, targetYear = null, excludeF
   let total = 0;
 
   for (const exp of data.expenses) {
+    if (fam(exp.family) !== f) continue;
     const [, month, year] = exp.date.split('.').map(Number);
+    if (month !== curMonth || year !== curYear) continue;
+    if (excludeFixed && exp.isFixed) continue;
 
-    if (month === curMonth && year === curYear) {
-      if (excludeFixed && exp.isFixed) continue;
+    const user = exp.user || 'Неизвестно';
+    if (!byUser[user]) byUser[user] = { total: 0, byCategory: {} };
+    byUser[user].total += exp.amount;
+    byUser[user].byCategory[exp.category] = (byUser[user].byCategory[exp.category] || 0) + exp.amount;
 
-      const user = exp.user || 'Неизвестно';
-
-      if (!byUser[user]) {
-        byUser[user] = { total: 0, byCategory: {} };
-      }
-      byUser[user].total += exp.amount;
-      byUser[user].byCategory[exp.category] = (byUser[user].byCategory[exp.category] || 0) + exp.amount;
-
-      byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
-      total += exp.amount;
-    }
+    byCategory[exp.category] = (byCategory[exp.category] || 0) + exp.amount;
+    total += exp.amount;
   }
 
   return {
@@ -213,13 +269,10 @@ export function getFamilySummary(targetMonth = null, targetYear = null, excludeF
 }
 
 /**
- * Данные для диаграммы: расходы по дням и пользователям
- * @param {number|null} targetMonth - месяц (1-12), null = текущий
- * @param {number|null} targetYear - год, null = текущий
- * @param {number|null} startDayOverride - принудительный день начала
- * @param {boolean} excludeFixed - исключить постоянные расходы
+ * Данные для диаграммы
  */
-export function getChartData(targetMonth = null, targetYear = null, startDayOverride = null, excludeFixed = false) {
+export function getChartData(targetMonth = null, targetYear = null, startDayOverride = null, excludeFixed = false, familyId) {
+  const f = fam(familyId);
   const now = new Date();
   const curMonth = targetMonth || (now.getMonth() + 1);
   const curYear = targetYear || now.getFullYear();
@@ -232,10 +285,9 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
   if (!startDay) {
     let minDay = endDay;
     for (const exp of data.expenses) {
+      if (fam(exp.family) !== f) continue;
       const [day, month, year] = exp.date.split('.').map(Number);
-      if (month === curMonth && year === curYear && day < minDay) {
-        minDay = day;
-      }
+      if (month === curMonth && year === curYear && day < minDay) minDay = day;
     }
     startDay = minDay;
   }
@@ -250,6 +302,7 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
 
   const dailyByUser = {};
   for (const exp of data.expenses) {
+    if (fam(exp.family) !== f) continue;
     const [day, month, year] = exp.date.split('.').map(Number);
     if (month === curMonth && year === curYear && day >= startDay && day <= endDay) {
       if (excludeFixed && exp.isFixed) continue;
@@ -264,37 +317,40 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
     userExpenses[user] = fullDates.map(date => dateMap[date] || 0);
   }
 
-  const trackingDays = endDay - startDay + 1;
-
   return {
-    labels, userExpenses, trackingDays, daysInMonth,
+    labels, userExpenses,
+    trackingDays: endDay - startDay + 1, daysInMonth,
     month: curMonth, year: curYear,
     monthName: getMonthName(curMonth, curYear),
   };
 }
 
 /**
- * Экспорт в CSV формате
+ * Экспорт в CSV
  */
-export function exportCSV() {
+export function exportCSV(familyId) {
+  const f = fam(familyId);
   const header = 'Дата;Категория;Описание;Сумма;Кто;Постоянный;Создано\n';
-  const rows = data.expenses.map(e =>
-    `${e.date};${e.category};${e.description};${e.amount};${e.user};${e.isFixed ? 'да' : 'нет'};${e.createdAt}`
-  ).join('\n');
+  const rows = data.expenses
+    .filter(e => fam(e.family) === f)
+    .map(e =>
+      `${e.date};${e.category};${e.description};${e.amount};${e.user};${e.isFixed ? 'да' : 'нет'};${e.createdAt}`
+    ).join('\n');
   return header + rows;
 }
 
 /**
- * Импорт из CSV (формат экспорта бота)
- * Возвращает { imported, skipped } — пропускает дубликаты по (date+category+amount+description)
+ * Импорт из CSV
  */
-export async function importFromCSV(csvText) {
+export async function importFromCSV(csvText, familyId) {
+  const f = fam(familyId);
   const lines = csvText.replace(/\r/g, '').split('\n').filter(Boolean);
-  // Пропускаем заголовок
   const dataLines = lines[0].startsWith('Дата') ? lines.slice(1) : lines;
 
   const existing = new Set(
-    data.expenses.map(e => `${e.date}|${e.category}|${e.amount}|${e.description}`)
+    data.expenses
+      .filter(e => fam(e.family) === f)
+      .map(e => `${e.date}|${e.category}|${e.amount}|${e.description}`)
   );
 
   let imported = 0;
@@ -320,6 +376,7 @@ export async function importFromCSV(csvText) {
       description: description.trim(),
       amount,
       user: user.trim(),
+      family: f,
       isFixed: fixedStr.trim() === 'да',
       createdAt: createdAt.trim() || new Date().toISOString(),
     });
@@ -330,7 +387,228 @@ export async function importFromCSV(csvText) {
   return { imported, skipped };
 }
 
-// Helpers
+/**
+ * Все расходы по конкретной категории за месяц
+ */
+export function getCategoryExpenses(category, month = null, year = null, familyId) {
+  const f = fam(familyId);
+  const now = new Date();
+  const m = month || (now.getMonth() + 1);
+  const y = year || now.getFullYear();
+  return data.expenses
+    .filter(exp => {
+      const [, em, ey] = exp.date.split('.').map(Number);
+      return fam(exp.family) === f && exp.category === category && em === m && ey === y;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Все расходы за месяц
+ */
+export function getExpensesForMonth(month = null, year = null, familyId) {
+  const f = fam(familyId);
+  const now = new Date();
+  const m = month || (now.getMonth() + 1);
+  const y = year || now.getFullYear();
+  return data.expenses
+    .filter(exp => {
+      const [, em, ey] = exp.date.split('.').map(Number);
+      return fam(exp.family) === f && em === m && ey === y;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Переключить isFixed
+ */
+export async function toggleExpenseFixed(id, familyId) {
+  const f = fam(familyId);
+  const exp = data.expenses.find(e => e.id === id && fam(e.family) === f);
+  if (!exp) return null;
+  exp.isFixed = !exp.isFixed;
+  debouncedSave();
+  return exp.isFixed;
+}
+
+/**
+ * Ретроактивно проставить isFixed по ключевым словам
+ */
+export async function retagFixedExpenses(familyId) {
+  const f = fam(familyId);
+  let tagged = 0;
+  for (const exp of data.expenses) {
+    if (fam(exp.family) !== f) continue;
+    const descLower = (exp.description || '').toLowerCase();
+    const shouldBeFixed = config.fixedKeywords.some(kw => descLower.includes(kw));
+    if (shouldBeFixed && !exp.isFixed) {
+      exp.isFixed = true;
+      tagged++;
+    }
+  }
+  if (tagged > 0) debouncedSave();
+  return tagged;
+}
+
+/**
+ * Удалить расход
+ */
+export async function deleteExpense(id, familyId) {
+  const f = fam(familyId);
+  const index = data.expenses.findIndex(e => e.id === id && fam(e.family) === f);
+  if (index === -1) return null;
+  const [deleted] = data.expenses.splice(index, 1);
+  debouncedSave();
+  return deleted;
+}
+
+// ─── Goals ────────────────────────────────────────────────────────────────────
+
+export function getGoals(familyId) {
+  const f = fam(familyId);
+  return (data.goals || []).filter(g => fam(g.family) === f);
+}
+
+export async function addGoal({ name, targetAmount, emoji = '🎯', createdBy = '', familyId }) {
+  if (!data.goals) data.goals = [];
+  const goal = {
+    id: generateId(),
+    name,
+    targetAmount,
+    emoji,
+    family: fam(familyId),
+    contributions: [],
+    createdAt: new Date().toISOString(),
+    createdBy,
+  };
+  data.goals.push(goal);
+  debouncedSave();
+  return goal;
+}
+
+export async function contributeToGoal(goalId, user, amount, familyId) {
+  const f = fam(familyId);
+  const goal = (data.goals || []).find(g => g.id === goalId && fam(g.family) === f);
+  if (!goal) return null;
+  goal.contributions.push({ user, amount: Number(amount), addedAt: new Date().toISOString() });
+  debouncedSave();
+  return goal;
+}
+
+export async function deleteGoal(goalId, familyId) {
+  const f = fam(familyId);
+  const idx = (data.goals || []).findIndex(g => g.id === goalId && fam(g.family) === f);
+  if (idx === -1) return null;
+  const [deleted] = data.goals.splice(idx, 1);
+  debouncedSave();
+  return deleted;
+}
+
+// ─── Budget plan ──────────────────────────────────────────────────────────────
+
+export function getBudgetPlan(familyId) {
+  return familySettings(familyId).budgetPlan || {};
+}
+
+export async function saveBudgetPlan(plan, familyId) {
+  familySettings(familyId).budgetPlan = plan;
+  debouncedSave();
+}
+
+// ─── Cashflow ─────────────────────────────────────────────────────────────────
+
+export function getCashflow(ym, familyId) {
+  return familySettings(familyId).cashflow?.[ym] || {};
+}
+
+export async function saveCashflow(ym, cfData, familyId) {
+  const fs = familySettings(familyId);
+  fs.cashflow = fs.cashflow || {};
+  fs.cashflow[ym] = cfData;
+  debouncedSave();
+}
+
+/** Суммарные расходы за каждый день месяца: { '01.04.2026': 5200, ... } */
+export function getMonthDailyTotals(month, year, familyId) {
+  const f = fam(familyId);
+  const result = {};
+  for (const exp of data.expenses) {
+    if (fam(exp.family) !== f) continue;
+    const parts = exp.date.split('.');
+    if (parts.length !== 3) continue;
+    const [, m, y] = parts.map(Number);
+    if (m === month && y === year) {
+      result[exp.date] = (result[exp.date] || 0) + exp.amount;
+    }
+  }
+  return result;
+}
+
+/**
+ * Принудительно сохранить данные (при завершении)
+ */
+export async function flushData() {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+    await saveData();
+  }
+}
+
+// ─── User management ──────────────────────────────────────────────────────────
+
+/** Найти пользователя по логину (включая пароль — для авторизации) */
+export function getUserByLogin(login) {
+  return (data.users || []).find(u => u.login === login) || null;
+}
+
+/** Список всех пользователей без паролей */
+export function getUsers() {
+  return (data.users || []).map(({ password: _p, ...u }) => u);
+}
+
+/** Создать нового пользователя */
+export async function addUser({ login, password, name, family, isAdmin = false }) {
+  if (!data.users) data.users = [];
+  if (data.users.find(u => u.login === login)) {
+    throw new Error('Логин уже занят');
+  }
+  const user = {
+    login: login.trim(),
+    password,
+    name: name.trim(),
+    family: (family || 'family1').trim(),
+    isAdmin,
+  };
+  data.users.push(user);
+  debouncedSave();
+  const { password: _p, ...safe } = user;
+  return safe;
+}
+
+/** Обновить данные пользователя */
+export async function updateUser(login, { password, name, family }) {
+  const user = (data.users || []).find(u => u.login === login);
+  if (!user) return null;
+  if (password) user.password = password;
+  if (name)     user.name = name.trim();
+  if (family)   user.family = family.trim();
+  debouncedSave();
+  const { password: _p, ...safe } = user;
+  return safe;
+}
+
+/** Удалить пользователя */
+export async function deleteUser(login) {
+  if (!data.users) return null;
+  const idx = data.users.findIndex(u => u.login === login);
+  if (idx === -1) return null;
+  const [deleted] = data.users.splice(idx, 1);
+  debouncedSave();
+  return deleted;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -350,161 +628,4 @@ export function getMonthName(month = null, year = null) {
   const m = month || (now.getMonth() + 1);
   const y = year || now.getFullYear();
   return `${months[m - 1]} ${y}`;
-}
-
-/**
- * Все расходы по конкретной категории за месяц
- */
-export function getCategoryExpenses(category, month = null, year = null) {
-  const now = new Date();
-  const m = month || (now.getMonth() + 1);
-  const y = year || now.getFullYear();
-  return data.expenses
-    .filter(exp => {
-      const [, em, ey] = exp.date.split('.').map(Number);
-      return exp.category === category && em === m && ey === y;
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-/**
- * Все расходы за месяц, отсортированные по дате
- */
-export function getExpensesForMonth(month = null, year = null) {
-  const now = new Date();
-  const m = month || (now.getMonth() + 1);
-  const y = year || now.getFullYear();
-  return data.expenses
-    .filter(exp => {
-      const [, em, ey] = exp.date.split('.').map(Number);
-      return em === m && ey === y;
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-/**
- * Переключить isFixed для конкретной записи
- */
-export async function toggleExpenseFixed(id) {
-  const exp = data.expenses.find(e => e.id === id);
-  if (!exp) return null;
-  exp.isFixed = !exp.isFixed;
-  debouncedSave();
-  return exp.isFixed;
-}
-
-/**
- * Ретроактивно проставить isFixed по ключевым словам для всех записей
- * Возвращает количество помеченных записей
- */
-export async function retagFixedExpenses() {
-  let tagged = 0;
-  for (const exp of data.expenses) {
-    const descLower = (exp.description || '').toLowerCase();
-    const shouldBeFixed = config.fixedKeywords.some(kw => descLower.includes(kw));
-    if (shouldBeFixed && !exp.isFixed) {
-      exp.isFixed = true;
-      tagged++;
-    }
-  }
-  if (tagged > 0) debouncedSave();
-  return tagged;
-}
-
-/**
- * Удалить расход по id
- */
-export async function deleteExpense(id) {
-  const index = data.expenses.findIndex(e => e.id === id);
-  if (index === -1) return null;
-  const [deleted] = data.expenses.splice(index, 1);
-  debouncedSave();
-  return deleted;
-}
-
-// ─── Goals ────────────────────────────────────────────────────────────────────
-
-export function getGoals() {
-  return data.goals || [];
-}
-
-export async function addGoal({ name, targetAmount, emoji = '🎯', createdBy = '' }) {
-  if (!data.goals) data.goals = [];
-  const goal = {
-    id: generateId(),
-    name,
-    targetAmount,
-    emoji,
-    contributions: [],
-    createdAt: new Date().toISOString(),
-    createdBy,
-  };
-  data.goals.push(goal);
-  debouncedSave();
-  return goal;
-}
-
-export async function contributeToGoal(goalId, user, amount) {
-  const goal = (data.goals || []).find(g => g.id === goalId);
-  if (!goal) return null;
-  goal.contributions.push({ user, amount: Number(amount), addedAt: new Date().toISOString() });
-  debouncedSave();
-  return goal;
-}
-
-export async function deleteGoal(goalId) {
-  const idx = (data.goals || []).findIndex(g => g.id === goalId);
-  if (idx === -1) return null;
-  const [deleted] = data.goals.splice(idx, 1);
-  debouncedSave();
-  return deleted;
-}
-
-// ─── Budget plan ──────────────────────────────────────────────────────────────
-
-export function getBudgetPlan() {
-  return data.settings?.budgetPlan || {};
-}
-
-export async function saveBudgetPlan(plan) {
-  data.settings = data.settings || {};
-  data.settings.budgetPlan = plan;
-  debouncedSave();
-}
-
-// ─── Cashflow ─────────────────────────────────────────────────────────────────
-
-export function getCashflow(ym) {
-  return data.settings?.cashflow?.[ym] || {};
-}
-
-export async function saveCashflow(ym, cfData) {
-  data.settings = data.settings || {};
-  data.settings.cashflow = data.settings.cashflow || {};
-  data.settings.cashflow[ym] = cfData;
-  debouncedSave();
-}
-
-/** Суммарные расходы за каждый день месяца: { '01.04.2026': 5200, ... } */
-export function getMonthDailyTotals(month, year) {
-  const result = {};
-  for (const exp of data.expenses) {
-    const parts = exp.date.split('.');
-    if (parts.length !== 3) continue;
-    const [d, m, y] = parts.map(Number);
-    if (m === month && y === year) {
-      result[exp.date] = (result[exp.date] || 0) + exp.amount;
-    }
-  }
-  return result;
-}
-
-/**
- * Принудительно сохранить данные (вызывается при завершении из index.js)
- */
-export async function flushData() {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-    await saveData();
-  }
 }

@@ -52,18 +52,34 @@ export const config = {
   // === Веб-приложение ===
   port: parseInt(process.env.PORT) || 3000,
   jwtSecret: process.env.JWT_SECRET || 'change-me-in-production-please',
-  // Пользователи веб-приложения (два человека — муж и жена)
+  // Пользователи веб-приложения. Поле family определяет, чьи данные видит пользователь.
+  // Пользователи с одинаковым family видят общий бюджет; с разными — полностью изолированы.
   webUsers: [
     {
       login: process.env.USER1_LOGIN || 'user1',
       password: process.env.USER1_PASSWORD || 'pass1',
       name: process.env.USER1_NAME || 'Удав',
+      family: process.env.USER1_FAMILY || 'family1',
     },
     {
       login: process.env.USER2_LOGIN || 'user2',
       password: process.env.USER2_PASSWORD || 'pass2',
       name: process.env.USER2_NAME || 'Марина',
+      family: process.env.USER2_FAMILY || 'family1',
     },
+    // Дополнительные пользователи — задаются через .env
+    ...(process.env.USER3_LOGIN ? [{
+      login: process.env.USER3_LOGIN,
+      password: process.env.USER3_PASSWORD || 'pass3',
+      name: process.env.USER3_NAME || 'Пользователь 3',
+      family: process.env.USER3_FAMILY || 'family2',
+    }] : []),
+    ...(process.env.USER4_LOGIN ? [{
+      login: process.env.USER4_LOGIN,
+      password: process.env.USER4_PASSWORD || 'pass4',
+      name: process.env.USER4_NAME || 'Пользователь 4',
+      family: process.env.USER4_FAMILY || 'family2',
+    }] : []),
   ],
 };
 
