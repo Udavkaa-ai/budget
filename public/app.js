@@ -40,6 +40,15 @@ let budgetFilter = 'all';
 let summaryMonth = null, summaryYear = null;
 let chartMonth = null, chartYear = null;
 
+// Throttle nav button clicks (same race condition as swipe — prevents +2 jumps)
+let lastNavTime = 0;
+function canNav() {
+  const now = Date.now();
+  if (now - lastNavTime < 420) return false;
+  lastNavTime = now;
+  return true;
+}
+
 // Request generation counters — отбрасываем устаревшие ответы
 let budgetGen = 0;
 let summaryGen = 0;
@@ -1368,10 +1377,12 @@ function setupEventListeners() {
 
   // Budget date navigation
   document.getElementById('budget-prev').addEventListener('click', () => {
+    if (!canNav()) return;
     budgetDate = new Date(budgetDate - 86400000);
     loadBudget();
   });
   document.getElementById('budget-next').addEventListener('click', () => {
+    if (!canNav()) return;
     const today = new Date(); today.setHours(0,0,0,0);
     const bd = new Date(budgetDate); bd.setHours(0,0,0,0);
     if (bd >= today) return;
@@ -1449,6 +1460,7 @@ function setupEventListeners() {
 
   // Summary navigation
   document.getElementById('summary-prev').addEventListener('click', () => {
+    if (!canNav()) return;
     const now = new Date();
     const m = summaryMonth || (now.getMonth() + 1);
     const y = summaryYear || now.getFullYear();
@@ -1458,6 +1470,7 @@ function setupEventListeners() {
     loadSummary();
   });
   document.getElementById('summary-next').addEventListener('click', () => {
+    if (!canNav()) return;
     const now = new Date();
     const m = summaryMonth || (now.getMonth() + 1);
     const y = summaryYear || now.getFullYear();
@@ -1479,6 +1492,7 @@ function setupEventListeners() {
 
   // Chart navigation
   document.getElementById('chart-prev').addEventListener('click', () => {
+    if (!canNav()) return;
     const now = new Date();
     const m = chartMonth || (now.getMonth() + 1);
     const y = chartYear || now.getFullYear();
@@ -1488,6 +1502,7 @@ function setupEventListeners() {
     loadChart(); loadCashflowSection();
   });
   document.getElementById('chart-next').addEventListener('click', () => {
+    if (!canNav()) return;
     const now = new Date();
     const m = chartMonth || (now.getMonth() + 1);
     const y = chartYear || now.getFullYear();
