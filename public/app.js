@@ -1669,9 +1669,10 @@ function clearAdminForm() {
 }
 
 function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
-  let startX = 0, startY = 0, active = false;
+  let startX = 0, startY = 0, active = false, transitioning = false;
 
   el.addEventListener('touchstart', e => {
+    if (transitioning) return;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     active = true;
@@ -1713,6 +1714,9 @@ function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
         return;
       }
 
+      // Lock against new swipes for the full animation cycle
+      transitioning = true;
+
       // Slide screen out
       el.style.transition = 'transform 0.2s ease-in';
       el.style.transform = `translateX(${goLeft ? '-105%' : '105%'})`;
@@ -1725,6 +1729,8 @@ function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
         requestAnimationFrame(() => requestAnimationFrame(() => {
           el.style.transition = 'transform 0.22s ease-out';
           el.style.transform = '';
+          // Unlock only after slide-in animation completes
+          setTimeout(() => { transitioning = false; }, 260);
         }));
       }, 200);
     } else {
