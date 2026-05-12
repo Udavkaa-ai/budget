@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>💰 Финансовый дашборд</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --surface-2: #f1f3f9;
+    --border: #e5e8f0;
+    --text: #1a1f36;
+    --text-dim: #6b7280;
+    --accent: #6366f1;
+    --accent-soft: #eef2ff;
+    --green: #10b981;
+    --green-soft: #d1fae5;
+    --red: #ef4444;
+    --red-soft: #fee2e2;
+    --amber: #f59e0b;
+    --amber-soft: #fef3c7;
+    --blue: #3b82f6;
+    --vtb: #3b82f6;
+    --sber: #10b981;
+    --yandex: #ef4444;
+    --shadow: 0 1px 3px rgba(15, 23, 42, .06), 0 1px 2px rgba(15, 23, 42, .04);
+    --shadow-lg: 0 10px 30px rgba(15, 23, 42, .08);
+    --radius: 14px;
+  }
+  [data-theme="dark"] {
+    --bg: #0b1020;
+    --surface: #131a2c;
+    --surface-2: #1a2238;
+    --border: #232c44;
+    --text: #e7ebf3;
+    --text-dim: #9aa3b7;
+    --accent: #818cf8;
+    --accent-soft: #1f2547;
+    --green-soft: #0d3a2c;
+    --red-soft: #3a1416;
+    --amber-soft: #3a2a0b;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .35);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .45);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Inter, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .app { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  h1 .accent { color: var(--accent); }
+  .sub { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  button, .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); padding: 8px 14px; border-radius: 10px; cursor: pointer;
+    font-size: 13px; font-weight: 500; transition: all .15s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover, .btn:hover { background: var(--surface-2); border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.08); }
+  button.danger { color: var(--red); }
+  button.danger:hover { background: var(--red-soft); border-color: var(--red); }
+  button.ghost { background: transparent; }
+
+  .kpis {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px; margin-bottom: 24px;
+  }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
+    position: relative; overflow: hidden;
+  }
+  .kpi::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent);
+  }
+  .kpi.green::before { background: var(--green); }
+  .kpi.red::before { background: var(--red); }
+  .kpi.amber::before { background: var(--amber); }
+  .kpi .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .kpi .value { font-size: 24px; font-weight: 700; margin-top: 6px; letter-spacing: -.01em; }
+  .kpi .hint { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .kpi .delta { font-size: 12px; margin-top: 6px; font-weight: 600; }
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(12, 1fr);
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
+  }
+  .card h3 {
+    margin: 0 0 14px; font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card h3 .desc { font-weight: 400; color: var(--text-dim); font-size: 12px; }
+  .span-12 { grid-column: span 12; }
+  .span-8 { grid-column: span 8; }
+  .span-6 { grid-column: span 6; }
+  .span-4 { grid-column: span 4; }
+  @media (max-width: 900px) {
+    .span-8, .span-6, .span-4 { grid-column: span 12; }
+  }
+  .chart-wrap { position: relative; height: 320px; }
+  .chart-wrap.tall { height: 380px; }
+  .chart-wrap.short { height: 260px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  tbody tr:hover { background: var(--surface-2); }
+  td.pos { color: var(--green); font-weight: 600; }
+  td.neg { color: var(--red); font-weight: 600; }
+  td.muted { color: var(--text-dim); }
+  .row-actions { white-space: nowrap; }
+  .row-actions button { padding: 4px 8px; font-size: 12px; }
+
+  form.entry {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px; align-items: end;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .field input, .field select {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; outline: none;
+    transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field-group { grid-column: 1 / -1; }
+  .field-group h4 {
+    margin: 8px 0 4px; font-size: 12px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  .bank-row { display: grid; grid-template-columns: 80px 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .bank-row .bank-name { font-weight: 600; font-size: 13px; }
+  .bank-row.vtb .bank-name { color: var(--vtb); }
+  .bank-row.sber .bank-name { color: var(--sber); }
+  .bank-row.yandex .bank-name { color: var(--yandex); }
+  .submit-row { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .hint-box {
+    background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text);
+    padding: 10px 14px; border-radius: 10px; font-size: 12px; margin-bottom: 12px;
+  }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-dim); flex-wrap: wrap; }
+  .legend span::before {
+    content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 3px; margin-right: 6px; vertical-align: middle;
+  }
+  .lg-vtb::before { background: var(--vtb); }
+  .lg-sber::before { background: var(--sber); }
+  .lg-yandex::before { background: var(--yandex); }
+  .lg-inc::before { background: var(--green); }
+  .lg-exp::before { background: var(--red); }
+  .lg-bal::before { background: var(--accent); }
+
+  .empty {
+    text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13px;
+  }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tab {
+    padding: 8px 14px; cursor: pointer; border: none; background: none;
+    color: var(--text-dim); font-size: 13px; font-weight: 500; border-radius: 0;
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge.pos { background: var(--green-soft); color: var(--green); }
+  .badge.neg { background: var(--red-soft); color: var(--red); }
+
+  footer {
+    text-align: center; color: var(--text-dim); font-size: 12px; margin-top: 32px; padding: 16px;
+  }
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none;
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: var(--radius); padding: 22px;
+    max-width: 480px; width: 92%; box-shadow: var(--shadow-lg);
+  }
+  .modal h3 { margin: 0 0 12px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div>
+      <h1>💰 Финансовый <span class="accent">дашборд</span></h1>
+      <div class="sub">Личные доходы и расходы по банкам · ВТБ · Сбер · Яндекс</div>
+    </div>
+    <div class="toolbar">
+      <button id="theme-btn" title="Сменить тему">🌗 Тема</button>
+      <button id="export-btn" title="Экспорт в JSON">⬇️ Экспорт</button>
+      <button id="import-btn" title="Импорт из JSON">⬆️ Импорт</button>
+      <input type="file" id="import-file" accept="application/json" style="display:none" />
+      <button id="reset-btn" class="danger" title="Сбросить к данным из Excel">↺ Сброс</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="card span-8">
+      <h3>📊 Доходы, расходы и баланс по месяцам
+        <span class="legend">
+          <span class="lg-inc">Доход</span>
+          <span class="lg-exp">Расход</span>
+          <span class="lg-bal">Баланс</span>
+        </span>
+      </h3>
+      <div class="chart-wrap tall"><canvas id="chart-main"></canvas></div>
+    </div>
+
+    <div class="card span-4">
+      <h3>🥧 Структура расходов <span class="desc">за весь период</span></h3>
+      <div class="chart-wrap tall"><canvas id="chart-donut"></canvas></div>
+    </div>
+
+    <div class="card span-6">
+      <h3>📈 Накопленный баланс <span class="desc">тренд капитала</span></h3>
+      <div class="chart-wrap"><canvas id="chart-cum"></canvas></div>
+    </div>
+
+    <div class="card span-6">
+      <h3>🏦 Расходы по банкам <span class="desc">стек по месяцам</span></h3>
+      <div class="chart-wrap"><canvas id="chart-stack"></canvas></div>
+    </div>
+
+    <div class="card span-6">
+      <h3>💼 «Чистый» доход против расходов
+        <span class="desc">внутренние переводы исключены</span>
+      </h3>
+      <div class="chart-wrap"><canvas id="chart-real"></canvas></div>
+    </div>
+
+    <div class="card span-6">
+      <h3>💹 Норма сбережений <span class="desc">% от настоящего дохода</span></h3>
+      <div class="chart-wrap"><canvas id="chart-savings"></canvas></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom: 24px;">
+    <h3>📋 Помесячная таблица</h3>
+    <div class="tabs">
+      <button class="tab active" data-tab="summary">Сводка</button>
+      <button class="tab" data-tab="banks">По банкам</button>
+    </div>
+    <div id="tab-summary">
+      <div style="overflow-x:auto">
+        <table id="table-summary">
+          <thead>
+            <tr>
+              <th>Месяц</th>
+              <th>Доход</th>
+              <th>Расход</th>
+              <th>Баланс</th>
+              <th>Доход (чистый)</th>
+              <th>Расход (чистый)</th>
+              <th>Норма сбережений</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="tab-banks" style="display:none">
+      <div style="overflow-x:auto">
+        <table id="table-banks">
+          <thead>
+            <tr>
+              <th rowspan="2">Месяц</th>
+              <th colspan="3" style="text-align:center; border-bottom:1px solid var(--border)">Доход</th>
+              <th colspan="3" style="text-align:center; border-bottom:1px solid var(--border)">Расход</th>
+              <th colspan="3" style="text-align:center; border-bottom:1px solid var(--border)">Баланс</th>
+            </tr>
+            <tr>
+              <th>ВТБ</th><th>Сбер</th><th>Яндекс</th>
+              <th>ВТБ</th><th>Сбер</th><th>Яндекс</th>
+              <th>ВТБ</th><th>Сбер</th><th>Яндекс</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom: 24px;">
+    <h3 id="form-title">➕ Добавить новый месяц</h3>
+    <div class="hint-box">
+      💡 <b>Подсказка.</b> Зарплата приходит на ВТБ. «Доход» Сбера и Яндекса — это переводы с ВТБ
+      (не считаются настоящим доходом). При расчётах эти переводы автоматически вычитаются,
+      чтобы не задвоить суммы.
+    </div>
+    <form class="entry" id="entry-form" autocomplete="off">
+      <div class="field">
+        <label>Месяц</label>
+        <select name="month" required>
+          <option value="0">Январь</option><option value="1">Февраль</option>
+          <option value="2">Март</option><option value="3">Апрель</option>
+          <option value="4">Май</option><option value="5">Июнь</option>
+          <option value="6">Июль</option><option value="7">Август</option>
+          <option value="8">Сентябрь</option><option value="9">Октябрь</option>
+          <option value="10">Ноябрь</option><option value="11">Декабрь</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Год</label>
+        <input type="number" name="year" min="2020" max="2099" required />
+      </div>
+
+      <div class="field-group">
+        <h4>Доход и расход по банкам, ₽</h4>
+        <div class="bank-row vtb">
+          <span class="bank-name">ВТБ</span>
+          <input type="number" name="vtb_income" step="1" placeholder="Доход ВТБ" min="0" required />
+          <input type="number" name="vtb_expense" step="1" placeholder="Расход ВТБ" min="0" required />
+        </div>
+        <div class="bank-row sber">
+          <span class="bank-name">Сбер</span>
+          <input type="number" name="sber_income" step="1" placeholder="Перевод на Сбер" min="0" required />
+          <input type="number" name="sber_expense" step="1" placeholder="Расход Сбер" min="0" required />
+        </div>
+        <div class="bank-row yandex">
+          <span class="bank-name">Яндекс</span>
+          <input type="number" name="yandex_income" step="1" placeholder="Перевод на Яндекс" min="0" required />
+          <input type="number" name="yandex_expense" step="1" placeholder="Расход Яндекс" min="0" required />
+        </div>
+      </div>
+
+      <div class="submit-row">
+        <button type="button" id="cancel-edit" class="ghost" style="display:none">Отмена</button>
+        <button type="submit" class="primary">Сохранить</button>
+      </div>
+    </form>
+  </section>
+
+  <footer>
+    Данные хранятся локально в вашем браузере. Файл полностью автономный.
+  </footer>
+</div>
+
+<div class="modal-bg" id="confirm-modal">
+  <div class="modal">
+    <h3 id="confirm-title">Подтверждение</h3>
+    <div id="confirm-text">Вы уверены?</div>
+    <div class="modal-actions">
+      <button id="confirm-no" class="ghost">Отмена</button>
+      <button id="confirm-yes" class="primary">Да</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Data: seed from Excel (август 2025 .. апрель 2026 предположительно).
+   Год можно поправить в любой строке через редактирование.
+   ============================================================ */
+const SEED = [
+  { year: 2025, month: 7,  vtb_income: 120485, vtb_expense: 171771, sber_income: 53311,  sber_expense: 106917, yandex_income: 28891, yandex_expense: 32187 },
+  { year: 2025, month: 8,  vtb_income: 219259, vtb_expense: 124551, sber_income: 42000,  sber_expense: 36546,  yandex_income: 7689,  yandex_expense: 51495 },
+  { year: 2025, month: 9,  vtb_income: 220512, vtb_expense: 286361, sber_income: 152083, sber_expense: 37353,  yandex_income: 48818, yandex_expense: 66884 },
+  { year: 2025, month: 10, vtb_income: 218994, vtb_expense: 113496, sber_income: 10000,  sber_expense: 46710,  yandex_income: 57194, yandex_expense: 48808 },
+  { year: 2025, month: 11, vtb_income: 337864, vtb_expense: 279150, sber_income: 58929,  sber_expense: 36320,  yandex_income: 25000, yandex_expense: 35520 },
+  { year: 2026, month: 0,  vtb_income: 60831,  vtb_expense: 123888, sber_income: 0,      sber_expense: 35029,  yandex_income: 12410, yandex_expense: 41187 },
+  { year: 2026, month: 1,  vtb_income: 311009, vtb_expense: 278316, sber_income: 75083,  sber_expense: 29391,  yandex_income: 27684, yandex_expense: 36399 },
+  { year: 2026, month: 2,  vtb_income: 225909, vtb_expense: 213670, sber_income: 30718,  sber_expense: 50469,  yandex_income: 51912, yandex_expense: 44184 },
+  { year: 2026, month: 3,  vtb_income: 365546, vtb_expense: 272362, sber_income: 88084,  sber_expense: 50040,  yandex_income: 10947, yandex_expense: 10952 },
+];
+
+const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const STORAGE_KEY = 'budget-dashboard-v1';
+const THEME_KEY = 'budget-dashboard-theme';
+
+/* ============================================================
+   State + persistence
+   ============================================================ */
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { console.warn(e); }
+  return [...SEED];
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function sortState() {
+  state.sort((a, b) => (a.year - b.year) || (a.month - b.month));
+}
+
+/* ============================================================
+   Formatters
+   ============================================================ */
+const fmtRUB = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
+const fmtNum = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+const fmtPct = (x) => (x >= 0 ? '+' : '') + x.toFixed(1) + '%';
+const labelOf = (r) => `${MONTHS_RU[r.month]} ${String(r.year).slice(-2)}`;
+
+/* ============================================================
+   Derived
+   ============================================================ */
+function derive(r) {
+  const income = r.vtb_income + r.sber_income + r.yandex_income;
+  const expense = r.vtb_expense + r.sber_expense + r.yandex_expense;
+  const balance = income - expense;
+  // Real numbers: transfers VTB -> Sber/Yandex excluded
+  const transfers = r.sber_income + r.yandex_income;
+  const realIncome = r.vtb_income;
+  const realExpense = (r.vtb_expense - transfers) + r.sber_expense + r.yandex_expense;
+  const realBalance = realIncome - realExpense; // == balance, sanity check
+  const savingsRate = realIncome > 0 ? (realBalance / realIncome) * 100 : 0;
+  return { ...r, income, expense, balance, transfers, realIncome, realExpense, realBalance, savingsRate };
+}
+
+/* ============================================================
+   Theme
+   ============================================================ */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem(THEME_KEY, t);
+  // Re-render charts to refresh colours
+  renderAll();
+}
+const savedTheme = localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+document.documentElement.dataset.theme = savedTheme;
+
+/* ============================================================
+   Charts
+   ============================================================ */
+const charts = {};
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function chartDefaults() {
+  Chart.defaults.color = cssVar('--text-dim');
+  Chart.defaults.borderColor = cssVar('--border');
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif';
+  Chart.defaults.font.size = 12;
+}
+
+function destroy(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderCharts(rows) {
+  chartDefaults();
+  const labels = rows.map(labelOf);
+  const dInc = rows.map(r => r.income);
+  const dExp = rows.map(r => r.expense);
+  const dBal = rows.map(r => r.balance);
+  const dRealInc = rows.map(r => r.realIncome);
+  const dRealExp = rows.map(r => r.realExpense);
+  const dSav = rows.map(r => r.savingsRate);
+
+  const C_GREEN = cssVar('--green'), C_RED = cssVar('--red'), C_BLUE = cssVar('--accent');
+  const C_VTB = cssVar('--vtb'), C_SBER = cssVar('--sber'), C_YANDEX = cssVar('--yandex');
+
+  /* Main: bars income/expense + line balance */
+  destroy('main');
+  charts.main = new Chart(document.getElementById('chart-main'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Доход',  data: dInc, backgroundColor: C_GREEN + 'cc', borderRadius: 6, order: 2 },
+        { label: 'Расход', data: dExp, backgroundColor: C_RED + 'cc',   borderRadius: 6, order: 2 },
+        { label: 'Баланс', data: dBal, type: 'line', borderColor: C_BLUE, backgroundColor: C_BLUE,
+          tension: .35, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2.5, order: 1 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtRUB.format(ctx.parsed.y)}` } }
+      },
+      scales: {
+        y: { ticks: { callback: v => fmtNum.format(v) + ' ₽' }, grid: { color: cssVar('--border') } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  /* Donut: total expenses by bank */
+  destroy('donut');
+  const totalVtbExp = rows.reduce((s, r) => s + (r.vtb_expense - r.transfers), 0);
+  const totalSberExp = rows.reduce((s, r) => s + r.sber_expense, 0);
+  const totalYandexExp = rows.reduce((s, r) => s + r.yandex_expense, 0);
+  charts.donut = new Chart(document.getElementById('chart-donut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['ВТБ (без переводов)', 'Сбер', 'Яндекс'],
+      datasets: [{
+        data: [Math.max(0,totalVtbExp), totalSberExp, totalYandexExp],
+        backgroundColor: [C_VTB, C_SBER, C_YANDEX],
+        borderColor: cssVar('--surface'),
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${fmtRUB.format(ctx.parsed)}` } }
+      }
+    }
+  });
+
+  /* Cumulative balance line */
+  destroy('cum');
+  const cum = []; let running = 0;
+  for (const v of dBal) { running += v; cum.push(running); }
+  charts.cum = new Chart(document.getElementById('chart-cum'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Накопленный баланс',
+        data: cum,
+        borderColor: C_BLUE,
+        backgroundColor: C_BLUE + '22',
+        fill: true, tension: .35, pointRadius: 3, borderWidth: 2.5,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => fmtRUB.format(ctx.parsed.y) } }
+      },
+      scales: {
+        y: { ticks: { callback: v => fmtNum.format(v) + ' ₽' }, grid: { color: cssVar('--border') } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  /* Stacked expenses by bank */
+  destroy('stack');
+  charts.stack = new Chart(document.getElementById('chart-stack'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'ВТБ (без переводов)', data: rows.map(r => Math.max(0, r.vtb_expense - r.transfers)), backgroundColor: C_VTB + 'cc', borderRadius: 4 },
+        { label: 'Сбер',   data: rows.map(r => r.sber_expense),   backgroundColor: C_SBER + 'cc', borderRadius: 4 },
+        { label: 'Яндекс', data: rows.map(r => r.yandex_expense), backgroundColor: C_YANDEX + 'cc', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 10, usePointStyle: true } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtRUB.format(ctx.parsed.y)}` } }
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, ticks: { callback: v => fmtNum.format(v) + ' ₽' }, grid: { color: cssVar('--border') } }
+      }
+    }
+  });
+
+  /* Real income vs real expense */
+  destroy('real');
+  charts.real = new Chart(document.getElementById('chart-real'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Чистый доход', data: dRealInc, borderColor: C_GREEN, backgroundColor: C_GREEN + '22', fill: true, tension: .35, pointRadius: 3, borderWidth: 2.5 },
+        { label: 'Чистый расход', data: dRealExp, borderColor: C_RED, backgroundColor: C_RED + '22', fill: true, tension: .35, pointRadius: 3, borderWidth: 2.5 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 10, usePointStyle: true } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtRUB.format(ctx.parsed.y)}` } }
+      },
+      scales: {
+        y: { ticks: { callback: v => fmtNum.format(v) + ' ₽' }, grid: { color: cssVar('--border') } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  /* Savings rate */
+  destroy('savings');
+  charts.savings = new Chart(document.getElementById('chart-savings'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Норма сбережений, %',
+        data: dSav,
+        backgroundColor: dSav.map(v => v >= 0 ? C_GREEN + 'cc' : C_RED + 'cc'),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => fmtPct(ctx.parsed.y) } }
+      },
+      scales: {
+        y: { ticks: { callback: v => v.toFixed(0) + '%' }, grid: { color: cssVar('--border') } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+/* ============================================================
+   KPI cards
+   ============================================================ */
+function renderKpis(rows) {
+  const totalInc = rows.reduce((s, r) => s + r.realIncome, 0);
+  const totalExp = rows.reduce((s, r) => s + r.realExpense, 0);
+  const balance = totalInc - totalExp;
+  const months = rows.length;
+  const avgSav = months ? rows.reduce((s, r) => s + r.savingsRate, 0) / months : 0;
+  const best = rows.reduce((b, r) => (!b || r.balance > b.balance ? r : b), null);
+  const worst = rows.reduce((w, r) => (!w || r.balance < w.balance ? r : w), null);
+
+  const last = rows[rows.length - 1];
+  const prev = rows[rows.length - 2];
+  let deltaInc = '', deltaExp = '';
+  if (last && prev && prev.realIncome) {
+    const diInc = ((last.realIncome - prev.realIncome) / prev.realIncome) * 100;
+    deltaInc = `<div class="delta ${diInc >= 0 ? 'up' : 'down'}">${fmtPct(diInc)} к ${labelOf(prev)}</div>`;
+  }
+  if (last && prev && prev.realExpense) {
+    const diExp = ((last.realExpense - prev.realExpense) / prev.realExpense) * 100;
+    deltaExp = `<div class="delta ${diExp <= 0 ? 'up' : 'down'}">${fmtPct(diExp)} к ${labelOf(prev)}</div>`;
+  }
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi green">
+      <div class="label">Всего получено (чистый доход)</div>
+      <div class="value">${fmtRUB.format(totalInc)}</div>
+      <div class="hint">за ${months} мес · в среднем ${fmtRUB.format(months ? totalInc/months : 0)}/мес</div>
+      ${deltaInc}
+    </div>
+    <div class="kpi red">
+      <div class="label">Всего потрачено (чистый расход)</div>
+      <div class="value">${fmtRUB.format(totalExp)}</div>
+      <div class="hint">в среднем ${fmtRUB.format(months ? totalExp/months : 0)}/мес</div>
+      ${deltaExp}
+    </div>
+    <div class="kpi ${balance >= 0 ? 'green' : 'red'}">
+      <div class="label">Сальдо за период</div>
+      <div class="value">${fmtRUB.format(balance)}</div>
+      <div class="hint">${balance >= 0 ? 'отложено сверх расходов' : 'минус'}</div>
+    </div>
+    <div class="kpi amber">
+      <div class="label">Средняя норма сбережений</div>
+      <div class="value">${fmtPct(avgSav)}</div>
+      <div class="hint">${avgSav >= 20 ? '👍 отлично' : avgSav >= 0 ? 'есть запас' : 'тратим больше, чем получаем'}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Лучший / худший месяц</div>
+      <div class="value" style="font-size:16px;line-height:1.4">
+        ${best ? `<span class="badge pos">${labelOf(best)}: ${fmtRUB.format(best.balance)}</span>` : '—'}<br>
+        ${worst ? `<span class="badge neg">${labelOf(worst)}: ${fmtRUB.format(worst.balance)}</span>` : '—'}
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   Tables
+   ============================================================ */
+function renderTables(rows) {
+  const tbSum = document.querySelector('#table-summary tbody');
+  tbSum.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td><b>${labelOf(r)}</b></td>
+      <td class="muted">${fmtNum.format(r.income)}</td>
+      <td class="muted">${fmtNum.format(r.expense)}</td>
+      <td class="${r.balance >= 0 ? 'pos' : 'neg'}">${fmtNum.format(r.balance)}</td>
+      <td class="pos">${fmtNum.format(r.realIncome)}</td>
+      <td class="neg">${fmtNum.format(r.realExpense)}</td>
+      <td class="${r.savingsRate >= 0 ? 'pos' : 'neg'}">${fmtPct(r.savingsRate)}</td>
+      <td class="row-actions">
+        <button data-edit="${i}">✏️</button>
+        <button data-del="${i}" class="danger">🗑</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" class="empty">Нет данных</td></tr>';
+
+  const tbBanks = document.querySelector('#table-banks tbody');
+  tbBanks.innerHTML = rows.map(r => {
+    const vtb_bal = r.vtb_income - r.vtb_expense;
+    const sber_bal = r.sber_income - r.sber_expense;
+    const yandex_bal = r.yandex_income - r.yandex_expense;
+    const cls = v => v >= 0 ? 'pos' : 'neg';
+    return `
+      <tr>
+        <td><b>${labelOf(r)}</b></td>
+        <td>${fmtNum.format(r.vtb_income)}</td>
+        <td>${fmtNum.format(r.sber_income)}</td>
+        <td>${fmtNum.format(r.yandex_income)}</td>
+        <td>${fmtNum.format(r.vtb_expense)}</td>
+        <td>${fmtNum.format(r.sber_expense)}</td>
+        <td>${fmtNum.format(r.yandex_expense)}</td>
+        <td class="${cls(vtb_bal)}">${fmtNum.format(vtb_bal)}</td>
+        <td class="${cls(sber_bal)}">${fmtNum.format(sber_bal)}</td>
+        <td class="${cls(yandex_bal)}">${fmtNum.format(yandex_bal)}</td>
+      </tr>
+    `;
+  }).join('') || '<tr><td colspan="10" class="empty">Нет данных</td></tr>';
+
+  tbSum.querySelectorAll('button[data-edit]').forEach(b =>
+    b.addEventListener('click', () => startEdit(+b.dataset.edit)));
+  tbSum.querySelectorAll('button[data-del]').forEach(b =>
+    b.addEventListener('click', () => confirmDelete(+b.dataset.del)));
+}
+
+/* ============================================================
+   Render orchestration
+   ============================================================ */
+function renderAll() {
+  sortState();
+  const rows = state.map(derive);
+  renderKpis(rows);
+  renderCharts(rows);
+  renderTables(rows);
+}
+
+/* ============================================================
+   Form
+   ============================================================ */
+const form = document.getElementById('entry-form');
+const cancelBtn = document.getElementById('cancel-edit');
+const formTitle = document.getElementById('form-title');
+let editingIndex = -1;
+
+function resetForm() {
+  form.reset();
+  editingIndex = -1;
+  cancelBtn.style.display = 'none';
+  formTitle.textContent = '➕ Добавить новый месяц';
+  // Pre-fill defaults: next month after the last entry
+  if (state.length) {
+    sortState();
+    const last = state[state.length - 1];
+    let m = last.month + 1, y = last.year;
+    if (m > 11) { m = 0; y++; }
+    form.month.value = m;
+    form.year.value = y;
+  } else {
+    const d = new Date();
+    form.month.value = d.getMonth();
+    form.year.value = d.getFullYear();
+  }
+}
+
+function startEdit(idx) {
+  sortState();
+  const r = state[idx];
+  editingIndex = idx;
+  form.month.value = r.month;
+  form.year.value = r.year;
+  form.vtb_income.value = r.vtb_income;
+  form.vtb_expense.value = r.vtb_expense;
+  form.sber_income.value = r.sber_income;
+  form.sber_expense.value = r.sber_expense;
+  form.yandex_income.value = r.yandex_income;
+  form.yandex_expense.value = r.yandex_expense;
+  cancelBtn.style.display = '';
+  formTitle.textContent = `✏️ Редактирование: ${MONTHS_RU[r.month]} ${r.year}`;
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+cancelBtn.addEventListener('click', resetForm);
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const fd = new FormData(form);
+  const entry = {
+    year: +fd.get('year'),
+    month: +fd.get('month'),
+    vtb_income: +fd.get('vtb_income') || 0,
+    vtb_expense: +fd.get('vtb_expense') || 0,
+    sber_income: +fd.get('sber_income') || 0,
+    sber_expense: +fd.get('sber_expense') || 0,
+    yandex_income: +fd.get('yandex_income') || 0,
+    yandex_expense: +fd.get('yandex_expense') || 0,
+  };
+  // Replace existing month if matched
+  const existing = state.findIndex((r, i) =>
+    r.year === entry.year && r.month === entry.month && i !== editingIndex);
+  if (existing !== -1) {
+    if (!confirm(`Запись за ${MONTHS_RU[entry.month]} ${entry.year} уже есть. Заменить?`)) return;
+    state.splice(existing, 1);
+    if (editingIndex > existing) editingIndex--;
+  }
+  if (editingIndex !== -1) state[editingIndex] = entry;
+  else state.push(entry);
+  save();
+  resetForm();
+  renderAll();
+});
+
+/* ============================================================
+   Confirm modal
+   ============================================================ */
+const modal = document.getElementById('confirm-modal');
+const modalTitle = document.getElementById('confirm-title');
+const modalText = document.getElementById('confirm-text');
+const yesBtn = document.getElementById('confirm-yes');
+const noBtn = document.getElementById('confirm-no');
+function ask(title, text) {
+  return new Promise((resolve) => {
+    modalTitle.textContent = title;
+    modalText.textContent = text;
+    modal.classList.add('open');
+    const close = (v) => { modal.classList.remove('open'); yesBtn.onclick = noBtn.onclick = null; resolve(v); };
+    yesBtn.onclick = () => close(true);
+    noBtn.onclick = () => close(false);
+  });
+}
+function confirmDelete(idx) {
+  const r = state[idx];
+  ask('Удалить запись?', `${MONTHS_RU[r.month]} ${r.year} будет удалён.`).then(ok => {
+    if (!ok) return;
+    state.splice(idx, 1); save(); renderAll();
+  });
+}
+
+/* ============================================================
+   Toolbar
+   ============================================================ */
+document.getElementById('theme-btn').addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
+document.getElementById('export-btn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `budget-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
+document.getElementById('import-file').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = async () => {
+    try {
+      const data = JSON.parse(r.result);
+      if (!Array.isArray(data)) throw new Error('Не массив');
+      const ok = await ask('Импортировать?', `Будет заменено ${state.length} → ${data.length} записей.`);
+      if (!ok) return;
+      state = data; save(); renderAll();
+    } catch (err) { alert('Не получилось разобрать файл: ' + err.message); }
+  };
+  r.readAsText(f);
+});
+document.getElementById('reset-btn').addEventListener('click', async () => {
+  const ok = await ask('Сбросить данные?', 'Все локальные правки будут потеряны, восстановятся исходные данные из Excel.');
+  if (!ok) return;
+  state = [...SEED]; save(); renderAll(); resetForm();
+});
+
+/* ============================================================
+   Tabs
+   ============================================================ */
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  const which = t.dataset.tab;
+  document.getElementById('tab-summary').style.display = which === 'summary' ? '' : 'none';
+  document.getElementById('tab-banks').style.display = which === 'banks' ? '' : 'none';
+}));
+
+/* ============================================================
+   Init
+   ============================================================ */
+resetForm();
+renderAll();
+</script>
+</body>
+</html>
