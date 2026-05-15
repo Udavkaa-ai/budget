@@ -259,6 +259,17 @@ app.post('/api/settings/retag', authMiddleware, async (req, res) => {
   res.json({ ok: true, count });
 });
 
+// Семья редактирует свой список постоянных расходов (без прав администратора)
+app.put('/api/family-budget/fixed-expenses', authMiddleware, async (req, res) => {
+  const { fixedExpensesList } = req.body || {};
+  if (!Array.isArray(fixedExpensesList)) {
+    return res.status(400).json({ error: 'Неверный формат данных' });
+  }
+  await saveFamilyBudgetSettings(req.user.family, { fixedExpensesList });
+  io.to(req.user.family).emit('settings:updated', { by: req.user.name });
+  res.json({ ok: true });
+});
+
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
 
 function adminMiddleware(req, res, next) {
