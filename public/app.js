@@ -958,16 +958,8 @@ async function loadSettingsScreen() {
     const data = await apiJson('GET', '/api/settings');
     appSettings = data;
 
-    // Fixed expenses list
-    const fixedList = document.getElementById('fixed-expenses-list');
-    if (data.fixedExpensesList && fixedList) {
-      fixedList.innerHTML = data.fixedExpensesList.map(item => `
-        <div class="fixed-item">
-          <span>${item.name}</span>
-          <span class="fixed-item-amount">${fmt(item.amount)}</span>
-        </div>
-      `).join('');
-    }
+    // Fixed expenses list — editable by all family members
+    renderFixedExpensesEditable(data.fixedExpensesList || []);
 
     // Info
     const infoPlanned = document.getElementById('info-planned');
@@ -984,6 +976,47 @@ async function loadSettingsScreen() {
     document.getElementById('admin-update-section').classList.remove('hidden');
     document.getElementById('admin-budget-section').classList.remove('hidden');
     loadAdminUsers();
+  }
+}
+
+// ─── FIXED EXPENSES (editable by family) ──────────────────────────────────────
+
+function renderFixedExpensesEditable(list) {
+  const container = document.getElementById('fixed-expenses-list');
+  container.innerHTML = '';
+  for (const item of list) {
+    container.appendChild(buildFixedItemRow(item.name, item.amount));
+  }
+}
+
+function buildFixedItemRow(name = '', amount = '') {
+  const row = document.createElement('div');
+  row.className = 'fixed-item-edit';
+  row.innerHTML = `
+    <input class="fixed-item-name-input" type="text" value="${esc(name)}" placeholder="Название" />
+    <input class="fixed-item-amount-input" type="number" value="${amount || ''}" placeholder="0" inputmode="numeric" />
+    <button class="fixed-item-del-btn" title="Удалить">✕</button>
+  `;
+  row.querySelector('.fixed-item-del-btn').addEventListener('click', () => row.remove());
+  return row;
+}
+
+async function saveFixedExpenses() {
+  const items = [...document.querySelectorAll('.fixed-item-edit')].map(row => ({
+    name:   row.querySelector('.fixed-item-name-input').value.trim(),
+    amount: parseInt(row.querySelector('.fixed-item-amount-input').value) || 0,
+  })).filter(i => i.name);
+
+  const btn = document.getElementById('btn-fixed-save');
+  btn.disabled = true;
+  try {
+    const res = await apiJson('PUT', '/api/family-budget/fixed-expenses', { fixedExpensesList: items });
+    if (res.ok) showToastSuccess('Постоянные расходы сохранены');
+    else showToastError(res.error || 'Ошибка сохранения');
+  } catch {
+    showToastError('Ошибка соединения');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -1698,6 +1731,11 @@ function setupEventListeners() {
   });
 
   // Retag button
+  document.getElementById('btn-fixed-add').addEventListener('click', () => {
+    document.getElementById('fixed-expenses-list').appendChild(buildFixedItemRow());
+  });
+  document.getElementById('btn-fixed-save').addEventListener('click', saveFixedExpenses);
+
   document.getElementById('btn-retag').addEventListener('click', async () => {
     const res = await apiJson('POST', '/api/settings/retag');
     showToastSuccess(`Перепомечено записей: ${res.count}`);

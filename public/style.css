@@ -905,6 +905,53 @@ html, body {
 
 .fixed-item-amount { font-weight: 700; color: var(--primary); }
 
+.fixed-item-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  box-shadow: var(--card-shadow);
+}
+.fixed-item-name-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+}
+.fixed-item-name-input:focus { outline: none; }
+.fixed-item-amount-input {
+  width: 84px;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(89,71,224,0.18);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: right;
+  color: var(--primary);
+  background: rgba(255,255,255,0.6);
+}
+.fixed-item-amount-input:focus { outline: none; border-color: var(--primary); }
+.fixed-item-del-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--danger);
+  font-size: 18px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
 /* ═══════════════════════════════════════════ REMINDER TOAST ══ */
 .reminder-toast {
   position: fixed;
@@ -1277,6 +1324,7 @@ html, body {
 
 .income-row input {
   flex: 1;
+  min-width: 0;
   padding: 10px 12px;
   border: 1.5px solid rgba(89,71,224,0.15);
   border-radius: var(--radius-xs);
@@ -1389,8 +1437,8 @@ html, body {
 }
 
 /* ════════════════════════════════ SUMMARY PLAN SECTION ══ */
-#summary-plan-section { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
-.summary-plan-card { padding: 18px 16px; }
+#summary-plan-section { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; padding-bottom: 80px; }
+.summary-plan-card { padding: 18px 16px; overflow: hidden; }
 
 /* ═══════════════════════════════════════════ ADMIN PANEL ══ */
 .admin-users-list { display: flex; flex-direction: column; gap: 8px; }
