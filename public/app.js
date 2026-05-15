@@ -360,6 +360,11 @@ function closeSheet() {
 
 // ─── SUMMARY SCREEN ───────────────────────────────────────────────────────────
 
+let summaryUserFilter = null; // null = all users
+let summaryCompareMode = false;
+let lastSummaryData = null;
+let compareChart = null;
+
 async function loadSummary() {
   const gen = ++summaryGen;
   const excludeFixed = document.getElementById('summary-exclude-fixed').checked;
@@ -370,62 +375,142 @@ async function loadSummary() {
   });
 
   document.getElementById('summary-month-label').textContent = getMonthName(summaryMonth, summaryYear);
-
-  // Hide detail if open
   document.getElementById('category-detail').classList.add('hidden');
-  document.getElementById('summary-categories').classList.remove('hidden');
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
 
   try {
     const data = await apiJson('GET', `/api/summary?${params}`);
     if (gen !== summaryGen) return;
-
-    // Total bar
-    const totalBar = document.getElementById('summary-total-bar');
-    totalBar.innerHTML = `<span>Итого за месяц</span><span class="highlight-total">${fmt(data.total)}</span>`;
-
-    // By user
-    const byUserEl = document.getElementById('summary-by-user');
-    byUserEl.innerHTML = '';
-    for (const [user, udata] of Object.entries(data.byUser)) {
-      byUserEl.innerHTML += `
-        <div class="user-stat-chip">
-          <div class="user-stat-name">${user}</div>
-          <div class="user-stat-amount">${fmt(udata.total)}</div>
-        </div>
-      `;
-    }
-
-    // Categories
-    const catList = document.getElementById('summary-categories');
-    catList.innerHTML = '';
-
-    if (Object.keys(data.byCategory).length === 0) {
-      catList.innerHTML = '<div class="empty-state">Нет данных за этот месяц</div>';
-      return;
-    }
-
-    const maxAmt = Math.max(...Object.values(data.byCategory));
-
-    for (const [cat, amount] of Object.entries(data.byCategory).sort((a, b) => b[1] - a[1])) {
-      const pct = maxAmt > 0 ? Math.round((amount / maxAmt) * 100) : 0;
-      const item = document.createElement('div');
-      item.className = 'category-item';
-      item.innerHTML = `
-        <span class="cat-bar-icon">${CATEGORY_ICONS[cat] || '❓'}</span>
-        <div class="cat-bar-info">
-          <div class="cat-bar-name">${cat}</div>
-          <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
-        </div>
-        <span class="cat-bar-amount">${fmt(amount)}</span>
-      `;
-      item.addEventListener('click', () => loadCategoryDetail(cat, summaryMonth, summaryYear));
-      catList.appendChild(item);
-    }
+    lastSummaryData = data;
+    renderSummaryView();
   } catch {
     showToastError('Ошибка загрузки статистики');
   }
+}
+
+function renderSummaryView() {
+  if (!lastSummaryData) return;
+  const data = lastSummaryData;
+
+  // Total bar — shows filtered user total when filter is active
+  const totalBar = document.getElementById('summary-total-bar');
+  const displayTotal = summaryUserFilter
+    ? (data.byUser[summaryUserFilter]?.total || 0)
+    : data.total;
+  const filterLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
+  totalBar.innerHTML = `<span>Итого за месяц${filterLabel}</span><span class="highlight-total">${fmt(displayTotal)}</span>`;
+
+  // User chips — clickable filter toggle
+  const byUserEl = document.getElementById('summary-by-user');
+  byUserEl.innerHTML = '';
+  for (const [user, udata] of Object.entries(data.byUser)) {
+    const isActive = summaryUserFilter === user;
+    const chip = document.createElement('div');
+    chip.className = 'user-stat-chip' + (isActive ? ' active' : '');
+    chip.innerHTML = `
+      <div class="user-stat-name">${esc(user)}</div>
+      <div class="user-stat-amount">${fmt(udata.total)}</div>
+    `;
+    chip.addEventListener('click', () => {
+      summaryUserFilter = isActive ? null : user;
+      if (summaryCompareMode) { /* filter doesn't apply in compare mode */ return; }
+      renderSummaryView();
+    });
+    byUserEl.appendChild(chip);
+  }
+
+  if (summaryCompareMode) {
+    document.getElementById('summary-categories').classList.add('hidden');
+    document.getElementById('summary-compare-panel').classList.remove('hidden');
+    renderCompareChart(data);
+  } else {
+    document.getElementById('summary-compare-panel').classList.add('hidden');
+    document.getElementById('summary-categories').classList.remove('hidden');
+    renderCategoryList(data);
+  }
+}
+
+function renderCategoryList(data) {
+  const catList = document.getElementById('summary-categories');
+  catList.innerHTML = '';
+
+  const byCategory = summaryUserFilter
+    ? (data.byUser[summaryUserFilter]?.byCategory || {})
+    : data.byCategory;
+
+  if (Object.keys(byCategory).length === 0) {
+    catList.innerHTML = '<div class="empty-state">Нет данных за этот месяц</div>';
+    return;
+  }
+
+  const maxAmt = Math.max(...Object.values(byCategory));
+  for (const [cat, amount] of Object.entries(byCategory).sort((a, b) => b[1] - a[1])) {
+    const pct = maxAmt > 0 ? Math.round((amount / maxAmt) * 100) : 0;
+    const item = document.createElement('div');
+    item.className = 'category-item';
+    item.innerHTML = `
+      <span class="cat-bar-icon">${CATEGORY_ICONS[cat] || '❓'}</span>
+      <div class="cat-bar-info">
+        <div class="cat-bar-name">${esc(cat)}</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <span class="cat-bar-amount">${fmt(amount)}</span>
+    `;
+    item.addEventListener('click', () => loadCategoryDetail(cat, summaryMonth, summaryYear));
+    catList.appendChild(item);
+  }
+}
+
+function renderCompareChart(data) {
+  const users = Object.keys(data.byUser);
+  const allCats = new Set();
+  for (const u of users) Object.keys(data.byUser[u].byCategory || {}).forEach(c => allCats.add(c));
+
+  // Sort categories by combined total descending
+  const sortedCats = [...allCats].sort((a, b) => {
+    const ta = users.reduce((s, u) => s + (data.byUser[u].byCategory[a] || 0), 0);
+    const tb = users.reduce((s, u) => s + (data.byUser[u].byCategory[b] || 0), 0);
+    return tb - ta;
+  });
+
+  const COLORS = ['#4f46e5', '#ef4444', '#f59e0b', '#10b981'];
+  const datasets = users.map((user, i) => ({
+    label: user,
+    data: sortedCats.map(cat => data.byUser[user].byCategory[cat] || 0),
+    backgroundColor: COLORS[i % COLORS.length],
+    borderRadius: 3,
+  }));
+
+  const canvas = document.getElementById('compare-chart');
+  const rowH = Math.max(38, Math.min(52, Math.round(300 / sortedCats.length)));
+  canvas.parentElement.style.height = (sortedCats.length * rowH * users.length + 60) + 'px';
+
+  if (compareChart) { compareChart.destroy(); compareChart = null; }
+  compareChart = new Chart(canvas, {
+    type: 'bar',
+    data: { labels: sortedCats, datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          ticks: { callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : String(v) },
+          grid: { color: 'rgba(0,0,0,0.05)' },
+        },
+        y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+      },
+      plugins: {
+        legend: { labels: { boxWidth: 12, padding: 12, font: { size: 12 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.x.toLocaleString('ru')} ₽`,
+          },
+        },
+      },
+    },
+  });
 }
 
 async function loadCategoryDetail(cat, month, year) {
@@ -435,8 +520,7 @@ async function loadCategoryDetail(cat, month, year) {
   });
 
   document.getElementById('summary-categories').classList.add('hidden');
-  document.getElementById('summary-by-user').classList.add('hidden');
-  document.getElementById('summary-total-bar').classList.add('hidden');
+  document.getElementById('summary-compare-panel').classList.add('hidden');
 
   const detail = document.getElementById('category-detail');
   detail.classList.remove('hidden');
@@ -1482,12 +1566,20 @@ function setupEventListeners() {
   });
   document.getElementById('summary-exclude-fixed').addEventListener('change', loadSummary);
 
+  // Compare toggle
+  document.getElementById('btn-summary-compare').addEventListener('click', () => {
+    summaryCompareMode = !summaryCompareMode;
+    document.getElementById('btn-summary-compare').classList.toggle('active', summaryCompareMode);
+    if (!summaryCompareMode && compareChart) { compareChart.destroy(); compareChart = null; }
+    renderSummaryView();
+  });
+
   // Category detail back
   document.getElementById('category-detail-back').addEventListener('click', () => {
     document.getElementById('category-detail').classList.add('hidden');
-    document.getElementById('summary-categories').classList.remove('hidden');
     document.getElementById('summary-by-user').classList.remove('hidden');
     document.getElementById('summary-total-bar').classList.remove('hidden');
+    renderSummaryView();
   });
 
   // Chart navigation
