@@ -1246,7 +1246,7 @@ function renderParseResult(expenses) {
     </div>
     ${expenses.map((e, i) => `
       <div class="parse-expense-item">
-        <span style="font-size:22px">${CATEGORY_ICONS[e.category] || '❓'}</span>
+        <span class="parse-expense-icon">${CATEGORY_ICONS[e.category] || '❓'}</span>
         <div class="parse-expense-info">
           <div class="parse-expense-desc">${e.description}</div>
           <div class="parse-expense-meta">${e.category} · ${e.date}</div>
@@ -1306,7 +1306,6 @@ function buildExpenseItem(exp, canDelete) {
       <div class="expense-meta">
         <span class="expense-user-tag">${exp.user}</span>
         <span>${exp.category}</span>
-        <span>${exp.date}</span>
         ${exp.isFixed ? '<span class="expense-fixed-tag">📌 пост.</span>' : ''}
       </div>
     </div>
