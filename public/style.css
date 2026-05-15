@@ -678,6 +678,7 @@ html, body {
 
 .user-stat-name { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
 .user-stat-amount { font-size: 20px; font-weight: 800; color: var(--primary); }
+.user-stat-pct { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-weight: 600; }
 
 /* Compare chart */
 .compare-chart-wrapper {
@@ -730,8 +731,20 @@ html, body {
   border-radius: 3px;
   transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+.cat-bar-fill--over { background: var(--danger); }
 
 .cat-bar-amount { font-size: 15px; font-weight: 800; flex-shrink: 0; }
+
+.cat-bar-budget {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 11px;
+}
+.cat-budget-ok  { color: #2BA889; font-weight: 700; }
+.cat-budget-over { color: var(--danger); font-weight: 700; }
+.cat-budget-limit { color: var(--text-muted); }
 
 /* Category detail */
 .category-detail-header {
@@ -1312,6 +1325,9 @@ html, body {
   padding: 8px 2px;
   border-bottom: 1px solid rgba(89,71,224,0.05);
 }
+.plan-row--compact {
+  grid-template-columns: 26px 1fr 80px;
+}
 
 .plan-cat-icon { font-size: 18px; text-align: center; }
 .plan-cat-name { font-size: 13px; font-weight: 600; }
@@ -1371,6 +1387,10 @@ html, body {
   font-size: 20px;
   font-weight: 800;
 }
+
+/* ════════════════════════════════ SUMMARY PLAN SECTION ══ */
+#summary-plan-section { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.summary-plan-card { padding: 18px 16px; }
 
 /* ═══════════════════════════════════════════ ADMIN PANEL ══ */
 .admin-users-list { display: flex; flex-direction: column; gap: 8px; }
