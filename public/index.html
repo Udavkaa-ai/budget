@@ -107,6 +107,49 @@
         </div>
         <div id="category-detail-list" class="expenses-list"></div>
       </div>
+
+      <!-- Plan section (merged from planning tab) -->
+      <div id="summary-plan-section">
+        <div class="card summary-plan-card">
+          <div class="settings-title">Плановый доход — <span id="plan-month-label"></span></div>
+          <div class="income-inputs">
+            <div class="income-row">
+              <span class="income-label" id="plan-label-me">Я</span>
+              <input type="number" id="plan-income-me" inputmode="numeric" placeholder="0" min="0" />
+              <span class="income-currency">₽</span>
+            </div>
+            <div class="income-row">
+              <span class="income-label" id="plan-label-partner">Партнёр</span>
+              <input type="number" id="plan-income-partner" inputmode="numeric" placeholder="0" min="0" />
+              <span class="income-currency">₽</span>
+            </div>
+          </div>
+          <div class="income-total-row">
+            <span class="income-total-label">Итого семейный бюджет</span>
+            <span class="income-total-amount" id="plan-income-total">0 ₽</span>
+          </div>
+          <div class="plan-footer" style="margin-top:12px">
+            <div class="plan-footer-row">
+              <span class="plan-footer-label">Запланировано расходов</span>
+              <span id="plan-total-planned">—</span>
+            </div>
+            <div class="plan-footer-row">
+              <span class="plan-footer-label">Потрачено</span>
+              <span id="plan-total-actual">—</span>
+            </div>
+            <div class="plan-footer-row plan-footer-savings">
+              <span class="plan-footer-label">Остаток</span>
+              <span id="plan-savings" class="plan-savings-amount">—</span>
+            </div>
+          </div>
+          <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
+        </div>
+
+        <div class="card summary-plan-card">
+          <div class="settings-title">Лимиты по категориям</div>
+          <div id="plan-table"></div>
+        </div>
+      </div>
     </div>
 
     <!-- ── CHART ──────────────────────────────────────────────────────── -->
@@ -164,60 +207,6 @@
       </div>
 
       <div id="cf-chart-container" class="hidden"></div>
-    </div>
-
-    <!-- ── PLANNING ─────────────────────────────────────────────────── -->
-    <div id="screen-planning" class="screen">
-
-      <!-- Income inputs -->
-      <div class="card">
-        <div class="settings-title">Доходы на месяц</div>
-        <div class="income-inputs">
-          <div class="income-row">
-            <span class="income-label" id="plan-label-me">Я</span>
-            <input type="number" id="plan-income-me" inputmode="numeric" placeholder="0" min="0" />
-            <span class="income-currency">₽</span>
-          </div>
-          <div class="income-row">
-            <span class="income-label" id="plan-label-partner">Партнёр</span>
-            <input type="number" id="plan-income-partner" inputmode="numeric" placeholder="0" min="0" />
-            <span class="income-currency">₽</span>
-          </div>
-        </div>
-        <div class="income-total-row">
-          <span class="income-total-label">Итого семейный бюджет</span>
-          <span class="income-total-amount" id="plan-income-total">0 ₽</span>
-        </div>
-        <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
-      </div>
-
-      <!-- Breakdown -->
-      <div class="card" id="plan-breakdown-card">
-        <div class="settings-title">Бюджет по категориям — <span id="plan-month-label"></span></div>
-        <div class="plan-table-header">
-          <span></span>
-          <span>Категория</span>
-          <span>Бюджет ₽</span>
-          <span>Факт</span>
-          <span>Остаток</span>
-        </div>
-        <div id="plan-table"></div>
-        <div class="plan-footer">
-          <div class="plan-footer-row">
-            <span class="plan-footer-label">Итого запланировано</span>
-            <span id="plan-total-planned">—</span>
-          </div>
-          <div class="plan-footer-row">
-            <span class="plan-footer-label">Потрачено в этом месяце</span>
-            <span id="plan-total-actual">—</span>
-          </div>
-          <div class="plan-footer-row plan-footer-savings">
-            <span class="plan-footer-label">Остаток / накопления</span>
-            <span id="plan-savings" class="plan-savings-amount">—</span>
-          </div>
-        </div>
-      </div>
-
     </div>
 
     <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
@@ -350,10 +339,6 @@
     <button class="nav-btn" data-screen="summary">
       <span class="nav-icon">📋</span>
       <span class="nav-label">Месяц</span>
-    </button>
-    <button class="nav-btn" data-screen="planning">
-      <span class="nav-icon">📊</span>
-      <span class="nav-label">План</span>
     </button>
     <button class="nav-btn" data-screen="chart">
       <span class="nav-icon">📉</span>

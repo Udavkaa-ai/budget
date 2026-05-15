@@ -210,7 +210,7 @@ function initSocket() {
   });
 
   socket.on('budget-plan:updated', () => {
-    if (currentScreen === 'planning') loadPlanning();
+    if (currentScreen === 'summary') loadSummary();
   });
 
   socket.on('connect_error', (err) => {
@@ -222,8 +222,7 @@ function initSocket() {
 
 const SCREEN_TITLES = {
   budget: 'Бюджет',
-  summary: 'Статистика',
-  planning: 'Планирование',
+  summary: 'Месяц',
   chart: 'График',
   settings: 'Настройки',
 };
@@ -254,7 +253,6 @@ function loadScreen(name) {
   switch (name) {
     case 'budget': loadBudget(); break;
     case 'summary': loadSummary(); break;
-    case 'planning': loadPlanning(); break;
     case 'chart': loadChart(); loadCashflowSection(); break;
     case 'settings': loadSettingsScreen(); break;
   }
@@ -372,6 +370,7 @@ function closeSheet() {
 let summaryUserFilter = null; // null = all users
 let summaryCompareMode = false;
 let lastSummaryData = null;
+let lastPlanData = null;
 let compareChart = null;
 
 async function loadSummary() {
@@ -384,14 +383,36 @@ async function loadSummary() {
   });
 
   document.getElementById('summary-month-label').textContent = getMonthName(summaryMonth, summaryYear);
+  document.getElementById('plan-month-label').textContent = getMonthName(summaryMonth, summaryYear);
   document.getElementById('category-detail').classList.add('hidden');
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
+  document.getElementById('summary-plan-section').classList.remove('hidden');
 
   try {
-    const data = await apiJson('GET', `/api/summary?${params}`);
+    const [data, planData] = await Promise.all([
+      apiJson('GET', `/api/summary?${params}`),
+      apiJson('GET', '/api/budget-plan'),
+    ]);
     if (gen !== summaryGen) return;
     lastSummaryData = data;
+    lastPlanData = planData;
+
+    // Derive partner name from summary users
+    const users = Object.keys(data.byUser || {});
+    planPartnerName = users.find(u => u !== currentUser.name) || 'Партнёр';
+
+    // Populate income fields
+    const incomes = planData.incomes || {};
+    document.getElementById('plan-label-me').textContent = currentUser.name;
+    document.getElementById('plan-label-partner').textContent = planPartnerName;
+    document.getElementById('plan-income-me').value = incomes[currentUser.name] || '';
+    document.getElementById('plan-income-partner').value = incomes[planPartnerName] || '';
+
+    // Populate category budgets table (compact: icon + name + input only)
+    renderPlanBreakdown(planData.categoryBudgets || {});
+    updatePlanTotals();
+
     renderSummaryView();
   } catch {
     showToastError('Ошибка загрузки статистики');
@@ -410,24 +431,32 @@ function renderSummaryView() {
   const filterLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
   totalBar.innerHTML = `<span>Итого за месяц${filterLabel}</span><span class="highlight-total">${fmt(displayTotal)}</span>`;
 
-  // User chips — clickable filter toggle
+  // User chips — clickable filter toggle; show % of income in normal mode
+  const incomes = lastPlanData?.incomes || {};
   const byUserEl = document.getElementById('summary-by-user');
   byUserEl.innerHTML = '';
   for (const [user, udata] of Object.entries(data.byUser)) {
     const isActive = summaryUserFilter === user;
+    const income = incomes[user] || 0;
+    const pctText = (!summaryCompareMode && income > 0)
+      ? `${Math.round(udata.total / income * 100)}% дохода`
+      : '';
     const chip = document.createElement('div');
     chip.className = 'user-stat-chip' + (isActive ? ' active' : '');
     chip.innerHTML = `
       <div class="user-stat-name">${esc(user)}</div>
       <div class="user-stat-amount">${fmt(udata.total)}</div>
+      ${pctText ? `<div class="user-stat-pct">${pctText}</div>` : ''}
     `;
     chip.addEventListener('click', () => {
       summaryUserFilter = isActive ? null : user;
-      if (summaryCompareMode) { /* filter doesn't apply in compare mode */ return; }
+      if (summaryCompareMode) { return; }
       renderSummaryView();
     });
     byUserEl.appendChild(chip);
   }
+
+  document.getElementById('summary-plan-section').classList.remove('hidden');
 
   if (summaryCompareMode) {
     document.getElementById('summary-categories').classList.add('hidden');
@@ -453,16 +482,36 @@ function renderCategoryList(data) {
     return;
   }
 
+  const categoryBudgets = lastPlanData?.categoryBudgets || {};
   const maxAmt = Math.max(...Object.values(byCategory));
+
   for (const [cat, amount] of Object.entries(byCategory).sort((a, b) => b[1] - a[1])) {
-    const pct = maxAmt > 0 ? Math.round((amount / maxAmt) * 100) : 0;
+    const budget = categoryBudgets[cat] || 0;
+    let pct, budgetHtml = '';
+
+    if (budget > 0) {
+      pct = Math.min(Math.round((amount / budget) * 100), 100);
+      const remaining = budget - amount;
+      const isOver = remaining < 0;
+      const cls = isOver ? 'cat-budget-over' : 'cat-budget-ok';
+      const text = isOver
+        ? `перерасход ${fmt(-remaining)}`
+        : `осталось ${fmt(remaining)}`;
+      budgetHtml = `<div class="cat-bar-budget"><span class="${cls}">${text}</span><span class="cat-budget-limit">лимит ${fmt(budget)}</span></div>`;
+    } else {
+      pct = maxAmt > 0 ? Math.round((amount / maxAmt) * 100) : 0;
+    }
+
+    const fillCls = budget > 0 && amount > budget ? 'cat-bar-fill cat-bar-fill--over' : 'cat-bar-fill';
+
     const item = document.createElement('div');
     item.className = 'category-item';
     item.innerHTML = `
       <span class="cat-bar-icon">${CATEGORY_ICONS[cat] || '❓'}</span>
       <div class="cat-bar-info">
         <div class="cat-bar-name">${esc(cat)}</div>
-        <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
+        <div class="cat-bar-track"><div class="${fillCls}" style="width:${pct}%"></div></div>
+        ${budgetHtml}
       </div>
       <span class="cat-bar-amount">${fmt(amount)}</span>
     `;
@@ -473,22 +522,40 @@ function renderCategoryList(data) {
 
 function renderCompareChart(data) {
   const users = Object.keys(data.byUser);
+  const incomes = lastPlanData?.incomes || {};
+  const categoryBudgets = lastPlanData?.categoryBudgets || {};
+
+  // Show % of income per user in chips
+  const byUserEl = document.getElementById('summary-by-user');
+  byUserEl.innerHTML = '';
+  for (const [user, udata] of Object.entries(data.byUser)) {
+    const income = incomes[user] || 0;
+    const pctText = income > 0 ? `${Math.round(udata.total / income * 100)}% дохода` : '';
+    const chip = document.createElement('div');
+    chip.className = 'user-stat-chip';
+    chip.innerHTML = `
+      <div class="user-stat-name">${esc(user)}</div>
+      <div class="user-stat-amount">${fmt(udata.total)}</div>
+      ${pctText ? `<div class="user-stat-pct">${pctText}</div>` : ''}
+    `;
+    byUserEl.appendChild(chip);
+  }
+
   const allCats = new Set();
   for (const u of users) Object.keys(data.byUser[u].byCategory || {}).forEach(c => allCats.add(c));
 
-  // Sort categories by combined total descending
   const sortedCats = [...allCats].sort((a, b) => {
     const ta = users.reduce((s, u) => s + (data.byUser[u].byCategory[a] || 0), 0);
     const tb = users.reduce((s, u) => s + (data.byUser[u].byCategory[b] || 0), 0);
     return tb - ta;
   });
 
-  const COLORS = ['#4f46e5', '#ef4444', '#f59e0b', '#10b981'];
+  const COLORS = ['#5947E0', '#FF7AB3', '#FFB47A', '#7AE0C3'];
   const datasets = users.map((user, i) => ({
     label: user,
     data: sortedCats.map(cat => data.byUser[user].byCategory[cat] || 0),
     backgroundColor: COLORS[i % COLORS.length],
-    borderRadius: 3,
+    borderRadius: 4,
   }));
 
   const canvas = document.getElementById('compare-chart');
@@ -514,7 +581,16 @@ function renderCompareChart(data) {
         legend: { labels: { boxWidth: 12, padding: 12, font: { size: 12 } } },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.x.toLocaleString('ru')} ₽`,
+            label: (ctx) => {
+              const user = ctx.dataset.label;
+              const cat = ctx.label;
+              const amount = ctx.parsed.x;
+              const income = incomes[user] || 0;
+              const budget = categoryBudgets[cat] || 0;
+              const pctIncome = income > 0 ? ` · ${Math.round(amount / income * 100)}% дохода` : '';
+              const pctBudget = budget > 0 ? ` · ${Math.round(amount / budget * 100)}% лимита` : '';
+              return ` ${user}: ${amount.toLocaleString('ru')} ₽${pctBudget || pctIncome}`;
+            },
           },
         },
       },
@@ -530,6 +606,7 @@ async function loadCategoryDetail(cat, month, year) {
 
   document.getElementById('summary-categories').classList.add('hidden');
   document.getElementById('summary-compare-panel').classList.add('hidden');
+  document.getElementById('summary-plan-section').classList.add('hidden');
 
   const detail = document.getElementById('category-detail');
   detail.classList.remove('hidden');
@@ -801,37 +878,9 @@ function closeChartFullscreen() {
   if (mainChartFs) { mainChartFs.destroy(); mainChartFs = null; }
 }
 
-// ─── PLANNING SCREEN ──────────────────────────────────────────────────────────
+// ─── PLANNING (merged into summary screen) ────────────────────────────────────
 
 let planPartnerName = 'Партнёр';
-let planActualByCategory = {};
-
-async function loadPlanning() {
-  try {
-    const [plan, summaryData, users] = await Promise.all([
-      apiJson('GET', '/api/budget-plan'),
-      apiJson('GET', '/api/summary'),
-      apiJson('GET', '/api/users'),
-    ]);
-
-    const incomes = plan.incomes || {};
-    const categoryBudgets = plan.categoryBudgets || {};
-    planPartnerName = (users || []).find(u => u.name !== currentUser.name)?.name || 'Партнёр';
-
-    document.getElementById('plan-label-me').textContent = currentUser.name;
-    document.getElementById('plan-label-partner').textContent = planPartnerName;
-    document.getElementById('plan-income-me').value = incomes[currentUser.name] || '';
-    document.getElementById('plan-income-partner').value = incomes[planPartnerName] || '';
-
-    document.getElementById('plan-month-label').textContent = getMonthName();
-
-    planActualByCategory = summaryData.byCategory || {};
-    renderPlanBreakdown(categoryBudgets);
-    updatePlanTotals();
-  } catch {
-    showToastError('Ошибка загрузки планирования');
-  }
-}
 
 function updatePlanTotals() {
   const myIncome = parseInt(document.getElementById('plan-income-me').value) || 0;
@@ -844,15 +893,16 @@ function updatePlanTotals() {
     totalPlanned += parseInt(inp.value) || 0;
   });
 
-  const totalActual = Object.values(planActualByCategory).reduce((s, v) => s + v, 0);
-  const savings = totalIncome - totalPlanned;
+  const byCategory = lastSummaryData?.byCategory || {};
+  const totalActual = Object.values(byCategory).reduce((s, v) => s + v, 0);
+  const remaining = totalIncome - totalActual;
 
-  document.getElementById('plan-total-planned').textContent = fmt(totalPlanned);
+  document.getElementById('plan-total-planned').textContent = totalPlanned > 0 ? fmt(totalPlanned) : '—';
   document.getElementById('plan-total-actual').textContent = fmt(totalActual);
 
   const savingsEl = document.getElementById('plan-savings');
-  savingsEl.textContent = fmt(savings);
-  savingsEl.className = 'plan-savings-amount ' + (savings >= 0 ? 'plan-diff-ok' : 'plan-diff-over');
+  savingsEl.textContent = totalIncome > 0 ? fmt(remaining) : '—';
+  savingsEl.className = 'plan-savings-amount ' + (remaining >= 0 ? 'plan-diff-ok' : 'plan-diff-over');
 }
 
 function renderPlanBreakdown(categoryBudgets) {
@@ -861,26 +911,13 @@ function renderPlanBreakdown(categoryBudgets) {
 
   for (const cat of PLAN_CATEGORIES) {
     const budgeted = categoryBudgets[cat.key] || 0;
-    const actual = planActualByCategory[cat.key] || 0;
-    const diff = budgeted > 0 ? budgeted - actual : null;
-
     const row = document.createElement('div');
-    row.className = 'plan-row';
-
-    let diffHtml = '<span class="plan-diff plan-diff-na">—</span>';
-    if (diff !== null) {
-      const cls = diff >= 0 ? 'plan-diff-ok' : 'plan-diff-over';
-      const sign = diff >= 0 ? '+' : '';
-      diffHtml = `<span class="plan-diff ${cls}">${sign}${fmt(diff)}</span>`;
-    }
-
+    row.className = 'plan-row plan-row--compact';
     row.innerHTML = `
       <span class="plan-cat-icon">${cat.icon}</span>
       <span class="plan-cat-name">${cat.key}</span>
       <input class="plan-budget-input" type="number" data-cat="${cat.key}"
-             value="${budgeted || ''}" placeholder="0" inputmode="numeric" />
-      <span class="plan-actual">${fmt(actual)}</span>
-      ${diffHtml}
+             value="${budgeted || ''}" placeholder="—" inputmode="numeric" />
     `;
     row.querySelector('input').addEventListener('input', updatePlanTotals);
     table.appendChild(row);
