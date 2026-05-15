@@ -649,37 +649,37 @@ function buildChartConfig(chartData) {
   const { labels, userExpenses, incomeDays, balanceLine, hasBalance } = chartData;
   const datasets = [];
 
-  // Income bars (UP, positive)
+  // Expense bars (UP, positive) — one dataset per user, rendered first (behind income)
+  Object.entries(userExpenses).forEach(([user, amounts], i) => {
+    const col = USER_CHART_COLORS[i % USER_CHART_COLORS.length];
+    datasets.push({
+      type: 'bar',
+      label: user,
+      data: amounts,
+      backgroundColor: col.bg,
+      borderColor: col.border,
+      borderWidth: 1,
+      stack: 'expenses',
+      order: 3,
+      yAxisID: 'y',
+    });
+  });
+
+  // Income bars (UP, positive) — separate stack, rendered on top
   const incomeArr = labels.map(d => incomeDays[d] || 0);
   if (incomeArr.some(v => v > 0)) {
     datasets.push({
       type: 'bar',
       label: 'Доход',
       data: incomeArr,
-      backgroundColor: 'rgba(34,197,94,0.75)',
-      borderColor: '#16a34a',
+      backgroundColor: 'rgba(122,224,195,0.85)',
+      borderColor: '#2BA889',
       borderWidth: 1,
       stack: 'income',
       order: 2,
       yAxisID: 'y',
     });
   }
-
-  // Expense bars (DOWN, negative) — one dataset per user
-  Object.entries(userExpenses).forEach(([user, amounts], i) => {
-    const col = USER_CHART_COLORS[i % USER_CHART_COLORS.length];
-    datasets.push({
-      type: 'bar',
-      label: user,
-      data: amounts.map(v => -v),
-      backgroundColor: col.bg,
-      borderColor: col.border,
-      borderWidth: 1,
-      stack: 'expenses',
-      order: 2,
-      yAxisID: 'y',
-    });
-  });
 
   // Balance line
   if (hasBalance && balanceLine) {
@@ -713,10 +713,7 @@ function buildChartConfig(chartData) {
       stacked: true,
       title: { display: true, text: 'Расходы / Доход, ₽', font: { size: 10 }, color: '#6b7280' },
       ticks: {
-        callback: v => {
-          const abs = Math.abs(v);
-          return abs >= 1000 ? (v < 0 ? '-' : '') + (abs/1000).toFixed(0) + 'к' : String(v);
-        },
+        callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : String(v),
       },
       grid: { color: 'rgba(0,0,0,0.05)' },
     },
