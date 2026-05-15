@@ -1936,11 +1936,13 @@ function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
   }
 
   el.addEventListener('touchend', e => {
-    finish(
-      e.changedTouches[0].clientX - startX,
-      e.changedTouches[0].clientY - startY,
-    );
-  }, { passive: true });
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (active && Math.abs(dx) >= 55 && Math.abs(dx) >= Math.abs(dy) * 1.3) {
+      e.preventDefault(); // prevent synthetic click after horizontal swipe
+    }
+    finish(dx, dy);
+  });
 
   el.addEventListener('touchcancel', () => {
     active = false;
