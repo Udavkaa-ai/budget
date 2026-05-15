@@ -53,6 +53,7 @@ function canNav() {
 let budgetGen = 0;
 let summaryGen = 0;
 let chartGen = 0;
+let animateNextLoad = false;
 
 // Add form state
 let selectedCategory = null;
@@ -335,6 +336,14 @@ async function loadBudget() {
 
     document.getElementById('budget-total-bar').innerHTML =
       `<span>Итого за день</span><span class="total-amount">${fmt(filteredTotal)}</span>`;
+
+    if (animateNextLoad) {
+      animateNextLoad = false;
+      list.querySelectorAll('.expense-item').forEach((el, i) => {
+        el.style.animationDelay = `${i * 45}ms`;
+        el.classList.add('expense-item--new');
+      });
+    }
 
   } catch {
     list.style.opacity = '';
@@ -1095,6 +1104,10 @@ async function submitFormExpense() {
     });
     if (res.ok) {
       showToastSuccess('Расход добавлен');
+      const fab = document.getElementById('fab-add');
+      fab.classList.add('fab--success');
+      setTimeout(() => fab.classList.remove('fab--success'), 700);
+      animateNextLoad = true;
       closeSheet();
       loadBudget();
     } else {
@@ -1195,6 +1208,10 @@ async function confirmParsedExpenses() {
     if (res.ok) {
       showToastSuccess(`Сохранено ${res.count} записей`);
       parsedExpenses = [];
+      const fab2 = document.getElementById('fab-add');
+      fab2.classList.add('fab--success');
+      setTimeout(() => fab2.classList.remove('fab--success'), 700);
+      animateNextLoad = true;
       closeSheet();
       loadBudget();
     } else {
