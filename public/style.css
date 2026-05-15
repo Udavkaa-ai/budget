@@ -511,7 +511,24 @@ html, body {
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(89,71,224,0.12);
+  font-weight: 500;
 }
+
+#expense-text {
+  font-family: 'Onest', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  padding: 14px 16px;
+  border: 1.5px solid rgba(89,71,224,0.18);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  resize: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+#expense-text:focus { outline: none; border-color: var(--primary); background: rgba(255,255,255,0.9); }
 
 .category-grid {
   display: grid;
@@ -581,28 +598,64 @@ html, body {
 }
 
 .parse-result-header {
-  padding: 12px 16px;
-  background: var(--primary-light);
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(89,71,224,0.08) 0%, rgba(255,122,179,0.07) 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid rgba(89,71,224,0.1);
 }
-
-.parse-result-header strong { color: var(--primary); font-size: 14px; }
+.parse-result-header strong {
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 15px;
+  font-weight: 800;
+}
+.parse-result-header > span {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
 
 .parse-expense-item {
-  padding: 12px 16px;
-  border-top: 1px solid rgba(89,71,224,0.08);
+  padding: 14px 18px;
+  border-top: 1px solid rgba(89,71,224,0.07);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 13px;
 }
+.parse-expense-item:hover { background: rgba(89,71,224,0.03); }
 
-.parse-expense-info { flex: 1; }
-.parse-expense-desc { font-size: 14px; font-weight: 600; }
-.parse-expense-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.parse-expense-amount { font-weight: 800; }
-.parse-confirm-bar { padding: 12px 16px; display: flex; gap: 8px; }
+.parse-expense-icon { font-size: 26px; flex-shrink: 0; }
+
+.parse-expense-info { flex: 1; min-width: 0; }
+.parse-expense-desc {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.parse-expense-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.1px;
+}
+.parse-expense-amount {
+  font-size: 17px;
+  font-weight: 800;
+  flex-shrink: 0;
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.parse-confirm-bar { padding: 14px 18px; display: flex; gap: 10px; }
 
 /* ═══════════════════════════════════════════ SUMMARY SCREEN ══ */
 .toggle-row {
