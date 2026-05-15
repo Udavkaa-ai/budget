@@ -80,15 +80,22 @@
         <span id="summary-month-label" class="nav-date-label"></span>
         <button id="summary-next" class="icon-btn">▶</button>
       </div>
-      <div class="toggle-row">
+      <div class="summary-toolbar">
         <label class="toggle-label">
           <input type="checkbox" id="summary-exclude-fixed" />
           <span>Без постоянных</span>
         </label>
+        <button id="btn-summary-compare" class="btn-compare">Сравнить</button>
       </div>
       <div id="summary-total-bar" class="total-bar card"></div>
       <div id="summary-by-user" class="summary-by-user"></div>
       <div id="summary-categories" class="category-list"></div>
+      <!-- Compare chart panel -->
+      <div id="summary-compare-panel" class="hidden">
+        <div class="compare-chart-wrapper">
+          <canvas id="compare-chart"></canvas>
+        </div>
+      </div>
       <!-- Category drill-down panel -->
       <div id="category-detail" class="hidden">
         <div class="category-detail-header">
