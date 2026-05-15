@@ -1249,11 +1249,16 @@ html, body {
 .cf-balance-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
+  align-items: end;
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.cf-balance-grid .form-group label { font-size: 11px; }
+.cf-balance-grid .form-group label {
+  font-size: 11px;
+  display: block;
+  min-height: 2.4em;
+}
 
 .cf-balance-grid input {
   padding: 8px 10px;
