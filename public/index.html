@@ -352,6 +352,20 @@
     </button>
   </nav>
 
+  <!-- Calendar Date Picker -->
+  <div id="cal-overlay" class="cal-overlay hidden"></div>
+  <div id="cal-modal" class="cal-modal hidden">
+    <div class="cal-header">
+      <button id="cal-prev" class="icon-btn">◀</button>
+      <span id="cal-month-label" class="cal-month-label"></span>
+      <button id="cal-next" class="icon-btn">▶</button>
+    </div>
+    <div class="cal-weekdays">
+      <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+    </div>
+    <div id="cal-grid" class="cal-grid"></div>
+  </div>
+
   <!-- Bottom Sheet (Add Expense) -->
   <div id="sheet-overlay" class="sheet-overlay hidden"></div>
   <div id="add-sheet" class="bottom-sheet">
