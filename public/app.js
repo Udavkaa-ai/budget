@@ -39,6 +39,7 @@ let budgetDate = new Date();
 let budgetFilter = 'all';
 let summaryMonth = null, summaryYear = null;
 let chartMonth = null, chartYear = null;
+let calViewYear = 0, calViewMonth = 0;
 
 // Throttle nav button clicks (same race condition as swipe — prevents +2 jumps)
 let lastNavTime = 0;
@@ -74,6 +75,76 @@ function parseDateStr(str) {
   // str = DD.MM.YYYY
   const [d, m, y] = str.split('.').map(Number);
   return new Date(y, m - 1, d);
+}
+
+function formatDayMonth(dateStr) {
+  const [d, m] = dateStr.split('.').map(Number);
+  const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  return `${d} ${months[m - 1]}`;
+}
+
+function openCalendar() {
+  calViewYear = budgetDate.getFullYear();
+  calViewMonth = budgetDate.getMonth();
+  renderCalendar();
+  document.getElementById('cal-overlay').classList.remove('hidden');
+  document.getElementById('cal-modal').classList.remove('hidden');
+}
+
+function closeCalendar() {
+  document.getElementById('cal-overlay').classList.add('hidden');
+  document.getElementById('cal-modal').classList.add('hidden');
+}
+
+function renderCalendar() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const sel = new Date(budgetDate); sel.setHours(0,0,0,0);
+  const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь',
+                  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+
+  document.getElementById('cal-month-label').textContent = `${MONTHS[calViewMonth]} ${calViewYear}`;
+
+  // Disable next if already at current month
+  const isCurrentMonth = calViewYear === now.getFullYear() && calViewMonth === now.getMonth();
+  document.getElementById('cal-next').disabled = isCurrentMonth;
+
+  const firstDow = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=Sun
+  const offset = firstDow === 0 ? 6 : firstDow - 1; // Mon=0
+  const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < offset; i++) {
+    const empty = document.createElement('div');
+    empty.className = 'cal-day cal-day--empty';
+    grid.appendChild(empty);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(calViewYear, calViewMonth, d);
+    date.setHours(0,0,0,0);
+    const btn = document.createElement('button');
+    btn.className = 'cal-day';
+    btn.textContent = d;
+
+    const isFuture = date > now;
+    const isToday = date.getTime() === now.getTime();
+    const isSelected = date.getTime() === sel.getTime();
+
+    if (isFuture) { btn.classList.add('cal-day--future'); btn.disabled = true; }
+    if (isToday) btn.classList.add('cal-day--today');
+    if (isSelected) btn.classList.add('cal-day--selected');
+
+    if (!isFuture) {
+      btn.addEventListener('click', () => {
+        budgetDate = date;
+        loadBudget();
+        closeCalendar();
+      });
+    }
+    grid.appendChild(btn);
+  }
 }
 
 function getMonthName(month, year) {
@@ -625,7 +696,7 @@ async function loadCategoryDetail(cat, month, year) {
     }
 
     for (const exp of [...expenses].reverse()) {
-      listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+      listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showDate: true }));
     }
   } catch {
     listEl.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
@@ -1291,7 +1362,7 @@ async function confirmParsedExpenses() {
 
 // ─── EXPENSE ITEM BUILDER ─────────────────────────────────────────────────────
 
-function buildExpenseItem(exp, canDelete) {
+function buildExpenseItem(exp, canDelete, { showDate = false } = {}) {
   const item = document.createElement('div');
   item.className = 'expense-item' + (exp.isFixed ? ' is-fixed' : '');
   item.dataset.id = exp.id;
@@ -1303,6 +1374,7 @@ function buildExpenseItem(exp, canDelete) {
       <div class="expense-meta">
         <span class="expense-user-tag">${exp.user}</span>
         <span>${exp.category}</span>
+        ${showDate && exp.date ? `<span class="expense-date-tag">${formatDayMonth(exp.date)}</span>` : ''}
         ${exp.isFixed ? '<span class="expense-fixed-tag">📌 пост.</span>' : ''}
       </div>
     </div>
@@ -1540,6 +1612,22 @@ function setupEventListeners() {
       pill.classList.add('active');
       loadBudget();
     });
+  });
+
+  // Calendar date picker
+  document.getElementById('budget-date-label').addEventListener('click', openCalendar);
+  document.getElementById('cal-overlay').addEventListener('click', closeCalendar);
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    if (calViewMonth === 0) { calViewMonth = 11; calViewYear--; }
+    else calViewMonth--;
+    renderCalendar();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    const now = new Date();
+    if (calViewYear === now.getFullYear() && calViewMonth === now.getMonth()) return;
+    if (calViewMonth === 11) { calViewMonth = 0; calViewYear++; }
+    else calViewMonth++;
+    renderCalendar();
   });
 
   // Budget date navigation
