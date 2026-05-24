@@ -1329,20 +1329,21 @@ function renderParseResult(expenses) {
   expenses.forEach((exp, idx) => {
     const [dd, mm, yyyy] = exp.date.split('.');
     const dateVal = `${yyyy}-${mm}-${dd}`;
-    const catOptions = PLAN_CATEGORIES.map(c =>
-      `<option value="${c.key}"${c.key === exp.category ? ' selected' : ''}>${c.icon} ${c.key}</option>`
+    const catOptHtml = PLAN_CATEGORIES.map(c =>
+      `<button class="parse-cat-opt${c.key === exp.category ? ' active' : ''}" data-key="${c.key}" title="${c.key}">${c.icon}</button>`
     ).join('');
 
     const card = document.createElement('div');
     card.className = 'parse-expense-item parse-expense-item--edit';
     card.innerHTML = `
-      <span class="parse-expense-icon">${CATEGORY_ICONS[exp.category] || '❓'}</span>
+      <button class="parse-cat-icon-btn" title="Изменить категорию">${CATEGORY_ICONS[exp.category] || '❓'}</button>
       <div class="parse-expense-info">
         <div class="parse-expense-desc">${exp.description}</div>
         <div class="parse-edit-row">
-          <select class="parse-edit-cat">${catOptions}</select>
+          <span class="parse-cat-name">${exp.category}</span>
           <input class="parse-edit-date" type="date" value="${dateVal}" max="${todayStr}">
         </div>
+        <div class="parse-cat-picker hidden">${catOptHtml}</div>
       </div>
       <div class="parse-edit-right">
         <input class="parse-edit-amount" type="number" value="${exp.amount}" min="1">
@@ -1351,9 +1352,21 @@ function renderParseResult(expenses) {
       <button class="parse-del-btn" title="Удалить">🗑</button>
     `;
 
-    card.querySelector('.parse-edit-cat').addEventListener('change', function () {
-      exp.category = this.value;
-      card.querySelector('.parse-expense-icon').textContent = CATEGORY_ICONS[this.value] || '❓';
+    const iconBtn = card.querySelector('.parse-cat-icon-btn');
+    const catName = card.querySelector('.parse-cat-name');
+    const catPicker = card.querySelector('.parse-cat-picker');
+
+    iconBtn.addEventListener('click', () => catPicker.classList.toggle('hidden'));
+
+    catPicker.querySelectorAll('.parse-cat-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        exp.category = btn.dataset.key;
+        iconBtn.textContent = CATEGORY_ICONS[btn.dataset.key] || '❓';
+        catName.textContent = btn.dataset.key;
+        catPicker.querySelectorAll('.parse-cat-opt').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        catPicker.classList.add('hidden');
+      });
     });
 
     card.querySelector('.parse-edit-date').addEventListener('change', function () {
