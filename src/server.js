@@ -559,10 +559,9 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   const plan     = getBudgetPlan(family);
   const settings = getFamilyBudgetSettings(family);
 
-  // Cashflow (balance + income)
-  const ym       = `${curYear}-${String(curMonth).padStart(2, '0')}`;
-  const cf       = getCashflow(ym, family);
-  const startBal = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
+  // Cashflow income (поступления по дням, баланс не используем)
+  const ym      = `${curYear}-${String(curMonth).padStart(2, '0')}`;
+  const cf      = getCashflow(ym, family);
   const totalInc = Object.values(cf.incomeDays || {}).reduce((s, v) => s + v, 0);
 
   // Days context
@@ -613,8 +612,6 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
 === ДОХОДЫ ===
 Запланировано: ${plannedInc.toLocaleString('ru')} ₽
 ${Object.entries(incomes).map(([n, v]) => `  ${n}: ${v.toLocaleString('ru')} ₽`).join('\n') || '  (не указаны)'}
-Получено в этом месяце: ${totalInc ? totalInc.toLocaleString('ru') + ' ₽' : 'нет данных'}
-
 === РАСХОДЫ ${cur.monthName.toUpperCase()} ===
 Итого: ${cur.total.toLocaleString('ru')} ₽${plannedInc ? ` (${Math.round(cur.total / plannedInc * 100)}% от дохода)` : ''}
 Переменные: ${curFix.total.toLocaleString('ru')} ₽
@@ -629,10 +626,6 @@ ${prev.total > 0 ? `По категориям:\n${prevCatLines}` : '(нет да
 === ОБЯЗАТЕЛЬНЫЕ ЕЖЕМЕСЯЧНЫЕ РАСХОДЫ ===
 ${fixedList || '  (не указаны)'}
 Итого постоянных: ${fixedTotal.toLocaleString('ru')} ₽
-
-=== БАЛАНС ===
-${startBal ? `На начало месяца: ${startBal.toLocaleString('ru')} ₽` : 'Начальный баланс: не указан'}
-${startBal || totalInc ? `Расчётный текущий: ${(startBal + totalInc - cur.total).toLocaleString('ru')} ₽` : ''}
 
 === ПЛАН/ЛИМИТЫ ===
 Плановые расходы на месяц: ${(settings.plannedMonthly || 0).toLocaleString('ru')} ₽
