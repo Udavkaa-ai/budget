@@ -163,7 +163,94 @@ export async function parseExpenses(text) {
   return { expenses: [], model: null, error: lastError };
 }
 
-function formatDate(date) {
+const ANALYSIS_SYSTEM_PROMPT = `Ты — финансовый советник семьи. Анализируй данные бюджета и составляй краткий, полезный отчёт на русском языке.
+
+Структура (используй ровно эти заголовки с эмодзи):
+
+## 💰 Общая картина
+Итого потрачено, % от дохода, сравнение с планом, баланс.
+
+## 📊 Расходы по категориям
+Топ-3 статьи расходов. Категории с перерасходом лимита. Где сэкономили.
+
+## 📈 Динамика
+Сравнение с прошлым месяцем — общий итог и ключевые категории (дельта ₽ и %).
+
+## 👥 Участники
+Расходы каждого, % от личного дохода, топ-категории каждого.
+
+## ⚠️ Тревожные моменты
+Перерасходы, аномалии, риски до конца месяца.
+
+## 💡 Рекомендации
+5 конкретных советов на следующий месяц.
+
+Правила: суммы в ₽, кратко и по делу, живой язык, без вступлений — сразу по делу. Если данных для раздела нет — пропусти его.`;
+
+/**
+ * Финансовый анализ бюджета семьи через AI
+ */
+export async function analyzeFinances(reportText) {
+  if (!config.openRouterKey) {
+    return { report: null, error: 'Нет API ключа' };
+  }
+
+  const analysisModels = [
+    'google/gemini-2.5-flash-preview',
+    'google/gemini-2.0-flash-001',
+    ...config.aiModels,
+  ].filter((m, i, arr) => arr.indexOf(m) === i); // deduplicate
+
+  for (const model of analysisModels) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/budget-bot',
+          'X-Title': 'Budget Tracker Bot',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
+            { role: 'user', content: reportText },
+          ],
+          temperature: 0.35,
+          max_tokens: 2500,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const txt = await response.text();
+        console.warn(`Analysis ${model}: HTTP ${response.status}: ${txt.slice(0, 200)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      if (data.error) { console.warn(`Analysis ${model}: ${data.error.message}`); continue; }
+
+      const content = data.choices?.[0]?.message?.content?.trim();
+      if (!content) continue;
+
+      console.log(`✅ Analysis via ${model}`);
+      return { report: content, model };
+    } catch (e) {
+      clearTimeout(timeout);
+      console.warn(`Analysis ${model}: ${e.message}`);
+    }
+  }
+
+  return { report: null, error: 'Не удалось получить анализ' };
+}
+
+
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
