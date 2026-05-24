@@ -109,6 +109,10 @@
       </div>
 
       <!-- Plan section (merged from planning tab) -->
+      <div class="card analysis-cta-card">
+        <button id="btn-get-analysis" class="btn btn-primary btn-full">🤖 Финансовый анализ</button>
+      </div>
+
       <div id="summary-plan-section">
         <div class="card summary-plan-card">
           <div class="settings-title">Плановый доход — <span id="plan-month-label"></span></div>
@@ -351,6 +355,17 @@
       <span class="nav-label">Настройки</span>
     </button>
   </nav>
+
+  <!-- Analysis Report Sheet -->
+  <div id="analysis-overlay" class="sheet-overlay hidden"></div>
+  <div id="analysis-sheet" class="analysis-sheet">
+    <div class="sheet-handle"></div>
+    <div class="analysis-sheet-header">
+      <span class="sheet-title">Финансовый анализ</span>
+      <button id="analysis-close" class="icon-btn">✕</button>
+    </div>
+    <div id="analysis-body" class="analysis-body"></div>
+  </div>
 
   <!-- Calendar Date Picker -->
   <div id="cal-overlay" class="cal-overlay hidden"></div>

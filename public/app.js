@@ -436,6 +436,66 @@ function closeSheet() {
   resetAddForm();
 }
 
+// ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
+
+function openAnalysis() {
+  document.getElementById('analysis-sheet').classList.add('open');
+  document.getElementById('analysis-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAnalysis() {
+  document.getElementById('analysis-sheet').classList.remove('open');
+  document.getElementById('analysis-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function renderMarkdown(md) {
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/^(?!<[hul])(.+)$/gm, (_, l) => l.trim() ? l : '')
+    .replace(/(<\/h[23]>|<\/ul>)\n?<\/p>/g, '$1')
+    .replace(/^<\/p>|<p>$/gm, '')
+    .replace(/<p>(<[hul])/g, '$1')
+    .replace(/(<\/[hul][^>]*>)<\/p>/g, '$1');
+}
+
+async function getFinancialAnalysis() {
+  const btn = document.getElementById('btn-get-analysis');
+  btn.disabled = true;
+  btn.textContent = '⏳ Анализирую...';
+
+  const body = document.getElementById('analysis-body');
+  body.innerHTML = '<div class="analysis-loading"><div class="analysis-spinner"></div><p>Собираю данные и готовлю анализ…</p></div>';
+  openAnalysis();
+
+  try {
+    const m = summaryMonth || (new Date().getMonth() + 1);
+    const y = summaryYear || new Date().getFullYear();
+    const data = await apiJson('POST', '/api/analyze', { month: m, year: y });
+
+    if (data.error) {
+      body.innerHTML = `<div class="analysis-error">⚠️ ${data.error}</div>`;
+      return;
+    }
+
+    const html = renderMarkdown(data.report || '');
+    body.innerHTML = `<div class="analysis-report">${html}</div>
+      <div class="analysis-model">Модель: ${data.model || '—'}</div>`;
+  } catch {
+    body.innerHTML = '<div class="analysis-error">⚠️ Ошибка соединения</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🤖 Финансовый анализ';
+  }
+}
+
 // ─── SUMMARY SCREEN ───────────────────────────────────────────────────────────
 
 let summaryUserFilter = null; // null = all users
@@ -1784,6 +1844,9 @@ function setupEventListeners() {
   document.getElementById('plan-income-me').addEventListener('input', updatePlanTotals);
   document.getElementById('plan-income-partner').addEventListener('input', updatePlanTotals);
   document.getElementById('btn-save-plan').addEventListener('click', savePlan);
+  document.getElementById('btn-get-analysis').addEventListener('click', getFinancialAnalysis);
+  document.getElementById('analysis-close').addEventListener('click', closeAnalysis);
+  document.getElementById('analysis-overlay').addEventListener('click', closeAnalysis);
 
   // Summary navigation
   document.getElementById('summary-prev').addEventListener('click', () => {

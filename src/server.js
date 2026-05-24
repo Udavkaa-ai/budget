@@ -42,7 +42,7 @@ import {
   getFamilyBudgetSettings,
   saveFamilyBudgetSettings,
 } from './storage.js';
-import { parseExpenses, parseImageExpenses, CATEGORIES } from './parser.js';
+import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -532,6 +532,119 @@ app.get('/api/unified-chart-data/:ym', authMiddleware, (req, res) => {
     hasBalance,
     monthName: chartData.monthName,
   });
+});
+
+// ─── AI Analyze Route ────────────────────────────────────────────────────────
+
+app.post('/api/analyze', authMiddleware, async (req, res) => {
+  if (!config.openRouterKey) {
+    return res.status(503).json({ error: 'AI-анализ недоступен (нет API ключа)' });
+  }
+
+  const { month, year } = req.body || {};
+  const now = new Date();
+  const curMonth = parseInt(month) || (now.getMonth() + 1);
+  const curYear  = parseInt(year)  || now.getFullYear();
+  const family   = req.user.family;
+
+  // Current month
+  const cur     = getFamilySummary(curMonth, curYear, false, family);
+  const curFix  = getFamilySummary(curMonth, curYear, true,  family);
+
+  // Previous month
+  const prevDate  = new Date(curYear, curMonth - 2, 1);
+  const prev      = getFamilySummary(prevDate.getMonth() + 1, prevDate.getFullYear(), false, family);
+
+  // Budget plan & settings
+  const plan     = getBudgetPlan(family);
+  const settings = getFamilyBudgetSettings(family);
+
+  // Cashflow (balance + income)
+  const ym       = `${curYear}-${String(curMonth).padStart(2, '0')}`;
+  const cf       = getCashflow(ym, family);
+  const startBal = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
+  const totalInc = Object.values(cf.incomeDays || {}).reduce((s, v) => s + v, 0);
+
+  // Days context
+  const daysInMonth  = new Date(curYear, curMonth, 0).getDate();
+  const isCurrentMon = curMonth === (now.getMonth() + 1) && curYear === now.getFullYear();
+  const daysElapsed  = isCurrentMon ? now.getDate() : daysInMonth;
+
+  // Format category rows
+  const catLimits = plan.categoryBudgets || {};
+  const catLines  = Object.entries(cur.byCategory)
+    .sort(([, a], [, b]) => b - a)
+    .map(([cat, amt]) => {
+      const limit  = catLimits[cat];
+      const limTxt = limit ? ` [лимит ${limit.toLocaleString('ru')} ₽${amt > limit ? ' — ⚠️ ПЕРЕРАСХОД' : ''}]` : '';
+      const prevAmt = prev.byCategory[cat] || 0;
+      const delta   = prevAmt ? ` (${amt > prevAmt ? '+' : ''}${((amt - prevAmt) / prevAmt * 100).toFixed(0)}% к прошлому мес.)` : '';
+      return `  ${cat}: ${amt.toLocaleString('ru')} ₽${limTxt}${delta}`;
+    }).join('\n');
+
+  // Format per-person rows
+  const incomes   = plan.userIncomes || {};
+  const personLines = Object.entries(cur.byUser)
+    .map(([name, data]) => {
+      const inc    = incomes[name] || 0;
+      const pct    = inc ? ` (${Math.round(data.total / inc * 100)}% дохода)` : '';
+      const topCat = Object.entries(data.byCategory || {})
+        .sort(([, a], [, b]) => b - a).slice(0, 3)
+        .map(([c, a]) => `${c}: ${a.toLocaleString('ru')} ₽`).join(', ');
+      return `  ${name}: ${data.total.toLocaleString('ru')} ₽${pct}\n    Топ: ${topCat}`;
+    }).join('\n');
+
+  // Previous month category summary
+  const prevCatLines = Object.entries(prev.byCategory)
+    .sort(([, a], [, b]) => b - a).slice(0, 8)
+    .map(([c, a]) => `  ${c}: ${a.toLocaleString('ru')} ₽`).join('\n');
+
+  // Fixed expenses
+  const fixedList  = (settings.fixedExpensesList || []).map(f => `  ${f.name}: ${f.amount.toLocaleString('ru')} ₽`).join('\n');
+  const fixedTotal = (settings.fixedExpensesList || []).reduce((s, f) => s + f.amount, 0);
+
+  // Planned income total
+  const plannedInc = Object.values(incomes).reduce((s, v) => s + v, 0) || settings.plannedMonthly || 0;
+
+  // Build report text for the AI
+  const reportText = `Семейный бюджет — ${cur.monthName}
+Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}
+
+=== ДОХОДЫ ===
+Запланировано: ${plannedInc.toLocaleString('ru')} ₽
+${Object.entries(incomes).map(([n, v]) => `  ${n}: ${v.toLocaleString('ru')} ₽`).join('\n') || '  (не указаны)'}
+Получено в этом месяце: ${totalInc ? totalInc.toLocaleString('ru') + ' ₽' : 'нет данных'}
+
+=== РАСХОДЫ ${cur.monthName.toUpperCase()} ===
+Итого: ${cur.total.toLocaleString('ru')} ₽${plannedInc ? ` (${Math.round(cur.total / plannedInc * 100)}% от дохода)` : ''}
+Переменные: ${curFix.total.toLocaleString('ru')} ₽
+Постоянные/обязательные: ${(cur.total - curFix.total).toLocaleString('ru')} ₽
+${cur.total > 0 ? `\nПо категориям:\n${catLines}` : ''}
+${Object.keys(cur.byUser).length > 0 ? `\nПо участникам:\n${personLines}` : ''}
+
+=== ПРОШЛЫЙ МЕСЯЦ (${prev.monthName}) ===
+Итого: ${prev.total.toLocaleString('ru')} ₽${prev.total && cur.total ? ` (${cur.total > prev.total ? '+' : ''}${((cur.total - prev.total) / prev.total * 100).toFixed(0)}% к прошлому)` : ''}
+${prev.total > 0 ? `По категориям:\n${prevCatLines}` : '(нет данных)'}
+
+=== ОБЯЗАТЕЛЬНЫЕ ЕЖЕМЕСЯЧНЫЕ РАСХОДЫ ===
+${fixedList || '  (не указаны)'}
+Итого постоянных: ${fixedTotal.toLocaleString('ru')} ₽
+
+=== БАЛАНС ===
+${startBal ? `На начало месяца: ${startBal.toLocaleString('ru')} ₽` : 'Начальный баланс: не указан'}
+${startBal || totalInc ? `Расчётный текущий: ${(startBal + totalInc - cur.total).toLocaleString('ru')} ₽` : ''}
+
+=== ПЛАН/ЛИМИТЫ ===
+Плановые расходы на месяц: ${(settings.plannedMonthly || 0).toLocaleString('ru')} ₽
+Лимиты по категориям: ${Object.keys(catLimits).length ? Object.entries(catLimits).map(([c, v]) => `${c}: ${v.toLocaleString('ru')} ₽`).join(', ') : 'не заданы'}`;
+
+  try {
+    const result = await analyzeFinances(reportText);
+    if (result.error) return res.status(502).json({ error: result.error });
+    res.json({ report: result.report, model: result.model });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── AI Parse Route ───────────────────────────────────────────────────────────
