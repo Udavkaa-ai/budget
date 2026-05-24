@@ -704,7 +704,19 @@ html, body {
 }
 .parse-expense-item--edit { align-items: flex-start; }
 
-.parse-expense-icon { font-size: 26px; flex-shrink: 0; margin-top: 2px; }
+.parse-cat-icon-btn {
+  font-size: 28px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.parse-cat-icon-btn:active { background: rgba(89,71,224,0.1); }
 
 .parse-expense-info { flex: 1; min-width: 0; }
 .parse-expense-desc {
@@ -717,12 +729,18 @@ html, body {
   text-overflow: ellipsis;
 }
 
-/* Edit row: category + date */
+/* Edit row: category name + date */
 .parse-edit-row {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
-.parse-edit-cat,
+.parse-cat-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 .parse-edit-date {
   font-family: 'Onest', -apple-system, sans-serif;
   font-size: 12px;
@@ -735,17 +753,35 @@ html, body {
   outline: none;
   -webkit-appearance: none;
   appearance: none;
-}
-.parse-edit-cat {
   flex: 1;
-  min-width: 0;
 }
-.parse-edit-date {
-  width: 118px;
-  flex-shrink: 0;
-}
-.parse-edit-cat:focus,
 .parse-edit-date:focus { border-color: rgba(89,71,224,0.45); }
+
+/* Category picker grid */
+.parse-cat-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.parse-cat-opt {
+  font-size: 20px;
+  background: rgba(255,255,255,0.7);
+  border: 1.5px solid rgba(89,71,224,0.12);
+  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, border-color 0.1s;
+}
+.parse-cat-opt:active { background: rgba(89,71,224,0.1); }
+.parse-cat-opt.active {
+  background: rgba(89,71,224,0.12);
+  border-color: var(--primary);
+}
 
 /* Amount group */
 .parse-edit-right {
