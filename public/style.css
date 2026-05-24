@@ -719,29 +719,42 @@ html, body {
 .parse-cat-icon-btn:active { background: rgba(89,71,224,0.1); }
 
 .parse-expense-info { flex: 1; min-width: 0; }
+
+/* Row 1: description + delete */
+.parse-desc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
 .parse-expense-desc {
+  flex: 1;
+  min-width: 0;
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Edit row: category name + date */
+/* Row 2: category name + date + amount */
 .parse-edit-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 .parse-cat-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
-.parse-edit-date {
+
+/* shared input style */
+.parse-edit-date,
+.parse-edit-amount {
   font-family: 'Onest', -apple-system, sans-serif;
   font-size: 12px;
   font-weight: 500;
@@ -749,13 +762,22 @@ html, body {
   background: rgba(255,255,255,0.7);
   border: 1.5px solid rgba(89,71,224,0.15);
   border-radius: 8px;
-  padding: 5px 7px;
+  padding: 5px 6px;
   outline: none;
   -webkit-appearance: none;
   appearance: none;
-  flex: 1;
 }
-.parse-edit-date:focus { border-color: rgba(89,71,224,0.45); }
+.parse-edit-date:focus,
+.parse-edit-amount:focus { border-color: rgba(89,71,224,0.45); }
+.parse-edit-date { flex: 1; min-width: 0; }
+.parse-edit-amount {
+  width: 58px;
+  flex-shrink: 0;
+  text-align: right;
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 13px;
+}
 
 /* Category picker grid */
 .parse-cat-picker {
@@ -783,34 +805,11 @@ html, body {
   border-color: var(--primary);
 }
 
-/* Amount group */
-.parse-edit-right {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.parse-edit-amount {
-  width: 70px;
-  text-align: right;
-  font-family: 'Onest', -apple-system, sans-serif;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--primary);
-  background: rgba(255,255,255,0.7);
-  border: 1.5px solid rgba(89,71,224,0.15);
-  border-radius: 8px;
-  padding: 4px 6px;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.parse-edit-amount:focus { border-color: rgba(89,71,224,0.45); }
 .parse-edit-ruble {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--primary);
+  flex-shrink: 0;
 }
 /* Delete button */
 .parse-del-btn {

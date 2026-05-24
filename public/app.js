@@ -1398,18 +1398,18 @@ function renderParseResult(expenses) {
     card.innerHTML = `
       <button class="parse-cat-icon-btn" title="Изменить категорию">${CATEGORY_ICONS[exp.category] || '❓'}</button>
       <div class="parse-expense-info">
-        <div class="parse-expense-desc">${exp.description}</div>
+        <div class="parse-desc-row">
+          <span class="parse-expense-desc">${exp.description}</span>
+          <button class="parse-del-btn" title="Удалить">🗑</button>
+        </div>
         <div class="parse-edit-row">
           <span class="parse-cat-name">${exp.category}</span>
           <input class="parse-edit-date" type="date" value="${dateVal}" max="${todayStr}">
+          <input class="parse-edit-amount" type="number" value="${exp.amount}" min="1">
+          <span class="parse-edit-ruble">₽</span>
         </div>
         <div class="parse-cat-picker hidden">${catOptHtml}</div>
       </div>
-      <div class="parse-edit-right">
-        <input class="parse-edit-amount" type="number" value="${exp.amount}" min="1">
-        <span class="parse-edit-ruble">₽</span>
-      </div>
-      <button class="parse-del-btn" title="Удалить">🗑</button>
     `;
 
     const iconBtn = card.querySelector('.parse-cat-icon-btn');
