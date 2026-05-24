@@ -1305,31 +1305,90 @@ async function parseText() {
 }
 
 function renderParseResult(expenses) {
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const todayStr = new Date().toISOString().slice(0, 10); // max for date inputs
   const resultEl = document.getElementById('parse-result');
-  resultEl.innerHTML = `
-    <div class="parse-result-header">
-      <strong>Распознано: ${expenses.length} записей</strong>
-      <span>${fmt(total)}</span>
-    </div>
-    ${expenses.map((e, i) => `
-      <div class="parse-expense-item">
-        <span class="parse-expense-icon">${CATEGORY_ICONS[e.category] || '❓'}</span>
-        <div class="parse-expense-info">
-          <div class="parse-expense-desc">${e.description}</div>
-          <div class="parse-expense-meta">${e.category} · ${e.date}</div>
-        </div>
-        <span class="parse-expense-amount">${fmt(e.amount)}</span>
-      </div>
-    `).join('')}
-    <div class="parse-confirm-bar">
-      <button id="btn-confirm-parse" class="btn btn-primary" style="flex:1">✓ Сохранить всё</button>
-      <button id="btn-cancel-parse" class="btn btn-outline">✕</button>
-    </div>
-  `;
+  resultEl.innerHTML = '';
 
-  document.getElementById('btn-confirm-parse').addEventListener('click', confirmParsedExpenses);
-  document.getElementById('btn-cancel-parse').addEventListener('click', () => {
+  function calcTotal() { return expenses.reduce((s, e) => s + (e.amount || 0), 0); }
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'parse-result-header';
+  header.innerHTML = `
+    <strong>Распознано: ${expenses.length}</strong>
+    <span id="parse-total">${fmt(calcTotal())}</span>
+  `;
+  resultEl.appendChild(header);
+
+  function refreshTotal() {
+    const el = resultEl.querySelector('#parse-total');
+    if (el) el.textContent = fmt(calcTotal());
+  }
+
+  // Cards
+  expenses.forEach((exp, idx) => {
+    const [dd, mm, yyyy] = exp.date.split('.');
+    const dateVal = `${yyyy}-${mm}-${dd}`;
+    const catOptions = PLAN_CATEGORIES.map(c =>
+      `<option value="${c.key}"${c.key === exp.category ? ' selected' : ''}>${c.icon} ${c.key}</option>`
+    ).join('');
+
+    const card = document.createElement('div');
+    card.className = 'parse-expense-item parse-expense-item--edit';
+    card.innerHTML = `
+      <span class="parse-expense-icon">${CATEGORY_ICONS[exp.category] || '❓'}</span>
+      <div class="parse-expense-info">
+        <div class="parse-expense-desc">${exp.description}</div>
+        <div class="parse-edit-row">
+          <select class="parse-edit-cat">${catOptions}</select>
+          <input class="parse-edit-date" type="date" value="${dateVal}" max="${todayStr}">
+        </div>
+      </div>
+      <div class="parse-edit-right">
+        <input class="parse-edit-amount" type="number" value="${exp.amount}" min="1">
+        <span class="parse-edit-ruble">₽</span>
+      </div>
+      <button class="parse-del-btn" title="Удалить">🗑</button>
+    `;
+
+    card.querySelector('.parse-edit-cat').addEventListener('change', function () {
+      exp.category = this.value;
+      card.querySelector('.parse-expense-icon').textContent = CATEGORY_ICONS[this.value] || '❓';
+    });
+
+    card.querySelector('.parse-edit-date').addEventListener('change', function () {
+      const [y, m, d] = this.value.split('-');
+      exp.date = `${d}.${m}.${y}`;
+    });
+
+    card.querySelector('.parse-edit-amount').addEventListener('input', function () {
+      exp.amount = parseInt(this.value) || 0;
+      refreshTotal();
+    });
+
+    card.querySelector('.parse-del-btn').addEventListener('click', () => {
+      parsedExpenses.splice(idx, 1);
+      if (parsedExpenses.length === 0) {
+        resultEl.classList.add('hidden');
+      } else {
+        renderParseResult(parsedExpenses);
+      }
+    });
+
+    resultEl.appendChild(card);
+  });
+
+  // Action bar
+  const bar = document.createElement('div');
+  bar.className = 'parse-confirm-bar';
+  bar.innerHTML = `
+    <button id="btn-confirm-parse" class="btn btn-primary" style="flex:1">✓ Сохранить всё</button>
+    <button id="btn-cancel-parse" class="btn btn-outline">✕</button>
+  `;
+  resultEl.appendChild(bar);
+
+  bar.querySelector('#btn-confirm-parse').addEventListener('click', confirmParsedExpenses);
+  bar.querySelector('#btn-cancel-parse').addEventListener('click', () => {
     parsedExpenses = [];
     resultEl.classList.add('hidden');
   });
