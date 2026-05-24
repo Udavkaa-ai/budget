@@ -696,41 +696,100 @@ html, body {
 }
 
 .parse-expense-item {
-  padding: 14px 18px;
+  padding: 12px 14px;
   border-top: 1px solid rgba(89,71,224,0.07);
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
 }
-.parse-expense-item:hover { background: rgba(89,71,224,0.03); }
+.parse-expense-item--edit { align-items: flex-start; }
 
-.parse-expense-icon { font-size: 26px; flex-shrink: 0; }
+.parse-expense-icon { font-size: 26px; flex-shrink: 0; margin-top: 2px; }
 
 .parse-expense-info { flex: 1; min-width: 0; }
 .parse-expense-desc {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text);
-  margin-bottom: 3px;
+  margin-bottom: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.parse-expense-meta {
+
+/* Edit row: category + date */
+.parse-edit-row {
+  display: flex;
+  gap: 6px;
+}
+.parse-edit-cat,
+.parse-edit-date {
+  font-family: 'Onest', -apple-system, sans-serif;
   font-size: 12px;
-  color: var(--text-muted);
   font-weight: 500;
-  letter-spacing: 0.1px;
+  color: var(--text);
+  background: rgba(255,255,255,0.7);
+  border: 1.5px solid rgba(89,71,224,0.15);
+  border-radius: 8px;
+  padding: 5px 7px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.parse-expense-amount {
-  font-size: 17px;
-  font-weight: 800;
+.parse-edit-cat {
+  flex: 1;
+  min-width: 0;
+}
+.parse-edit-date {
+  width: 118px;
   flex-shrink: 0;
-  background: var(--gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
+.parse-edit-cat:focus,
+.parse-edit-date:focus { border-color: rgba(89,71,224,0.45); }
+
+/* Amount group */
+.parse-edit-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.parse-edit-amount {
+  width: 70px;
+  text-align: right;
+  font-family: 'Onest', -apple-system, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary);
+  background: rgba(255,255,255,0.7);
+  border: 1.5px solid rgba(89,71,224,0.15);
+  border-radius: 8px;
+  padding: 4px 6px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.parse-edit-amount:focus { border-color: rgba(89,71,224,0.45); }
+.parse-edit-ruble {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+/* Delete button */
+.parse-del-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.45;
+  flex-shrink: 0;
+  padding: 4px 2px;
+  margin-top: 1px;
+  line-height: 1;
+}
+.parse-del-btn:active { opacity: 0.8; }
+
 .parse-confirm-bar { padding: 14px 18px; display: flex; gap: 10px; }
 
 /* ═══════════════════════════════════════════ SUMMARY SCREEN ══ */
