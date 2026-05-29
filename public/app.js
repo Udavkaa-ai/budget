@@ -665,6 +665,7 @@ function renderSummaryView() {
     `;
     chip.addEventListener('click', () => {
       summaryUserFilter = isActive ? null : user;
+      document.getElementById('category-detail').classList.add('hidden');
       if (summaryCompareMode) { return; }
       renderSummaryView();
     });
@@ -841,14 +842,7 @@ async function loadCategoryDetail(cat, month, year) {
   const MONTH_NAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
   const mLabel = `${MONTH_NAMES[(month || new Date().getMonth() + 1) - 1]} ${year || new Date().getFullYear()}`;
   const uLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
-  let ctxBadge = document.getElementById('category-detail-ctx');
-  if (!ctxBadge) {
-    ctxBadge = document.createElement('div');
-    ctxBadge.id = 'category-detail-ctx';
-    ctxBadge.className = 'category-detail-ctx';
-    document.querySelector('.category-detail-header').after(ctxBadge);
-  }
-  ctxBadge.textContent = mLabel + uLabel;
+  document.getElementById('category-detail-ctx').textContent = mLabel + uLabel;
 
   const listEl = document.getElementById('category-detail-list');
   listEl.innerHTML = '<div class="loading">Загрузка</div>';
