@@ -593,8 +593,11 @@ export function getUserByLogin(login) {
 
 /** Статистика по каждому пользователю: количество записей и дата последней */
 export function getUserStats() {
-  // DD.MM.YYYY → YYYYMMDD for correct chronological sort
-  const toSortKey = (d) => { const [dd, mm, yyyy] = d.split('.'); return `${yyyy}${mm}${dd}`; };
+  // DD.MM.YYYY (with possible missing leading zeros) → YYYYMMDD for correct sort
+  const toSortKey = (d) => {
+    const [dd, mm, yyyy] = d.split('.');
+    return `${yyyy}${mm.padStart(2,'0')}${dd.padStart(2,'0')}`;
+  };
 
   return (data.users || []).map(u => {
     const familyId = u.family || 'family1';
@@ -609,7 +612,7 @@ export function getUserStats() {
       isAdmin: u.isAdmin || false,
       isGoogle: !!u.googleId,
       expenseCount: userExp.length,
-      lastDate: lastExp?.date || null,
+      lastDate: lastExp ? lastExp.date.split('.').map((p,i) => i<2 ? p.padStart(2,'0') : p).join('.') : null,
     };
   });
 }
