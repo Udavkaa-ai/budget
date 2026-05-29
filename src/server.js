@@ -41,6 +41,12 @@ import {
   deleteUser,
   getFamilyBudgetSettings,
   saveFamilyBudgetSettings,
+  getUserByGoogleId,
+  createGoogleUser,
+  updateUserFamily,
+  createInvite,
+  getInvite,
+  consumeInvite,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -100,6 +106,85 @@ app.post('/api/auth/login', (req, res) => {
   );
 
   res.json({ token, name: user.name, login: user.login, isAdmin: user.isAdmin || false });
+});
+
+// Public endpoint — tells frontend which auth providers are available
+app.get('/api/auth/providers', (_req, res) => {
+  res.json({
+    google: !!config.googleClientId,
+    googleClientId: config.googleClientId || null,
+  });
+});
+
+// Google OAuth — verifies Google ID token, creates/finds user, returns JWT
+app.post('/api/auth/google', async (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) return res.status(400).json({ error: 'Нет токена' });
+  if (!config.googleClientId) return res.status(503).json({ error: 'Google OAuth не настроен' });
+
+  try {
+    const verifyRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+    );
+    const payload = await verifyRes.json();
+
+    if (!verifyRes.ok || payload.error) {
+      return res.status(401).json({ error: 'Неверный токен Google' });
+    }
+    if (payload.aud !== config.googleClientId) {
+      return res.status(401).json({ error: 'Неверный client_id' });
+    }
+
+    const { sub: googleId, email, name, picture } = payload;
+
+    let user = getUserByGoogleId(googleId);
+    if (!user) {
+      user = await createGoogleUser({ googleId, email, name, picture });
+    }
+
+    const token = jwt.sign(
+      { login: user.login, name: user.name, family: user.family, isAdmin: user.isAdmin || false },
+      config.jwtSecret,
+      { expiresIn: '90d' }
+    );
+
+    res.json({ token, name: user.name, login: user.login, isAdmin: user.isAdmin || false });
+  } catch (err) {
+    console.error('Google auth error:', err);
+    res.status(500).json({ error: 'Ошибка авторизации' });
+  }
+});
+
+// Create invite link (auth required)
+app.post('/api/invite', authMiddleware, (req, res) => {
+  const code = createInvite(req.user.family, req.user.login);
+  const origin = req.headers.origin || `https://${req.headers.host}`;
+  res.json({ code, link: `${origin}/?invite=${code}` });
+});
+
+// Join family via invite code (auth required)
+app.post('/api/invite/join', authMiddleware, async (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Нет кода' });
+
+  const invite = getInvite(code);
+  if (!invite) return res.status(400).json({ error: 'Код неверный или устарел' });
+  if (invite.family === req.user.family) {
+    return res.status(400).json({ error: 'Вы уже в этой семье' });
+  }
+
+  const user = await updateUserFamily(req.user.login, invite.family);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  consumeInvite(code);
+  io.to(invite.family).emit('family:joined', { name: user.name });
+
+  const token = jwt.sign(
+    { login: user.login, name: user.name, family: user.family, isAdmin: false },
+    config.jwtSecret,
+    { expiresIn: '90d' }
+  );
+
+  res.json({ token, name: user.name, login: user.login, isAdmin: false });
 });
 
 app.get('/api/me', authMiddleware, (req, res) => {

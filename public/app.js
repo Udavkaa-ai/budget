@@ -31,6 +31,7 @@ const CATEGORY_ICONS = {
 // ─── State ────────────────────────────────────────────────────────────────────
 let token = localStorage.getItem('budget_token');
 let currentUser = null;
+let pendingInviteCode = null;
 let socket = null;
 let appSettings = {};
 
@@ -197,9 +198,96 @@ async function apiJson(method, path, body) {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-function showLogin() {
+async function showLogin() {
   document.getElementById('screen-login').classList.add('active');
   document.getElementById('app').classList.add('hidden');
+
+  // Check for invite code in URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteCode = urlParams.get('invite');
+  if (inviteCode) {
+    pendingInviteCode = inviteCode.toUpperCase();
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  // Load auth providers
+  try {
+    const providers = await fetch('/api/auth/providers').then(r => r.json());
+    if (providers.google && providers.googleClientId) {
+      document.getElementById('google-signin-section').classList.remove('hidden');
+      // Open password section only if no Google
+      document.getElementById('password-login-section').removeAttribute('open');
+
+      google.accounts.id.initialize({
+        client_id: providers.googleClientId,
+        callback: handleGoogleCredential,
+        auto_select: false,
+      });
+      google.accounts.id.renderButton(
+        document.getElementById('google-signin-btn'),
+        { theme: 'outline', size: 'large', text: 'signin_with', locale: 'ru', width: 280 }
+      );
+    } else {
+      // No Google — open password login by default
+      document.getElementById('password-login-section').setAttribute('open', '');
+    }
+  } catch {
+    document.getElementById('password-login-section').setAttribute('open', '');
+  }
+}
+
+async function handleGoogleCredential(response) {
+  const errEl = document.getElementById('login-error-google');
+  errEl.classList.add('hidden');
+  try {
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Ошибка входа через Google';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    await onLoginSuccess(data);
+  } catch {
+    errEl.textContent = 'Ошибка соединения';
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function onLoginSuccess(data) {
+  token = data.token;
+  currentUser = { name: data.name, login: data.login, isAdmin: data.isAdmin || false };
+  localStorage.setItem('budget_token', token);
+  localStorage.setItem('budget_user', JSON.stringify(currentUser));
+
+  // Handle pending invite
+  if (pendingInviteCode) {
+    await handlePendingInvite();
+  } else {
+    initApp();
+  }
+}
+
+async function handlePendingInvite() {
+  const code = pendingInviteCode;
+  pendingInviteCode = null;
+  try {
+    const res = await apiJson('POST', '/api/invite/join', { code });
+    if (res.token) {
+      token = res.token;
+      currentUser = { name: res.name, login: res.login, isAdmin: res.isAdmin || false };
+      localStorage.setItem('budget_token', token);
+      localStorage.setItem('budget_user', JSON.stringify(currentUser));
+      showToastSuccess('Вы присоединились к семейному бюджету!');
+    }
+  } catch {
+    // Invite failed — continue without joining
+  }
+  initApp();
 }
 
 function showApp() {
@@ -237,11 +325,7 @@ async function loginSubmit(e) {
       errEl.classList.remove('hidden');
       return;
     }
-    token = data.token;
-    currentUser = { name: data.name, login: data.login, isAdmin: data.isAdmin || false };
-    localStorage.setItem('budget_token', token);
-    localStorage.setItem('budget_user', JSON.stringify(currentUser));
-    initApp();
+    await onLoginSuccess(data);
   } catch {
     errEl.textContent = 'Ошибка соединения';
     errEl.classList.remove('hidden');
@@ -1844,6 +1928,17 @@ function setupEventListeners() {
   document.getElementById('plan-income-me').addEventListener('input', updatePlanTotals);
   document.getElementById('plan-income-partner').addEventListener('input', updatePlanTotals);
   document.getElementById('btn-save-plan').addEventListener('click', savePlan);
+
+  // Invite
+  document.getElementById('btn-create-invite')?.addEventListener('click', async () => {
+    const res = await apiJson('POST', '/api/invite');
+    document.getElementById('invite-code-text').textContent = res.code;
+    document.getElementById('invite-result').classList.remove('hidden');
+    document.getElementById('btn-copy-invite').onclick = () => {
+      navigator.clipboard.writeText(res.link).then(() => showToastSuccess('Ссылка скопирована'));
+    };
+  });
+
   document.getElementById('btn-get-analysis').addEventListener('click', getFinancialAnalysis);
   document.getElementById('analysis-close').addEventListener('click', closeAnalysis);
   document.getElementById('analysis-overlay').addEventListener('click', closeAnalysis);
