@@ -7,6 +7,7 @@ let data = {
   expenses: [],
   settings: {},
   goals: [],
+  invites: {},
   meta: { created: new Date().toISOString(), version: 1 }
 };
 
@@ -59,6 +60,7 @@ export async function loadData() {
       data = JSON.parse(raw);
       data.settings = data.settings || {};
       data.goals = data.goals || [];
+      data.invites = data.invites || {};
 
       let migrated = false;
 
@@ -629,6 +631,61 @@ export async function deleteUser(login) {
   const [deleted] = data.users.splice(idx, 1);
   debouncedSave();
   return deleted;
+}
+
+export function getUserByGoogleId(googleId) {
+  return (data.users || []).find(u => u.googleId === googleId) || null;
+}
+
+export async function createGoogleUser({ googleId, email, name, picture }) {
+  if (!data.users) data.users = [];
+  const familyId = 'fam_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const user = {
+    login: `g_${googleId}`,
+    googleId,
+    email,
+    name: name || email.split('@')[0],
+    picture: picture || '',
+    family: familyId,
+    isAdmin: true,
+    createdAt: new Date().toISOString(),
+  };
+  data.users.push(user);
+  debouncedSave();
+  return user;
+}
+
+export async function updateUserFamily(login, familyId) {
+  const user = (data.users || []).find(u => u.login === login);
+  if (!user) return null;
+  user.family = familyId;
+  debouncedSave();
+  return user;
+}
+
+export function createInvite(familyId, createdBy) {
+  if (!data.invites) data.invites = {};
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code;
+  do {
+    code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  } while (data.invites[code]);
+  data.invites[code] = { family: familyId, createdBy, expiresAt: Date.now() + 48 * 60 * 60 * 1000 };
+  debouncedSave();
+  return code;
+}
+
+export function getInvite(code) {
+  const invite = (data.invites || {})[code?.toUpperCase()];
+  if (!invite || invite.expiresAt < Date.now()) return null;
+  return invite;
+}
+
+export function consumeInvite(code) {
+  if (data.invites?.[code?.toUpperCase()]) {
+    delete data.invites[code.toUpperCase()];
+    debouncedSave();
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

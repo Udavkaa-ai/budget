@@ -15,6 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -22,22 +23,33 @@
 <div id="screen-login" class="screen active">
   <div class="login-container">
     <div class="login-logo">
-      <div class="login-icon">💰</div>
+      <img src="/icon-192.png" class="login-app-icon" alt="" />
       <h1>Семейный бюджет</h1>
       <p>Совместный учёт расходов</p>
     </div>
-    <form id="login-form" class="login-form">
-      <div class="form-group">
-        <label>Логин</label>
-        <input type="text" id="login-input" autocomplete="username" placeholder="Введите логин" />
-      </div>
-      <div class="form-group">
-        <label>Пароль</label>
-        <input type="password" id="password-input" autocomplete="current-password" placeholder="Введите пароль" />
-      </div>
-      <div id="login-error" class="error-msg hidden"></div>
-      <button type="submit" class="btn btn-primary btn-full">Войти</button>
-    </form>
+
+    <!-- Google Sign-In (shown when GOOGLE_CLIENT_ID is set) -->
+    <div id="google-signin-section" class="hidden">
+      <div id="google-signin-btn"></div>
+      <div id="login-error-google" class="error-msg hidden"></div>
+    </div>
+
+    <!-- Password login (always available as fallback) -->
+    <details id="password-login-section">
+      <summary class="login-details-toggle">Войти с паролем</summary>
+      <form id="login-form" class="login-form">
+        <div class="form-group">
+          <label>Логин</label>
+          <input type="text" id="login-input" autocomplete="username" placeholder="Введите логин" />
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="password-input" autocomplete="current-password" placeholder="Введите пароль" />
+        </div>
+        <div id="login-error" class="error-msg hidden"></div>
+        <button type="submit" class="btn btn-primary btn-full">Войти</button>
+      </form>
+    </details>
   </div>
 </div>
 
@@ -243,6 +255,20 @@
             <div>Плановые расходы: <strong id="info-planned"></strong></div>
             <div>Постоянные расходы: <strong id="info-fixed"></strong></div>
             <div style="margin-top:6px;color:var(--text-muted);font-size:13px">Версия 2.1.1</div>
+          </div>
+        </div>
+
+        <div class="card settings-section" id="invite-section">
+          <div class="settings-title">Пригласить партнёра</div>
+          <p class="settings-hint">Партнёр войдёт через Google и введёт код, чтобы видеть общий бюджет.</p>
+          <button id="btn-create-invite" class="btn btn-primary btn-full">🔗 Создать ссылку-приглашение</button>
+          <div id="invite-result" class="hidden">
+            <div class="invite-code-row">
+              <span class="invite-code-label">Код:</span>
+              <span id="invite-code-text" class="invite-code"></span>
+            </div>
+            <button id="btn-copy-invite" class="btn btn-outline btn-full" style="margin-top:8px">📋 Скопировать ссылку</button>
+            <p class="invite-expiry">Действует 48 часов</p>
           </div>
         </div>
 

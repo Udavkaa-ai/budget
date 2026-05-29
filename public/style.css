@@ -103,6 +103,43 @@ html, body {
 
 .login-form { display: flex; flex-direction: column; gap: 16px; }
 
+.login-app-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
+.login-details-toggle {
+  display: block;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 10px 0;
+  user-select: none;
+}
+#password-login-section { border: none; }
+#google-signin-btn {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0;
+}
+.invite-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+.invite-code-label { font-size: 13px; color: var(--text-muted); }
+.invite-code {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--primary);
+}
+.invite-expiry { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.settings-hint { font-size: 13px; color: var(--text-muted); margin: 4px 0 12px; line-height: 1.5; }
+
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 
 .form-group label {
