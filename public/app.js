@@ -780,11 +780,13 @@ function renderCompareChart(data) {
   if (compareChart) { compareChart.destroy(); compareChart = null; }
   compareChart = new Chart(canvas, {
     type: 'bar',
+    plugins: [ChartDataLabels],
     data: { labels: sortedCats, datasets },
     options: {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { right: 52 } },
       scales: {
         x: {
           ticks: { callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : String(v) },
@@ -807,6 +809,14 @@ function renderCompareChart(data) {
               return ` ${user}: ${amount.toLocaleString('ru')} ₽${pctBudget || pctIncome}`;
             },
           },
+        },
+        datalabels: {
+          anchor: 'end',
+          align: 'end',
+          clip: false,
+          formatter: (v) => v > 0 ? (v >= 1000 ? Math.round(v / 1000) + 'к' : v) : null,
+          font: { size: 11, weight: '600' },
+          color: (ctx) => datasets[ctx.datasetIndex]?.backgroundColor || '#555',
         },
       },
     },
