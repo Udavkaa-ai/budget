@@ -651,7 +651,7 @@ export async function createGoogleUser({ googleId, email, name, picture }) {
     name: name || email.split('@')[0],
     picture: picture || '',
     family: familyId,
-    isAdmin: true,
+    isAdmin: false,
     createdAt: new Date().toISOString(),
   };
   data.users.push(user);
