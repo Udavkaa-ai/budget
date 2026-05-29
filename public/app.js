@@ -1605,9 +1605,11 @@ function buildExpenseItem(exp, canDelete, { showDate = false } = {}) {
         ${exp.isFixed ? '<span class="expense-fixed-tag">📌 пост.</span>' : ''}
       </div>
     </div>
-    <span class="expense-amount">${fmt(exp.amount)}</span>
-    <div class="expense-actions">
-      ${canDelete ? `<button class="btn-delete" title="Удалить">🗑</button>` : ''}
+    <div class="expense-right">
+      <span class="expense-amount">${fmt(exp.amount)}</span>
+      <div class="expense-actions">
+        ${canDelete ? `<button class="btn-delete" title="Удалить">🗑</button>` : ''}
+      </div>
     </div>
   `;
 
