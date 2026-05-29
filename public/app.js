@@ -469,7 +469,7 @@ async function loadBudget() {
         const expList = document.createElement('div');
         expList.className = 'expenses-list';
         for (const exp of udata.expenses) {
-          expList.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+          expList.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showUser: false }));
         }
         section.appendChild(expList);
         list.appendChild(section);
@@ -482,7 +482,7 @@ async function loadBudget() {
         list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
       } else {
         for (const exp of udata.expenses) {
-          list.appendChild(buildExpenseItem(exp, exp.user === currentUser.name));
+          list.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showUser: false }));
         }
       }
     }
@@ -838,6 +838,18 @@ async function loadCategoryDetail(cat, month, year) {
   detail.classList.remove('hidden');
   document.getElementById('category-detail-title').textContent = `${CATEGORY_ICONS[cat] || ''} ${cat}`;
 
+  const MONTH_NAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  const mLabel = `${MONTH_NAMES[(month || new Date().getMonth() + 1) - 1]} ${year || new Date().getFullYear()}`;
+  const uLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
+  let ctxBadge = document.getElementById('category-detail-ctx');
+  if (!ctxBadge) {
+    ctxBadge = document.createElement('div');
+    ctxBadge.id = 'category-detail-ctx';
+    ctxBadge.className = 'category-detail-ctx';
+    document.querySelector('.category-detail-header').after(ctxBadge);
+  }
+  ctxBadge.textContent = mLabel + uLabel;
+
   const listEl = document.getElementById('category-detail-list');
   listEl.innerHTML = '<div class="loading">Загрузка</div>';
 
@@ -851,7 +863,7 @@ async function loadCategoryDetail(cat, month, year) {
     }
 
     for (const exp of [...expenses].reverse()) {
-      listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showDate: true }));
+      listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showDate: true, showCategory: false }));
     }
   } catch {
     listEl.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
@@ -1589,7 +1601,7 @@ async function confirmParsedExpenses() {
 
 // ─── EXPENSE ITEM BUILDER ─────────────────────────────────────────────────────
 
-function buildExpenseItem(exp, canDelete, { showDate = false } = {}) {
+function buildExpenseItem(exp, canDelete, { showDate = false, showCategory = true, showUser = true } = {}) {
   const item = document.createElement('div');
   item.className = 'expense-item' + (exp.isFixed ? ' is-fixed' : '');
   item.dataset.id = exp.id;
@@ -1599,8 +1611,8 @@ function buildExpenseItem(exp, canDelete, { showDate = false } = {}) {
     <div class="expense-info">
       <div class="expense-desc">${exp.description || exp.category}</div>
       <div class="expense-meta">
-        <span class="expense-user-tag">${exp.user}</span>
-        <span>${exp.category}</span>
+        ${showUser ? `<span class="expense-user-tag">${exp.user}</span>` : ''}
+        ${showCategory ? `<span>${exp.category}</span>` : ''}
         ${showDate && exp.date ? `<span class="expense-date-tag">${formatDayMonth(exp.date)}</span>` : ''}
         ${exp.isFixed ? '<span class="expense-fixed-tag">📌 пост.</span>' : ''}
       </div>
