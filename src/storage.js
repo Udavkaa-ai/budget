@@ -591,6 +591,26 @@ export function getUserByLogin(login) {
   return (data.users || []).find(u => u.login === login) || null;
 }
 
+/** Статистика по каждому пользователю: количество записей и дата последней */
+export function getUserStats() {
+  return (data.users || []).map(u => {
+    const familyId = u.family || 'family1';
+    const userExp = (data.expenses || []).filter(
+      e => e.user === u.name && (e.family || 'family1') === familyId
+    );
+    const lastExp = [...userExp].sort((a, b) => b.date.localeCompare(a.date))[0];
+    return {
+      name: u.name,
+      login: u.login,
+      family: familyId,
+      isAdmin: u.isAdmin || false,
+      isGoogle: !!u.googleId,
+      expenseCount: userExp.length,
+      lastDate: lastExp?.date || null,
+    };
+  });
+}
+
 /** Список всех пользователей без паролей */
 export function getUsers() {
   return (data.users || []).map(({ password: _p, ...u }) => u);

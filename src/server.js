@@ -36,6 +36,7 @@ import {
   getMonthDailyTotals,
   getUserByLogin,
   getUsers,
+  getUserStats,
   addUser,
   updateUser,
   deleteUser,
@@ -405,6 +406,13 @@ app.post('/api/admin/force-update', authMiddleware, adminMiddleware, (req, res) 
   io.emit('app:update');
   console.log(`🔄 Принудительное обновление инициировано пользователем ${req.user.name}`);
   res.json({ ok: true });
+});
+
+// Статистика использования (только количество, без сумм)
+app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
+  const stats = getUserStats();
+  const families = [...new Set(stats.map(u => u.family))];
+  res.json({ totalFamilies: families.length, totalUsers: stats.length, users: stats });
 });
 
 // Бюджетные настройки конкретной группы (семьи)
