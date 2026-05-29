@@ -261,7 +261,8 @@ app.get('/api/expenses/month', authMiddleware, (req, res) => {
 app.get('/api/expenses/category/:cat', authMiddleware, (req, res) => {
   const month = req.query.month ? parseInt(req.query.month) : null;
   const year = req.query.year ? parseInt(req.query.year) : null;
-  res.json(getCategoryExpenses(req.params.cat, month, year, req.user.family));
+  const user = req.query.user || null;
+  res.json(getCategoryExpenses(req.params.cat, month, year, req.user.family, user));
 });
 
 // Сводка за месяц (статистика)
