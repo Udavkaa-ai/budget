@@ -593,12 +593,15 @@ export function getUserByLogin(login) {
 
 /** Статистика по каждому пользователю: количество записей и дата последней */
 export function getUserStats() {
+  // DD.MM.YYYY → YYYYMMDD for correct chronological sort
+  const toSortKey = (d) => { const [dd, mm, yyyy] = d.split('.'); return `${yyyy}${mm}${dd}`; };
+
   return (data.users || []).map(u => {
     const familyId = u.family || 'family1';
     const userExp = (data.expenses || []).filter(
-      e => e.user === u.name && (e.family || 'family1') === familyId
+      e => e.user === u.name && fam(e.family) === fam(familyId)
     );
-    const lastExp = [...userExp].sort((a, b) => b.date.localeCompare(a.date))[0];
+    const lastExp = [...userExp].sort((a, b) => toSortKey(b.date).localeCompare(toSortKey(a.date)))[0];
     return {
       name: u.name,
       login: u.login,
