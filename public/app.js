@@ -1199,12 +1199,16 @@ async function loadSettingsScreen() {
     showToastError('Ошибка загрузки настроек');
   }
 
-  // Admin panel — загружаем только если текущий пользователь администратор
   if (currentUser?.isAdmin) {
-    document.getElementById('admin-section').classList.remove('hidden');
+    document.getElementById('admin-panel-btn-section').classList.remove('hidden');
     document.getElementById('admin-update-section').classList.remove('hidden');
     document.getElementById('admin-budget-section').classList.remove('hidden');
-    loadAdminUsers();
+    // Load family budget settings for this admin's own family by default
+    const users = await apiJson('GET', '/api/admin/users').catch(() => []);
+    if (Array.isArray(users)) {
+      const families = [...new Set(users.map(u => u.family || 'family1'))];
+      loadAdminFamilies(families);
+    }
   }
 }
 
@@ -1251,46 +1255,116 @@ async function saveFixedExpenses() {
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
 
-async function loadAdminUsers() {
-  const users = await apiJson('GET', '/api/admin/users');
-  if (!Array.isArray(users)) return;
+async function openAdminPanel() {
+  document.getElementById('admin-overlay').classList.remove('hidden');
+  document.getElementById('admin-panel').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 
-  const list = document.getElementById('admin-users-list');
+  const body = document.getElementById('admin-panel-body');
+  body.innerHTML = '<div class="loading">Загрузка…</div>';
 
-  // Собираем уникальные семьи для select'а и для раздела бюджетных настроек
-  const families = [...new Set(users.map(u => u.family || 'family1'))];
-  renderAdminFamilySelect(families);
-  loadAdminFamilies(families);
+  const [stats, allUsers] = await Promise.all([
+    apiJson('GET', '/api/admin/stats'),
+    apiJson('GET', '/api/admin/users'),
+  ]);
 
-  list.innerHTML = '';
-  for (const u of users) {
-    const row = document.createElement('div');
-    row.className = 'admin-user-row';
-    row.innerHTML = `
-      <div class="admin-user-info">
-        <div class="admin-user-name">${esc(u.name)}</div>
-        <div class="admin-user-meta">${esc(u.login)}</div>
-      </div>
-      <span class="admin-family-badge">${esc(u.family || 'family1')}</span>
-      ${u.isAdmin ? '<span class="admin-badge-admin">admin</span>' : ''}
-      <button class="admin-user-del" data-login="${esc(u.login)}" title="Удалить"
-        ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
-    `;
-    row.querySelector('.admin-user-del').addEventListener('click', async () => {
-      if (!confirm(`Удалить пользователя ${u.name} (${u.login})?`)) return;
-      const res = await apiJson('DELETE', `/api/admin/users/${encodeURIComponent(u.login)}`);
-      if (res.ok) { showToastSuccess('Пользователь удалён'); loadAdminUsers(); }
-      else showToastError(res.error || 'Ошибка');
-    });
-    list.appendChild(row);
+  if (!stats || !Array.isArray(allUsers)) {
+    body.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+    return;
   }
+
+  // Group users by family
+  const byFamily = {};
+  for (const u of stats.users) {
+    if (!byFamily[u.family]) byFamily[u.family] = [];
+    byFamily[u.family].push(u);
+  }
+
+  body.innerHTML = `
+    <div class="admin-stats-summary">
+      <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalFamilies}</div><div class="admin-stat-label">семей</div></div>
+      <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalUsers}</div><div class="admin-stat-label">пользователей</div></div>
+      <div class="admin-stat-card"><div class="admin-stat-num">${stats.users.reduce((s,u)=>s+u.expenseCount,0)}</div><div class="admin-stat-label">записей всего</div></div>
+    </div>
+    <div id="admin-families-stat"></div>
+  `;
+
+  const familyStat = body.querySelector('#admin-families-stat');
+  for (const [famId, members] of Object.entries(byFamily)) {
+    const block = document.createElement('div');
+    block.className = 'admin-family-block';
+    block.innerHTML = `<div class="admin-family-id">${esc(famId)}</div>`;
+    for (const u of members) {
+      const row = document.createElement('div');
+      row.className = 'admin-user-row';
+      row.innerHTML = `
+        <div class="admin-user-info">
+          <div class="admin-user-name">${esc(u.name)} ${u.isGoogle ? '<span class="admin-badge-google">G</span>' : ''} ${u.isAdmin ? '<span class="admin-badge-admin">admin</span>' : ''}</div>
+          <div class="admin-user-meta">${esc(u.login)}${u.lastDate ? ` · последний расход ${u.lastDate}` : ''}</div>
+        </div>
+        <span class="admin-stat-entries">${u.expenseCount} зап.</span>
+        <button class="admin-user-del" title="Удалить"
+          ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
+      `;
+      row.querySelector('.admin-user-del').addEventListener('click', async () => {
+        if (!confirm(`Удалить пользователя ${u.name}?`)) return;
+        const res = await apiJson('DELETE', `/api/admin/users/${encodeURIComponent(u.login)}`);
+        if (res.ok) { showToastSuccess('Удалён'); openAdminPanel(); }
+        else showToastError(res.error || 'Ошибка');
+      });
+      block.appendChild(row);
+    }
+    familyStat.appendChild(block);
+  }
+
+  // Create user form
+  const families = Object.keys(byFamily);
+  const familyOpts = families.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  const createForm = document.createElement('div');
+  createForm.className = 'admin-create-section';
+  createForm.innerHTML = `
+    <button id="btn-admin-add2" class="btn btn-outline btn-full" style="margin-top:16px">+ Создать пользователя</button>
+    <div id="admin-create-form2" class="admin-create-form hidden">
+      <div class="form-group"><label>Имя</label><input id="anew-name" type="text" placeholder="Имя" autocomplete="off"/></div>
+      <div class="form-group"><label>Логин</label><input id="anew-login" type="text" placeholder="login" autocomplete="off" autocapitalize="none"/></div>
+      <div class="form-group"><label>Пароль</label><input id="anew-password" type="text" placeholder="пароль" autocomplete="off"/></div>
+      <div class="form-group"><label>Семья</label><select id="anew-family">${familyOpts}<option value="__new__">+ Новая…</option></select></div>
+      <div id="anew-error" class="error-msg hidden"></div>
+      <div class="admin-form-btns">
+        <button id="anew-create" class="btn btn-primary">Создать</button>
+        <button id="anew-cancel" class="btn btn-outline">Отмена</button>
+      </div>
+    </div>
+  `;
+  body.appendChild(createForm);
+
+  body.querySelector('#btn-admin-add2').addEventListener('click', () => {
+    body.querySelector('#admin-create-form2').classList.remove('hidden');
+    body.querySelector('#btn-admin-add2').classList.add('hidden');
+  });
+  body.querySelector('#anew-cancel').addEventListener('click', () => {
+    body.querySelector('#admin-create-form2').classList.add('hidden');
+    body.querySelector('#btn-admin-add2').classList.remove('hidden');
+  });
+  body.querySelector('#anew-create').addEventListener('click', async () => {
+    const name = body.querySelector('#anew-name').value.trim();
+    const login = body.querySelector('#anew-login').value.trim();
+    const password = body.querySelector('#anew-password').value.trim();
+    let family = body.querySelector('#anew-family').value;
+    if (family === '__new__') family = 'fam_' + Date.now().toString(36);
+    const errEl = body.querySelector('#anew-error');
+    if (!name || !login || !password) { errEl.textContent = 'Заполните все поля'; errEl.classList.remove('hidden'); return; }
+    errEl.classList.add('hidden');
+    const res = await apiJson('POST', '/api/admin/users', { name, login, password, family });
+    if (res.login) { showToastSuccess('Пользователь создан'); openAdminPanel(); }
+    else { errEl.textContent = res.error || 'Ошибка'; errEl.classList.remove('hidden'); }
+  });
 }
 
-function renderAdminFamilySelect(families) {
-  const sel = document.getElementById('admin-new-family');
-  if (!sel) return;
-  sel.innerHTML = families.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
-  sel.insertAdjacentHTML('beforeend', '<option value="__new__">+ Новая группа…</option>');
+function closeAdminPanel() {
+  document.getElementById('admin-overlay').classList.add('hidden');
+  document.getElementById('admin-panel').classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 function esc(str) {
@@ -2123,6 +2197,10 @@ function setupEventListeners() {
   });
 
   // Принудительное обновление у всех пользователей
+  document.getElementById('btn-open-admin').addEventListener('click', () => openAdminPanel());
+  document.getElementById('btn-close-admin').addEventListener('click', () => closeAdminPanel());
+  document.getElementById('admin-overlay').addEventListener('click', () => closeAdminPanel());
+
   document.getElementById('btn-force-update').addEventListener('click', async () => {
     const btn = document.getElementById('btn-force-update');
     btn.disabled = true;
