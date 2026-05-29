@@ -817,6 +817,7 @@ async function loadCategoryDetail(cat, month, year) {
   const params = new URLSearchParams({
     ...(month ? { month } : {}),
     ...(year ? { year } : {}),
+    ...(summaryUserFilter ? { user: summaryUserFilter } : {}),
   });
 
   document.getElementById('summary-categories').classList.add('hidden');

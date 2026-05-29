@@ -416,7 +416,7 @@ export async function importFromCSV(csvText, familyId) {
 /**
  * Все расходы по конкретной категории за месяц
  */
-export function getCategoryExpenses(category, month = null, year = null, familyId) {
+export function getCategoryExpenses(category, month = null, year = null, familyId, userName = null) {
   const f = fam(familyId);
   const now = new Date();
   const m = month || (now.getMonth() + 1);
@@ -424,7 +424,11 @@ export function getCategoryExpenses(category, month = null, year = null, familyI
   return data.expenses
     .filter(exp => {
       const [, em, ey] = exp.date.split('.').map(Number);
-      return fam(exp.family) === f && exp.category === category && em === m && ey === y;
+      if (fam(exp.family) !== f) return false;
+      if (exp.category !== category) return false;
+      if (em !== m || ey !== y) return false;
+      if (userName && exp.user !== userName) return false;
+      return true;
     })
     .sort((a, b) => a.date.localeCompare(b.date));
 }
