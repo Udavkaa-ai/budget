@@ -1446,6 +1446,42 @@ html, body {
   background-clip: text;
 }
 
+.summary-total-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-остаток-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(89,71,224,0.1);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.summary-остаток-amt {
+  font-weight: 700;
+  font-size: 15px;
+}
+.summary-остаток-amt.ok   { color: #10b981; }
+.summary-остаток-amt.over { color: var(--danger); }
+
+/* Cashflow income total row */
+.cf-income-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(16,185,129,0.08);
+  border-radius: 10px;
+}
+.cf-income-total-label { font-size: 13px; color: var(--text-muted); }
+.cf-income-total-amt   { font-size: 16px; font-weight: 800; color: #10b981; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
