@@ -2047,6 +2047,32 @@ html, body {
 }
 .admin-create-section { margin-top: 8px; }
 
+.admin-month-picker {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.admin-month-picker select {
+  flex: 1;
+  background: var(--card);
+  border: var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.admin-family-income {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: rgba(16,185,129,0.08);
+  border-radius: 8px;
+}
+.admin-family-income strong { color: #10b981; }
+
 .family-budget-card {
   background: var(--card);
   backdrop-filter: var(--card-blur);

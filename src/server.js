@@ -410,9 +410,21 @@ app.post('/api/admin/force-update', authMiddleware, adminMiddleware, (req, res) 
 
 // Статистика использования (только количество, без сумм)
 app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
-  const stats = getUserStats();
+  const now = new Date();
+  const month = req.query.month ? parseInt(req.query.month) : now.getMonth() + 1;
+  const year  = req.query.year  ? parseInt(req.query.year)  : now.getFullYear();
+  const ym    = `${year}-${String(month).padStart(2, '0')}`;
+
+  const stats   = getUserStats();
   const families = [...new Set(stats.map(u => u.family))];
-  res.json({ totalFamilies: families.length, totalUsers: stats.length, users: stats });
+
+  const familyIncome = {};
+  for (const famId of families) {
+    const cf = getCashflow(ym, famId);
+    familyIncome[famId] = Object.values(cf.incomeDays || {}).reduce((s, v) => s + v, 0);
+  }
+
+  res.json({ totalFamilies: families.length, totalUsers: stats.length, users: stats, familyIncome, month, year });
 });
 
 // Бюджетные настройки конкретной группы (семьи)
