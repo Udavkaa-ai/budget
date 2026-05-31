@@ -661,6 +661,10 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   const prevDate  = new Date(curYear, curMonth - 2, 1);
   const prev      = getFamilySummary(prevDate.getMonth() + 1, prevDate.getFullYear(), false, family);
 
+  // Two months ago
+  const prev2Date = new Date(curYear, curMonth - 3, 1);
+  const prev2     = getFamilySummary(prev2Date.getMonth() + 1, prev2Date.getFullYear(), false, family);
+
   // Budget plan & settings
   const plan     = getBudgetPlan(family);
   const settings = getFamilyBudgetSettings(family);
@@ -680,15 +684,21 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   const catLines  = Object.entries(cur.byCategory)
     .sort(([, a], [, b]) => b - a)
     .map(([cat, amt]) => {
-      const limit  = catLimits[cat];
-      const limTxt = limit ? ` [лимит ${limit.toLocaleString('ru')} ₽${amt > limit ? ' — ⚠️ ПЕРЕРАСХОД' : ''}]` : '';
-      const prevAmt = prev.byCategory[cat] || 0;
-      const delta   = prevAmt ? ` (${amt > prevAmt ? '+' : ''}${((amt - prevAmt) / prevAmt * 100).toFixed(0)}% к прошлому мес.)` : '';
-      return `  ${cat}: ${amt.toLocaleString('ru')} ₽${limTxt}${delta}`;
+      const limit     = catLimits[cat];
+      const limTxt    = limit ? ` [лимит ${limit.toLocaleString('ru')} ₽${amt > limit ? ` — ⚠️ ПЕРЕРАСХОД +${(amt - limit).toLocaleString('ru')} ₽` : ''}]` : '';
+      const prevAmt   = prev.byCategory[cat] || 0;
+      const prev2Amt  = prev2.byCategory[cat] || 0;
+      const d1 = prevAmt  ? ` ${prevAmt.toLocaleString('ru')}→${amt.toLocaleString('ru')}` : '';
+      const d2 = prev2Amt ? `(${prev2Amt.toLocaleString('ru')}→` : '';
+      const trend = prev2Amt && prevAmt
+        ? ` [тренд: ${prev2Amt.toLocaleString('ru')}→${prevAmt.toLocaleString('ru')}→${amt.toLocaleString('ru')}]`
+        : prevAmt ? ` [vs прошлый: ${prevAmt > 0 ? `${amt > prevAmt ? '+' : ''}${((amt - prevAmt) / prevAmt * 100).toFixed(0)}%` : 'новая'}]` : '';
+      return `  ${cat}: ${amt.toLocaleString('ru')} ₽${limTxt}${trend}`;
     }).join('\n');
 
-  // Format per-person rows
+  // Format per-person rows with overspend detail
   const incomes   = plan.userIncomes || {};
+  const familyTotalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
   const personLines = Object.entries(cur.byUser)
     .map(([name, data]) => {
       const inc    = incomes[name] || 0;
@@ -696,11 +706,35 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
       const topCat = Object.entries(data.byCategory || {})
         .sort(([, a], [, b]) => b - a).slice(0, 3)
         .map(([c, a]) => `${c}: ${a.toLocaleString('ru')} ₽`).join(', ');
-      return `  ${name}: ${data.total.toLocaleString('ru')} ₽${pct}\n    Топ: ${topCat}`;
+      // Per-user overspend: categories where their spend > their proportional share of limit
+      const overspendCats = Object.entries(data.byCategory || {})
+        .filter(([cat, userAmt]) => {
+          const lim = catLimits[cat];
+          if (!lim) return false;
+          const share = familyTotalIncome > 0 && inc > 0 ? lim * (inc / familyTotalIncome) : lim;
+          return userAmt > share;
+        })
+        .map(([cat, userAmt]) => {
+          const lim = catLimits[cat];
+          const share = familyTotalIncome > 0 && inc > 0 ? lim * (inc / familyTotalIncome) : lim;
+          return `${cat} (+${(userAmt - share).toLocaleString('ru', { maximumFractionDigits: 0 })} ₽)`;
+        }).join(', ');
+      const prevPerson = prev.byUser[name];
+      const prevTxt = prevPerson ? ` [прошлый мес: ${prevPerson.total.toLocaleString('ru')} ₽]` : '';
+      return `  ${name}: ${data.total.toLocaleString('ru')} ₽${pct}${prevTxt}\n    Топ: ${topCat}${overspendCats ? `\n    ⚠️ Перерасход доли: ${overspendCats}` : ''}`;
     }).join('\n');
 
-  // Previous month category summary
+  // Previous month category summary with 2-month comparison
   const prevCatLines = Object.entries(prev.byCategory)
+    .sort(([, a], [, b]) => b - a).slice(0, 10)
+    .map(([c, a]) => {
+      const p2 = prev2.byCategory[c];
+      const trend = p2 ? ` (${a > p2 ? '+' : ''}${((a - p2) / p2 * 100).toFixed(0)}% к ${prev2.monthName})` : '';
+      return `  ${c}: ${a.toLocaleString('ru')} ₽${trend}`;
+    }).join('\n');
+
+  // Two months ago summary
+  const prev2CatLines = Object.entries(prev2.byCategory)
     .sort(([, a], [, b]) => b - a).slice(0, 8)
     .map(([c, a]) => `  ${c}: ${a.toLocaleString('ru')} ₽`).join('\n');
 
@@ -711,6 +745,9 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   // Planned income total
   const plannedInc = Object.values(incomes).reduce((s, v) => s + v, 0) || settings.plannedMonthly || 0;
 
+  // Spending pace: expected spend by now vs actual
+  const expectedByNow = isCurrentMon && plannedInc > 0 ? Math.round(plannedInc * daysElapsed / daysInMonth) : null;
+
   // Savings analysis
   const sumLimits    = Object.values(catLimits).reduce((s, v) => s + v, 0);
   const plannedSaving = plannedInc > 0 ? plannedInc - sumLimits : null;
@@ -719,22 +756,26 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
 
   // Build report text for the AI
   const reportText = `Семейный бюджет — ${cur.monthName}
-Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}
+Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}${expectedByNow !== null ? `\nТемп трат: ${cur.total.toLocaleString('ru')} ₽ (ожидалось к этому дню ~${expectedByNow.toLocaleString('ru')} ₽ по бюджету)` : ''}
 
 === ДОХОДЫ ===
 Запланировано: ${plannedInc.toLocaleString('ru')} ₽
 ${Object.entries(incomes).map(([n, v]) => `  ${n}: ${v.toLocaleString('ru')} ₽`).join('\n') || '  (не указаны)'}
 Фактически получено (кэшфлоу): ${totalInc > 0 ? totalInc.toLocaleString('ru') + ' ₽' : 'не указано'}
+
 === РАСХОДЫ ${cur.monthName.toUpperCase()} ===
 Итого: ${cur.total.toLocaleString('ru')} ₽${plannedInc ? ` (${Math.round(cur.total / plannedInc * 100)}% от дохода)` : ''}
 Переменные: ${curFix.total.toLocaleString('ru')} ₽
 Постоянные/обязательные: ${(cur.total - curFix.total).toLocaleString('ru')} ₽
-${cur.total > 0 ? `\nПо категориям:\n${catLines}` : ''}
+${cur.total > 0 ? `\nПо категориям (с трендом за 3 месяца):\n${catLines}` : ''}
 ${Object.keys(cur.byUser).length > 0 ? `\nПо участникам:\n${personLines}` : ''}
 
-=== ПРОШЛЫЙ МЕСЯЦ (${prev.monthName}) ===
-Итого: ${prev.total.toLocaleString('ru')} ₽${prev.total && cur.total ? ` (${cur.total > prev.total ? '+' : ''}${((cur.total - prev.total) / prev.total * 100).toFixed(0)}% к прошлому)` : ''}
-${prev.total > 0 ? `По категориям:\n${prevCatLines}` : '(нет данных)'}
+=== ИСТОРИЯ (для анализа трендов) ===
+${prev.monthName}: ${prev.total.toLocaleString('ru')} ₽${prev.total && cur.total ? ` (${cur.total > prev.total ? '+' : ''}${((cur.total - prev.total) / prev.total * 100).toFixed(0)}% к текущему)` : ''}
+${prev.total > 0 ? prevCatLines : '(нет данных)'}
+
+${prev2.monthName}: ${prev2.total.toLocaleString('ru')} ₽
+${prev2.total > 0 ? prev2CatLines : '(нет данных)'}
 
 === ОБЯЗАТЕЛЬНЫЕ ЕЖЕМЕСЯЧНЫЕ РАСХОДЫ ===
 ${fixedList || '  (не указаны)'}
