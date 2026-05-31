@@ -598,7 +598,6 @@ async function loadSummary() {
   });
 
   document.getElementById('summary-month-label').textContent = getMonthName(summaryMonth, summaryYear);
-  document.getElementById('plan-month-label').textContent = getMonthName(summaryMonth, summaryYear);
   document.getElementById('category-detail').classList.add('hidden');
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
@@ -617,12 +616,7 @@ async function loadSummary() {
     const users = Object.keys(data.byUser || {});
     planPartnerName = users.find(u => u !== currentUser.name) || 'Партнёр';
 
-    // Populate income fields
-    const incomes = planData.incomes || {};
-    document.getElementById('plan-label-me').textContent = currentUser.name;
-    document.getElementById('plan-label-partner').textContent = planPartnerName;
-    document.getElementById('plan-income-me').value = incomes[currentUser.name] || '';
-    document.getElementById('plan-income-partner').value = incomes[planPartnerName] || '';
+    // Income values kept in lastPlanData (no longer shown as inputs)
 
     // Populate category budgets table (compact: icon + name + input only)
     renderPlanBreakdown(planData.categoryBudgets || {});
@@ -644,7 +638,12 @@ function renderSummaryView() {
     ? (data.byUser[summaryUserFilter]?.total || 0)
     : data.total;
   const filterLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
-  totalBar.innerHTML = `<span>Итого за месяц${filterLabel}</span><span class="highlight-total">${fmt(displayTotal)}</span>`;
+  const totalIncome = Object.values(lastPlanData?.incomes || {}).reduce((s, v) => s + v, 0);
+  const remaining = totalIncome > 0 ? totalIncome - data.total : null;
+  const remainHtml = remaining !== null
+    ? `<div class="summary-остаток-row"><span>Остаток от плана</span><span class="summary-остаток-amt ${remaining >= 0 ? 'ok' : 'over'}">${fmt(remaining)}</span></div>`
+    : '';
+  totalBar.innerHTML = `<div class="summary-total-main"><span>Итого за месяц${filterLabel}</span><span class="highlight-total">${fmt(displayTotal)}</span></div>${remainHtml}`;
 
   // User chips — clickable filter toggle; show % of income in normal mode
   const incomes = lastPlanData?.incomes || {};
@@ -1112,26 +1111,8 @@ function closeChartFullscreen() {
 let planPartnerName = 'Партнёр';
 
 function updatePlanTotals() {
-  const myIncome = parseInt(document.getElementById('plan-income-me').value) || 0;
-  const partnerIncome = parseInt(document.getElementById('plan-income-partner').value) || 0;
-  const totalIncome = myIncome + partnerIncome;
-  document.getElementById('plan-income-total').textContent = fmt(totalIncome);
-
-  let totalPlanned = 0;
-  document.querySelectorAll('.plan-budget-input').forEach(inp => {
-    totalPlanned += parseInt(inp.value) || 0;
-  });
-
-  const byCategory = lastSummaryData?.byCategory || {};
-  const totalActual = Object.values(byCategory).reduce((s, v) => s + v, 0);
-  const remaining = totalIncome - totalActual;
-
-  document.getElementById('plan-total-planned').textContent = totalPlanned > 0 ? fmt(totalPlanned) : '—';
-  document.getElementById('plan-total-actual').textContent = fmt(totalActual);
-
-  const savingsEl = document.getElementById('plan-savings');
-  savingsEl.textContent = totalIncome > 0 ? fmt(remaining) : '—';
-  savingsEl.className = 'plan-savings-amount ' + (remaining >= 0 ? 'plan-diff-ok' : 'plan-diff-over');
+  // Income inputs removed — nothing to recalculate here
+  // Остаток is shown in the total bar via renderSummaryView
 }
 
 function renderPlanBreakdown(categoryBudgets) {
@@ -1160,10 +1141,8 @@ async function savePlan() {
     if (val > 0) categoryBudgets[inp.dataset.cat] = val;
   });
 
-  const incomes = {
-    [currentUser.name]: parseInt(document.getElementById('plan-income-me').value) || 0,
-    [planPartnerName]: parseInt(document.getElementById('plan-income-partner').value) || 0,
-  };
+  // Preserve existing income values (no longer editable here)
+  const incomes = lastPlanData?.incomes || {};
 
   const btn = document.getElementById('btn-save-plan');
   btn.disabled = true;
@@ -1314,13 +1293,9 @@ async function openAdminPanel(month, year) {
 
   const familyStat = body.querySelector('#admin-families-stat');
   for (const [famId, members] of Object.entries(byFamily)) {
-    const income = stats.familyIncome?.[famId] || 0;
     const block = document.createElement('div');
     block.className = 'admin-family-block';
-    block.innerHTML = `
-      <div class="admin-family-id">${esc(famId)}</div>
-      ${income > 0 ? `<div class="admin-family-income">💰 Доход за период: <strong>${income.toLocaleString('ru')} ₽</strong></div>` : ''}
-    `;
+    block.innerHTML = `<div class="admin-family-id">${esc(famId)}</div>`;
     for (const u of members) {
       const row = document.createElement('div');
       row.className = 'admin-user-row';
@@ -2045,8 +2020,6 @@ function setupEventListeners() {
   });
 
   // Planning
-  document.getElementById('plan-income-me').addEventListener('input', updatePlanTotals);
-  document.getElementById('plan-income-partner').addEventListener('input', updatePlanTotals);
   document.getElementById('btn-save-plan').addEventListener('click', savePlan);
 
   // Invite
@@ -2446,8 +2419,17 @@ async function loadCashflowSection() {
     document.getElementById('cf-cash').value   = cf.cash   || '';
     updateCfTotal();
     renderCfIncomeDays(cf.incomeDays || { '10': 0, '25': 0 });
+    const totalInc = Object.values(cf.incomeDays || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    const incRow = document.getElementById('cf-income-total-row');
+    if (totalInc > 0) {
+      document.getElementById('cf-income-total-amt').textContent = fmt(totalInc);
+      incRow.classList.remove('hidden');
+    } else {
+      incRow.classList.add('hidden');
+    }
   } catch {
     renderCfIncomeDays({ '10': 0, '25': 0 });
+    document.getElementById('cf-income-total-row').classList.add('hidden');
   }
 }
 

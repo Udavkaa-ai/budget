@@ -131,43 +131,9 @@
 
       <div id="summary-plan-section">
         <div class="card summary-plan-card">
-          <div class="settings-title">Плановый доход — <span id="plan-month-label"></span></div>
-          <div class="income-inputs">
-            <div class="income-row">
-              <span class="income-label" id="plan-label-me">Я</span>
-              <input type="number" id="plan-income-me" inputmode="numeric" placeholder="0" min="0" />
-              <span class="income-currency">₽</span>
-            </div>
-            <div class="income-row">
-              <span class="income-label" id="plan-label-partner">Партнёр</span>
-              <input type="number" id="plan-income-partner" inputmode="numeric" placeholder="0" min="0" />
-              <span class="income-currency">₽</span>
-            </div>
-          </div>
-          <div class="income-total-row">
-            <span class="income-total-label">Итого семейный бюджет</span>
-            <span class="income-total-amount" id="plan-income-total">0 ₽</span>
-          </div>
-          <div class="plan-footer" style="margin-top:12px">
-            <div class="plan-footer-row">
-              <span class="plan-footer-label">Запланировано расходов</span>
-              <span id="plan-total-planned">—</span>
-            </div>
-            <div class="plan-footer-row">
-              <span class="plan-footer-label">Потрачено</span>
-              <span id="plan-total-actual">—</span>
-            </div>
-            <div class="plan-footer-row plan-footer-savings">
-              <span class="plan-footer-label">Остаток</span>
-              <span id="plan-savings" class="plan-savings-amount">—</span>
-            </div>
-          </div>
-          <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
-        </div>
-
-        <div class="card summary-plan-card">
           <div class="settings-title">Лимиты по категориям</div>
           <div id="plan-table"></div>
+          <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
         </div>
       </div>
     </div>
@@ -221,6 +187,10 @@
 
         <div class="settings-title" style="margin-top:14px">Дни получения дохода</div>
         <div id="cf-income-days"></div>
+        <div class="cf-income-total-row hidden" id="cf-income-total-row">
+          <span class="cf-income-total-label">Итого доходов за месяц</span>
+          <span id="cf-income-total-amt" class="cf-income-total-amt">0 ₽</span>
+        </div>
         <button id="btn-cf-add-day" class="btn btn-outline" style="margin-top:8px;width:100%">+ Добавить день дохода</button>
 
         <button id="btn-cf-save" class="btn btn-primary btn-full" style="margin-top:14px">Сохранить</button>
