@@ -711,6 +711,12 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   // Planned income total
   const plannedInc = Object.values(incomes).reduce((s, v) => s + v, 0) || settings.plannedMonthly || 0;
 
+  // Savings analysis
+  const sumLimits    = Object.values(catLimits).reduce((s, v) => s + v, 0);
+  const plannedSaving = plannedInc > 0 ? plannedInc - sumLimits : null;
+  const actualRemain  = totalInc   > 0 ? totalInc   - cur.total : null;
+  const savingsDelta  = plannedSaving !== null && actualRemain !== null ? actualRemain - plannedSaving : null;
+
   // Build report text for the AI
   const reportText = `Семейный бюджет — ${cur.monthName}
 Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}
@@ -718,6 +724,7 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
 === ДОХОДЫ ===
 Запланировано: ${plannedInc.toLocaleString('ru')} ₽
 ${Object.entries(incomes).map(([n, v]) => `  ${n}: ${v.toLocaleString('ru')} ₽`).join('\n') || '  (не указаны)'}
+Фактически получено (кэшфлоу): ${totalInc > 0 ? totalInc.toLocaleString('ru') + ' ₽' : 'не указано'}
 === РАСХОДЫ ${cur.monthName.toUpperCase()} ===
 Итого: ${cur.total.toLocaleString('ru')} ₽${plannedInc ? ` (${Math.round(cur.total / plannedInc * 100)}% от дохода)` : ''}
 Переменные: ${curFix.total.toLocaleString('ru')} ₽
@@ -735,7 +742,13 @@ ${fixedList || '  (не указаны)'}
 
 === ПЛАН/ЛИМИТЫ ===
 Плановые расходы на месяц: ${(settings.plannedMonthly || 0).toLocaleString('ru')} ₽
-Лимиты по категориям: ${Object.keys(catLimits).length ? Object.entries(catLimits).map(([c, v]) => `${c}: ${v.toLocaleString('ru')} ₽`).join(', ') : 'не заданы'}`;
+Сумма лимитов по категориям: ${sumLimits.toLocaleString('ru')} ₽
+Лимиты по категориям: ${Object.keys(catLimits).length ? Object.entries(catLimits).map(([c, v]) => `${c}: ${v.toLocaleString('ru')} ₽`).join(', ') : 'не заданы'}
+
+=== СБЕРЕЖЕНИЯ ===
+Плановые сбережения (доход − сумма лимитов): ${plannedSaving !== null ? plannedSaving.toLocaleString('ru') + ' ₽' : 'нет данных'}
+Фактический остаток (фактический доход − расходы): ${actualRemain !== null ? actualRemain.toLocaleString('ru') + ' ₽' : 'нет данных'}${savingsDelta !== null ? `
+Отклонение: ${savingsDelta >= 0 ? '+' : ''}${savingsDelta.toLocaleString('ru')} ₽ (${savingsDelta >= 0 ? 'сберегли больше плана' : 'сберегли меньше плана'})` : ''}`;
 
   try {
     const result = await analyzeFinances(reportText);
