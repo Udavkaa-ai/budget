@@ -1111,8 +1111,21 @@ function closeChartFullscreen() {
 let planPartnerName = 'Партнёр';
 
 function updatePlanTotals() {
-  // Income inputs removed — nothing to recalculate here
-  // Остаток is shown in the total bar via renderSummaryView
+  const totalIncome = Object.values(lastPlanData?.incomes || {}).reduce((s, v) => s + v, 0);
+  let totalLimits = 0;
+  document.querySelectorAll('.plan-budget-input').forEach(inp => {
+    totalLimits += parseInt(inp.value) || 0;
+  });
+  const savings = totalIncome - totalLimits;
+  const el = document.getElementById('plan-savings-calc');
+  if (!el) return;
+  if (totalIncome === 0) {
+    el.textContent = '—';
+    el.className = 'plan-savings-calc';
+  } else {
+    el.textContent = fmt(savings);
+    el.className = 'plan-savings-calc ' + (savings >= 0 ? 'savings-ok' : 'savings-over');
+  }
 }
 
 function renderPlanBreakdown(categoryBudgets) {
@@ -1132,6 +1145,18 @@ function renderPlanBreakdown(categoryBudgets) {
     row.querySelector('input').addEventListener('input', updatePlanTotals);
     table.appendChild(row);
   }
+
+  // Savings row — auto-calculated, read-only
+  const savingsRow = document.createElement('div');
+  savingsRow.className = 'plan-row plan-row--savings';
+  savingsRow.innerHTML = `
+    <span class="plan-cat-icon">🏦</span>
+    <span class="plan-cat-name">Сбережения</span>
+    <span id="plan-savings-calc" class="plan-savings-calc">—</span>
+  `;
+  table.appendChild(savingsRow);
+
+  updatePlanTotals();
 }
 
 async function savePlan() {
