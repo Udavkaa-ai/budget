@@ -1255,16 +1255,20 @@ async function saveFixedExpenses() {
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
 
-async function openAdminPanel() {
+async function openAdminPanel(month, year) {
   document.getElementById('admin-overlay').classList.remove('hidden');
   document.getElementById('admin-panel').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+
+  const now = new Date();
+  const m = month || now.getMonth() + 1;
+  const y = year  || now.getFullYear();
 
   const body = document.getElementById('admin-panel-body');
   body.innerHTML = '<div class="loading">Загрузка…</div>';
 
   const [stats, allUsers] = await Promise.all([
-    apiJson('GET', '/api/admin/stats'),
+    apiJson('GET', `/api/admin/stats?month=${m}&year=${y}`),
     apiJson('GET', '/api/admin/users'),
   ]);
 
@@ -1280,7 +1284,19 @@ async function openAdminPanel() {
     byFamily[u.family].push(u);
   }
 
+  const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const monthOpts = MONTH_NAMES.map((name, i) =>
+    `<option value="${i+1}" ${i+1 === m ? 'selected' : ''}>${name}</option>`
+  ).join('');
+  const yearOpts = [y-1, y, y+1].map(yr =>
+    `<option value="${yr}" ${yr === y ? 'selected' : ''}>${yr}</option>`
+  ).join('');
+
   body.innerHTML = `
+    <div class="admin-month-picker">
+      <select id="admin-sel-month">${monthOpts}</select>
+      <select id="admin-sel-year">${yearOpts}</select>
+    </div>
     <div class="admin-stats-summary">
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalFamilies}</div><div class="admin-stat-label">семей</div></div>
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalUsers}</div><div class="admin-stat-label">пользователей</div></div>
@@ -1289,11 +1305,22 @@ async function openAdminPanel() {
     <div id="admin-families-stat"></div>
   `;
 
+  body.querySelector('#admin-sel-month').addEventListener('change', () => {
+    openAdminPanel(parseInt(body.querySelector('#admin-sel-month').value), parseInt(body.querySelector('#admin-sel-year').value));
+  });
+  body.querySelector('#admin-sel-year').addEventListener('change', () => {
+    openAdminPanel(parseInt(body.querySelector('#admin-sel-month').value), parseInt(body.querySelector('#admin-sel-year').value));
+  });
+
   const familyStat = body.querySelector('#admin-families-stat');
   for (const [famId, members] of Object.entries(byFamily)) {
+    const income = stats.familyIncome?.[famId] || 0;
     const block = document.createElement('div');
     block.className = 'admin-family-block';
-    block.innerHTML = `<div class="admin-family-id">${esc(famId)}</div>`;
+    block.innerHTML = `
+      <div class="admin-family-id">${esc(famId)}</div>
+      ${income > 0 ? `<div class="admin-family-income">💰 Доход за период: <strong>${income.toLocaleString('ru')} ₽</strong></div>` : ''}
+    `;
     for (const u of members) {
       const row = document.createElement('div');
       row.className = 'admin-user-row';
