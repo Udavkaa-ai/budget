@@ -2503,50 +2503,103 @@ async function loadSpeedometer() {
   const container = document.getElementById('bablometr-content');
   const now = new Date();
   const m = now.getMonth() + 1, y = now.getFullYear();
-  const ym = `${y}-${String(m).padStart(2, '0')}`;
   const daysInMonth = new Date(y, m, 0).getDate();
   const daysElapsed = now.getDate();
+  const plannedMonthly = appSettings.plannedMonthly || 0;
+  if (!plannedMonthly) {
+    container.innerHTML = '<div class="empty-state">Укажите плановые расходы в настройках — тогда баблометр заработает</div>';
+    return;
+  }
   try {
-    const [summary, cf] = await Promise.all([
-      apiJson('GET', `/api/summary?month=${m}&year=${y}`),
-      apiJson('GET', `/api/cashflow/${ym}`),
-    ]);
+    const summary = await apiJson('GET', `/api/summary?month=${m}&year=${y}`);
     const spent = summary.total || 0;
-    const plannedInc = Array.isArray(cf.incomeDays)
-      ? cf.incomeDays.reduce((s, e) => s + (e.amount || 0), 0)
-      : Object.values(cf.incomeDays || {}).reduce((s, v) => s + Number(v), 0);
-    if (plannedInc === 0) {
-      container.innerHTML = '<div class="empty-state">Укажите доходы в разделе «График» — тогда баблометр заработает</div>';
-      return;
-    }
-    const expectedByNow = Math.round(plannedInc * daysElapsed / daysInMonth);
-    const pct = expectedByNow > 0 ? spent / expectedByNow : 0;
-    renderSpeedometer(container, spent, expectedByNow, plannedInc, pct, daysElapsed, daysInMonth);
+    const expectedByNow = Math.round(plannedMonthly * daysElapsed / daysInMonth);
+    const ratio = expectedByNow > 0 ? spent / expectedByNow : 0;
+    renderSpeedometer(container, spent, expectedByNow, plannedMonthly, ratio, daysElapsed, daysInMonth);
   } catch {
     container.innerHTML = '<div class="empty-state">Нет данных для баблометра</div>';
   }
 }
 
-function renderSpeedometer(container, spent, expectedByNow, plannedInc, pct, daysElapsed, daysInMonth) {
-  const pctFmt = Math.round(pct * 100);
-  const needlePct = Math.min(pct / 1.5, 1) * 100;
-  const color = pctFmt <= 85 ? '#22c55e' : pctFmt <= 110 ? '#f59e0b' : '#ef4444';
-  const verdict = pctFmt <= 85 ? '🟢 Отличный темп!' : pctFmt <= 110 ? '🟡 В норме' : '🔴 Превышение темпа!';
+function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, ratio, daysElapsed, daysInMonth) {
+  const pctFmt = Math.round(ratio * 100);
+
+  // SVG gauge geometry
+  const CX = 100, CY = 115, R = 82, SW = 18;
+  const START_DEG = 200, END_DEG = 340;
+  // Arc sweep: going clockwise in standard math (counterclockwise in SVG) from 200° through top to 340°
+  const TOTAL_SWEEP = 220; // degrees
+  const SCALE_MAX = 150;   // 150% = max of the gauge scale
+
+  function svgPt(deg, r) {
+    const rad = deg * Math.PI / 180;
+    return [(CX + r * Math.cos(rad)).toFixed(2), (CY - r * Math.sin(rad)).toFixed(2)];
+  }
+
+  // Arc path from startDeg to endDeg, going clockwise in standard math = sweep-flag=0 in SVG
+  function arcPath(startDeg, endDeg, r) {
+    const [x1, y1] = svgPt(startDeg, r);
+    const [x2, y2] = svgPt(endDeg, r);
+    const sweep = ((startDeg - endDeg) + 360) % 360;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 0 ${x2} ${y2}`;
+  }
+
+  // Zone boundaries: angle = START_DEG - (value/SCALE_MAX) * TOTAL_SWEEP
+  const gEnd = START_DEG - (70  / SCALE_MAX) * TOTAL_SWEEP; // end of green zone (at 70%)
+  const yEnd = START_DEG - (90  / SCALE_MAX) * TOTAL_SWEEP; // end of yellow zone (at 90%)
+
+  // Needle position
+  const clamp = Math.min(pctFmt, SCALE_MAX);
+  const needleDeg = START_DEG - (clamp / SCALE_MAX) * TOTAL_SWEEP;
+  const [nx, ny] = svgPt(needleDeg, R - SW / 2 - 2);
+
+  // Filled arc up to current value
+  const valueDeg = needleDeg;
+
+  const color = pctFmt <= 70 ? '#22c55e' : pctFmt <= 90 ? '#f59e0b' : '#ef4444';
+  const verdict = pctFmt <= 70 ? 'Экономим 🟢' : pctFmt <= 90 ? 'В норме 🟡' : 'Перерасход 🔴';
+
   container.innerHTML = `
-    <div class="bablometr-gauge">
-      <div class="bablometr-track">
-        <div class="bablometr-needle" style="left:${needlePct}%"></div>
-      </div>
-      <div class="bablometr-pct-label" style="color:${color}">${pctFmt}%</div>
-    </div>
-    <div class="bablometr-verdict">${verdict}</div>
+    <svg viewBox="0 0 200 148" class="speedometer-svg" aria-label="Баблометр ${pctFmt}%">
+      <!-- Background track -->
+      <path d="${arcPath(START_DEG, END_DEG, R)}" fill="none" stroke="rgba(89,71,224,0.12)" stroke-width="${SW}" stroke-linecap="butt"/>
+      <!-- Green zone (0-70%) -->
+      <path d="${arcPath(START_DEG, gEnd, R)}" fill="none" stroke="#16a34a" stroke-width="${SW}" stroke-linecap="butt" opacity="0.55"/>
+      <!-- Yellow zone (70-90%) -->
+      <path d="${arcPath(gEnd, yEnd, R)}" fill="none" stroke="#d97706" stroke-width="${SW}" stroke-linecap="butt" opacity="0.55"/>
+      <!-- Red zone (90-150%) -->
+      <path d="${arcPath(yEnd, END_DEG, R)}" fill="none" stroke="#dc2626" stroke-width="${SW}" stroke-linecap="butt" opacity="0.55"/>
+      <!-- Filled arc (bright, up to needle) -->
+      <path d="${arcPath(START_DEG, valueDeg, R)}" fill="none" stroke="${color}" stroke-width="${SW - 7}" stroke-linecap="butt"/>
+      <!-- Tick at 70% (green/yellow boundary) -->
+      <line x1="${svgPt(gEnd, R - SW/2 + 3)[0]}" y1="${svgPt(gEnd, R - SW/2 + 3)[1]}"
+            x2="${svgPt(gEnd, R + SW/2 + 1)[0]}" y2="${svgPt(gEnd, R + SW/2 + 1)[1]}"
+            stroke="white" stroke-width="2" opacity="0.5"/>
+      <!-- Tick at 90% (yellow/red boundary) -->
+      <line x1="${svgPt(yEnd, R - SW/2 + 3)[0]}" y1="${svgPt(yEnd, R - SW/2 + 3)[1]}"
+            x2="${svgPt(yEnd, R + SW/2 + 1)[0]}" y2="${svgPt(yEnd, R + SW/2 + 1)[1]}"
+            stroke="white" stroke-width="2" opacity="0.5"/>
+      <!-- Needle -->
+      <line x1="${CX}" y1="${CY}" x2="${nx}" y2="${ny}" stroke="${color}" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
+      <!-- Center hub -->
+      <circle cx="${CX}" cy="${CY}" r="7" fill="rgba(26,21,48,0.15)"/>
+      <circle cx="${CX}" cy="${CY}" r="4" fill="${color}"/>
+      <!-- Percentage -->
+      <text x="${CX}" y="${CY - 20}" text-anchor="middle" fill="${color}" font-size="26" font-weight="800" font-family="Onest,sans-serif">${pctFmt}%</text>
+      <!-- Label -->
+      <text x="${CX}" y="${CY - 6}" text-anchor="middle" fill="rgba(26,21,48,0.5)" font-size="8" font-family="Onest,sans-serif" letter-spacing="0.5">ФАКТ / ПЛАН</text>
+      <!-- Zone labels -->
+      <text x="18" y="143" text-anchor="middle" fill="#16a34a" font-size="7" font-family="Onest,sans-serif">0%</text>
+      <text x="182" y="143" text-anchor="middle" fill="#dc2626" font-size="7" font-family="Onest,sans-serif">150%</text>
+    </svg>
+    <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
     <div class="bablometr-stats">
       <div class="bablometr-stat">
         <span class="bablometr-stat-label">Потрачено</span>
         <span class="bablometr-stat-value">${fmt(spent)}</span>
       </div>
       <div class="bablometr-stat">
-        <span class="bablometr-stat-label">Ожидалось</span>
+        <span class="bablometr-stat-label">По плану</span>
         <span class="bablometr-stat-value">${fmt(expectedByNow)}</span>
       </div>
       <div class="bablometr-stat">
