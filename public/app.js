@@ -2236,60 +2236,6 @@ function setupEventListeners() {
     setTimeout(() => window.location.reload(), 1000);
   });
 
-  // Admin panel — кнопка показа формы создания
-  document.getElementById('btn-admin-add').addEventListener('click', () => {
-    document.getElementById('admin-create-form').classList.remove('hidden');
-    document.getElementById('btn-admin-add').classList.add('hidden');
-    document.getElementById('admin-new-name').focus();
-  });
-
-  document.getElementById('btn-admin-cancel').addEventListener('click', () => {
-    document.getElementById('admin-create-form').classList.add('hidden');
-    document.getElementById('btn-admin-add').classList.remove('hidden');
-    clearAdminForm();
-  });
-
-  // Если выбрана "Новая группа" — заменяем select на текстовый input
-  document.getElementById('admin-new-family').addEventListener('change', (e) => {
-    if (e.target.value !== '__new__') return;
-    const name = prompt('Название новой группы (например: family2):');
-    if (!name?.trim()) { e.target.value = e.target.options[0]?.value || 'family1'; return; }
-    const opt = document.createElement('option');
-    opt.value = name.trim(); opt.textContent = name.trim(); opt.selected = true;
-    e.target.insertBefore(opt, e.target.lastElementChild);
-    e.target.value = name.trim();
-  });
-
-  document.getElementById('btn-admin-create').addEventListener('click', async () => {
-    const name   = document.getElementById('admin-new-name').value.trim();
-    const login  = document.getElementById('admin-new-login').value.trim();
-    const pass   = document.getElementById('admin-new-password').value.trim();
-    const family = document.getElementById('admin-new-family').value;
-    const errEl  = document.getElementById('admin-create-error');
-    errEl.classList.add('hidden');
-
-    if (!name || !login || !pass) {
-      errEl.textContent = 'Заполните имя, логин и пароль';
-      errEl.classList.remove('hidden');
-      return;
-    }
-
-    const btn = document.getElementById('btn-admin-create');
-    btn.disabled = true;
-    const res = await apiJson('POST', '/api/admin/users', { name, login, password: pass, family });
-    btn.disabled = false;
-
-    if (res.ok) {
-      showToastSuccess(`Пользователь ${name} создан`);
-      document.getElementById('admin-create-form').classList.add('hidden');
-      document.getElementById('btn-admin-add').classList.remove('hidden');
-      clearAdminForm();
-      loadAdminUsers();
-    } else {
-      errEl.textContent = res.error || 'Ошибка';
-      errEl.classList.remove('hidden');
-    }
-  });
 }
 
 function clearAdminForm() {
