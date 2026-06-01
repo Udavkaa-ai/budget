@@ -186,6 +186,38 @@
       <div id="cf-chart-container" class="hidden"></div>
     </div>
 
+    <!-- ── GOALS / КОПИЛКИ ──────────────────────────────────────────── -->
+    <div id="screen-goals" class="screen">
+
+      <!-- Баблометр -->
+      <div class="card bablometr-card">
+        <div class="bablometr-title">💸 Баблометр</div>
+        <div id="bablometr-content"><div class="loading">Загрузка...</div></div>
+      </div>
+
+      <!-- Daily feed -->
+      <div class="card feed-card">
+        <div class="feed-title">📥 Внесено сегодня</div>
+        <div id="daily-feed-list"><div class="loading">Загрузка...</div></div>
+      </div>
+
+      <!-- Goals / копилки -->
+      <div class="goals-section">
+        <div class="goals-section-header">
+          <span class="settings-title" style="margin:0">🎯 Копилки</span>
+          <button id="btn-add-goal" class="btn btn-primary btn-sm">+ Новая</button>
+        </div>
+        <div id="goals-list"></div>
+      </div>
+
+      <!-- Family spending overview -->
+      <div class="card family-overview-card">
+        <div class="settings-title">👥 Семейные расходы за месяц</div>
+        <div id="family-overview-list"><div class="loading">Загрузка...</div></div>
+      </div>
+
+    </div>
+
     <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
     <div id="screen-settings" class="screen">
       <div class="settings-list">
@@ -316,6 +348,10 @@
       <span class="nav-icon">⚙️</span>
       <span class="nav-label">Настройки</span>
     </button>
+    <button class="nav-btn" data-screen="goals">
+      <span class="nav-icon">🎯</span>
+      <span class="nav-label">Копилки</span>
+    </button>
   </nav>
 
   <!-- Analysis Report Sheet -->
@@ -397,6 +433,40 @@
           <input type="date" id="form-date" />
         </div>
         <button id="btn-add-form" class="btn btn-primary btn-full">Добавить расход</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Goal Modal (add / contribute) -->
+  <div id="goal-modal-overlay" class="sheet-overlay hidden"></div>
+  <div id="goal-modal" class="bottom-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span id="goal-modal-title" class="sheet-title">Новая копилка</span>
+      <button id="goal-modal-close" class="icon-btn">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div id="goal-add-form">
+        <div class="form-group">
+          <label>Эмодзи</label>
+          <input type="text" id="goal-emoji-input" value="🎯" maxlength="2" class="goal-emoji-input" />
+        </div>
+        <div class="form-group">
+          <label>Название</label>
+          <input type="text" id="goal-name-input" placeholder="Отпуск, iPhone, машина…" />
+        </div>
+        <div class="form-group">
+          <label>Целевая сумма, ₽</label>
+          <input type="number" id="goal-target-input" inputmode="numeric" placeholder="100000" />
+        </div>
+        <button id="btn-goal-create" class="btn btn-primary btn-full">Создать копилку</button>
+      </div>
+      <div id="goal-contribute-form" class="hidden">
+        <div class="form-group">
+          <label>Сумма пополнения, ₽</label>
+          <input type="number" id="goal-contribute-amount" inputmode="numeric" placeholder="1000" />
+        </div>
+        <button id="btn-goal-contribute" class="btn btn-primary btn-full">Пополнить</button>
       </div>
     </div>
   </div>

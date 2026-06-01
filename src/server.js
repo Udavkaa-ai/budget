@@ -40,6 +40,7 @@ import {
   addUser,
   updateUser,
   deleteUser,
+  getTodayFeed,
   getFamilyBudgetSettings,
   saveFamilyBudgetSettings,
   getUserByGoogleId,
@@ -502,8 +503,10 @@ function incomeDayTotals(incomeDays) {
   if (Array.isArray(incomeDays)) {
     const totals = {};
     for (const e of incomeDays) {
-      const d = String(e.day);
-      totals[d] = (totals[d] || 0) + (e.amount || 0);
+      const d = parseInt(e.day);
+      if (!d || d < 1 || d > 31) continue;
+      const dk = String(d);
+      totals[dk] = (totals[dk] || 0) + (e.amount || 0);
     }
     return totals;
   }
@@ -604,6 +607,12 @@ app.get('/api/cashflow-chart/:ym', authMiddleware, async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Ошибка генерации графика' });
   }
+});
+
+// ─── Daily Feed ───────────────────────────────────────────────────────────────
+
+app.get('/api/feed/today', authMiddleware, (req, res) => {
+  res.json(getTodayFeed(req.user.family, req.query.date));
 });
 
 // ─── Unified Chart Data ───────────────────────────────────────────────────────

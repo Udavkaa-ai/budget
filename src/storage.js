@@ -492,6 +492,20 @@ export async function deleteExpense(id, familyId) {
   return deleted;
 }
 
+// ─── Daily Feed ───────────────────────────────────────────────────────────────
+
+export function getTodayFeed(familyId, localDateStr) {
+  const f = fam(familyId);
+  const prefix = localDateStr || new Date().toISOString().slice(0, 10);
+  const entries = (data.expenses || [])
+    .filter(e => fam(e.family) === f && e.createdAt && e.createdAt.startsWith(prefix))
+    .map(({ id, date, category, description, amount, user, isFixed, createdAt }) => ({
+      type: 'expense', id, date, category, description, amount, user, isFixed, createdAt,
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { entries };
+}
+
 // ─── Goals ────────────────────────────────────────────────────────────────────
 
 export function getGoals(familyId) {
@@ -622,7 +636,6 @@ export function getUserStats(month, year) {
       isAdmin: u.isAdmin || false,
       isGoogle: !!u.googleId,
       expenseCount: periodExp.length,
-      expenseTotal: periodExp.reduce((s, e) => s + (e.amount || 0), 0),
       lastDate: lastExp ? lastExp.date.split('.').map((p,i) => i<2 ? p.padStart(2,'0') : p).join('.') : null,
     };
   });
