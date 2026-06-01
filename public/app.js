@@ -2524,73 +2524,76 @@ async function loadSpeedometer() {
 function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, ratio, daysElapsed, daysInMonth) {
   const pctFmt = Math.round(ratio * 100);
 
-  // SVG gauge geometry
-  const CX = 100, CY = 115, R = 82, SW = 18;
-  const START_DEG = 200, END_DEG = 340;
-  // Arc sweep: going clockwise in standard math (counterclockwise in SVG) from 200° through top to 340°
-  const TOTAL_SWEEP = 220; // degrees
-  const SCALE_MAX = 150;   // 150% = max of the gauge scale
+  // SVG angles are measured CLOCKWISE from the right (3 o'clock).
+  // x = cx + r*cos(θ),  y = cy + r*sin(θ)  (y positive = DOWN in SVG)
+  //
+  // Arc layout: starts at 150° (lower-left, ~7 o'clock),
+  //             ends   at  30° (lower-right, ~5 o'clock),
+  //             sweeps 240° clockwise through the top (12 o'clock = 270°).
+  //
+  // 0%→150°  70%→255°  90%→285°  160%→30°
+  const CX = 100, CY = 100, R = 75, SW = 18;
+  const START_A = 150, END_A = 30;
+  const TOTAL_SWEEP = 240; // degrees, clockwise in SVG
+  const SCALE_MAX = 160;
 
-  function svgPt(deg, r) {
+  // SVG point at angle θ (CW from right)
+  function pt(deg, r) {
     const rad = deg * Math.PI / 180;
-    return [(CX + r * Math.cos(rad)).toFixed(2), (CY - r * Math.sin(rad)).toFixed(2)];
+    return [(CX + r * Math.cos(rad)).toFixed(1), (CY + r * Math.sin(rad)).toFixed(1)];
   }
 
-  // Arc path from startDeg to endDeg, going clockwise in standard math = sweep-flag=0 in SVG
-  function arcPath(startDeg, endDeg, r) {
-    const [x1, y1] = svgPt(startDeg, r);
-    const [x2, y2] = svgPt(endDeg, r);
-    const sweep = ((startDeg - endDeg) + 360) % 360;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 0 ${x2} ${y2}`;
+  // Clockwise arc from startDeg to endDeg (sweep-flag = 1)
+  function arc(s, e, r) {
+    const [x1, y1] = pt(s, r);
+    const [x2, y2] = pt(e, r);
+    const sweep = ((e - s) + 360) % 360;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${x2} ${y2}`;
   }
 
-  // Zone boundaries: angle = START_DEG - (value/SCALE_MAX) * TOTAL_SWEEP
-  const gEnd = START_DEG - (70  / SCALE_MAX) * TOTAL_SWEEP; // end of green zone (at 70%)
-  const yEnd = START_DEG - (90  / SCALE_MAX) * TOTAL_SWEEP; // end of yellow zone (at 90%)
+  // Zone boundary angles and needle angle
+  const gEnd = START_A + (70 / SCALE_MAX) * TOTAL_SWEEP;  // 255°
+  const yEnd = START_A + (90 / SCALE_MAX) * TOTAL_SWEEP;  // 285°
+  const needleA = START_A + (Math.min(pctFmt, SCALE_MAX) / SCALE_MAX) * TOTAL_SWEEP;
 
-  // Needle position
-  const clamp = Math.min(pctFmt, SCALE_MAX);
-  const needleDeg = START_DEG - (clamp / SCALE_MAX) * TOTAL_SWEEP;
-  const [nx, ny] = svgPt(needleDeg, R - SW / 2 - 2);
+  // Needle tip sits on the middle of the track
+  const [nx, ny] = pt(needleA, R - SW / 2 - 2);
 
-  // Filled arc up to current value
-  const valueDeg = needleDeg;
+  // Tick mark helper (inner→outer of track)
+  function tick(deg) {
+    const [xi, yi] = pt(deg, R - SW / 2 + 2);
+    const [xo, yo] = pt(deg, R + SW / 2 + 1);
+    return `<line x1="${xi}" y1="${yi}" x2="${xo}" y2="${yo}" stroke="rgba(255,255,255,0.75)" stroke-width="2.5"/>`;
+  }
 
-  const color = pctFmt <= 70 ? '#22c55e' : pctFmt <= 90 ? '#f59e0b' : '#ef4444';
+  const color   = pctFmt <= 70 ? '#22c55e' : pctFmt <= 90 ? '#f59e0b' : '#ef4444';
   const verdict = pctFmt <= 70 ? 'Экономим 🟢' : pctFmt <= 90 ? 'В норме 🟡' : 'Перерасход 🔴';
 
   container.innerHTML = `
-    <svg viewBox="0 0 200 148" class="speedometer-svg" aria-label="Баблометр ${pctFmt}%">
+    <svg viewBox="0 0 200 142" class="speedometer-svg">
       <!-- Background track -->
-      <path d="${arcPath(START_DEG, END_DEG, R)}" fill="none" stroke="rgba(89,71,224,0.12)" stroke-width="${SW}" stroke-linecap="butt"/>
-      <!-- Green zone (0-70%) -->
-      <path d="${arcPath(START_DEG, gEnd, R)}" fill="none" stroke="#16a34a" stroke-width="${SW}" stroke-linecap="butt" opacity="0.55"/>
-      <!-- Yellow zone (70-90%) -->
-      <path d="${arcPath(gEnd, yEnd, R)}" fill="none" stroke="#d97706" stroke-width="${SW}" stroke-linecap="butt" opacity="0.55"/>
-      <!-- Red zone (90-150%) -->
-      <path d="${arcPath(yEnd, END_DEG, R)}" fill="none" stroke="#dc2626" stroke-width="${SW}" stroke-linecap="butt" opacity="0.55"/>
-      <!-- Filled arc (bright, up to needle) -->
-      <path d="${arcPath(START_DEG, valueDeg, R)}" fill="none" stroke="${color}" stroke-width="${SW - 7}" stroke-linecap="butt"/>
-      <!-- Tick at 70% (green/yellow boundary) -->
-      <line x1="${svgPt(gEnd, R - SW/2 + 3)[0]}" y1="${svgPt(gEnd, R - SW/2 + 3)[1]}"
-            x2="${svgPt(gEnd, R + SW/2 + 1)[0]}" y2="${svgPt(gEnd, R + SW/2 + 1)[1]}"
-            stroke="white" stroke-width="2" opacity="0.5"/>
-      <!-- Tick at 90% (yellow/red boundary) -->
-      <line x1="${svgPt(yEnd, R - SW/2 + 3)[0]}" y1="${svgPt(yEnd, R - SW/2 + 3)[1]}"
-            x2="${svgPt(yEnd, R + SW/2 + 1)[0]}" y2="${svgPt(yEnd, R + SW/2 + 1)[1]}"
-            stroke="white" stroke-width="2" opacity="0.5"/>
+      <path d="${arc(START_A, END_A, R)}" fill="none" stroke="rgba(89,71,224,0.14)" stroke-width="${SW}"/>
+      <!-- Green zone 0-70% -->
+      <path d="${arc(START_A, gEnd, R)}" fill="none" stroke="#16a34a" stroke-width="${SW}" opacity="0.55"/>
+      <!-- Yellow zone 70-90% -->
+      <path d="${arc(gEnd, yEnd, R)}" fill="none" stroke="#d97706" stroke-width="${SW}" opacity="0.55"/>
+      <!-- Red zone 90-160% -->
+      <path d="${arc(yEnd, END_A, R)}" fill="none" stroke="#dc2626" stroke-width="${SW}" opacity="0.55"/>
+      <!-- Zone boundary ticks -->
+      ${tick(gEnd)}${tick(yEnd)}
+      <!-- Progress arc (bright, up to needle) -->
+      ${pctFmt > 0 ? `<path d="${arc(START_A, needleA, R)}" fill="none" stroke="${color}" stroke-width="${SW - 8}"/>` : ''}
       <!-- Needle -->
-      <line x1="${CX}" y1="${CY}" x2="${nx}" y2="${ny}" stroke="${color}" stroke-width="3" stroke-linecap="round" opacity="0.95"/>
-      <!-- Center hub -->
-      <circle cx="${CX}" cy="${CY}" r="7" fill="rgba(26,21,48,0.15)"/>
-      <circle cx="${CX}" cy="${CY}" r="4" fill="${color}"/>
-      <!-- Percentage -->
-      <text x="${CX}" y="${CY - 20}" text-anchor="middle" fill="${color}" font-size="26" font-weight="800" font-family="Onest,sans-serif">${pctFmt}%</text>
-      <!-- Label -->
-      <text x="${CX}" y="${CY - 6}" text-anchor="middle" fill="rgba(26,21,48,0.5)" font-size="8" font-family="Onest,sans-serif" letter-spacing="0.5">ФАКТ / ПЛАН</text>
-      <!-- Zone labels -->
-      <text x="18" y="143" text-anchor="middle" fill="#16a34a" font-size="7" font-family="Onest,sans-serif">0%</text>
-      <text x="182" y="143" text-anchor="middle" fill="#dc2626" font-size="7" font-family="Onest,sans-serif">150%</text>
+      <line x1="${CX}" y1="${CY}" x2="${nx}" y2="${ny}" stroke="${color}" stroke-width="3.5" stroke-linecap="round"/>
+      <!-- Hub -->
+      <circle cx="${CX}" cy="${CY}" r="7" fill="rgba(89,71,224,0.1)"/>
+      <circle cx="${CX}" cy="${CY}" r="4"  fill="${color}"/>
+      <!-- Value -->
+      <text x="${CX}" y="${CY - 16}" text-anchor="middle" fill="${color}" font-size="26" font-weight="800" font-family="Onest,sans-serif">${pctFmt}%</text>
+      <text x="${CX}" y="${CY - 2}"  text-anchor="middle" fill="rgba(26,21,48,0.5)" font-size="8" font-family="Onest,sans-serif" letter-spacing="0.6">ФАКТ / ПЛАН</text>
+      <!-- Scale ends -->
+      <text x="26"  y="140" text-anchor="middle" fill="#16a34a" font-size="7.5" font-family="Onest,sans-serif">0%</text>
+      <text x="174" y="140" text-anchor="middle" fill="#dc2626" font-size="7.5" font-family="Onest,sans-serif">160%</text>
     </svg>
     <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
     <div class="bablometr-stats">
