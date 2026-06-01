@@ -368,6 +368,10 @@ function initSocket() {
     if (currentScreen === 'summary') loadSummary();
   });
 
+  socket.on('goals:updated', () => {
+    if (currentScreen === 'goals') loadGoalsList();
+  });
+
   socket.on('connect_error', (err) => {
     console.warn('Socket error:', err.message);
   });
@@ -380,6 +384,7 @@ const SCREEN_TITLES = {
   summary: 'Месяц',
   chart: 'График',
   settings: 'Настройки',
+  goals: 'Копилки',
 };
 
 let currentScreen = 'budget';
@@ -410,6 +415,7 @@ function loadScreen(name) {
     case 'summary': loadSummary(); break;
     case 'chart': loadChart(); loadCashflowSection(); break;
     case 'settings': loadSettingsScreen(); break;
+    case 'goals': loadGoalsScreen(); break;
   }
 }
 
@@ -430,7 +436,7 @@ async function loadBudget() {
 
   try {
     const data = await apiJson('GET', `/api/expenses/family?date=${dateStr}`);
-    if (gen !== budgetGen) return; // устаревший ответ — выбрасываем
+    if (gen !== budgetGen) { list.style.opacity = ''; return; } // устаревший ответ — выбрасываем
     list.style.opacity = '';
 
     const byUser = data.byUser || {};
@@ -1905,6 +1911,7 @@ async function initApp() {
   initSocket();
   initCategoryGrid();
   setupEventListeners();
+  initGoalsScreen();
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
@@ -2238,13 +2245,6 @@ function setupEventListeners() {
 
 }
 
-function clearAdminForm() {
-  ['admin-new-name','admin-new-login','admin-new-password'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-  document.getElementById('admin-create-error').classList.add('hidden');
-}
-
 function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
   let startX = 0, startY = 0, active = false, transitioning = false;
 
@@ -2369,21 +2369,21 @@ function renderCfMemberBlocks(cf, users) {
     const block = document.createElement('div');
     block.className = 'cf-member-block';
     block.innerHTML = `
-      <div class="cf-member-name">${user.name}</div>
+      <div class="cf-member-name">${esc(user.name)}</div>
       <div class="cf-balance-grid">
         <div class="form-group">
           <label>Дебетовая</label>
-          <input type="number" class="cf-member-input" data-user="${user.name}" data-field="debit"
+          <input type="number" class="cf-member-input" data-user="${esc(user.name)}" data-field="debit"
             inputmode="numeric" placeholder="0" value="${m.debit || ''}" />
         </div>
         <div class="form-group">
           <label>Кредитная</label>
-          <input type="number" class="cf-member-input" data-user="${user.name}" data-field="credit"
+          <input type="number" class="cf-member-input" data-user="${esc(user.name)}" data-field="credit"
             inputmode="numeric" placeholder="0" value="${m.credit || ''}" />
         </div>
         <div class="form-group">
           <label>Сбережения</label>
-          <input type="number" class="cf-member-input" data-user="${user.name}" data-field="savings"
+          <input type="number" class="cf-member-input" data-user="${esc(user.name)}" data-field="savings"
             inputmode="numeric" placeholder="0" value="${m.savings || ''}" />
         </div>
       </div>`;
@@ -2415,7 +2415,7 @@ function makeCfDayRow(day, amt, user) {
   const row = document.createElement('div');
   row.className = 'cf-day-row';
   const opts = cfUserNames.map(n =>
-    `<option value="${n}"${n === user ? ' selected' : ''}>${n}</option>`
+    `<option value="${esc(n)}"${n === user ? ' selected' : ''}>${esc(n)}</option>`
   ).join('');
   row.innerHTML = `
     <select class="cf-day-user">${opts}</select>
@@ -2450,6 +2450,7 @@ async function loadCashflowSection() {
       incRow.classList.add('hidden');
     }
   } catch {
+    showToastError('Ошибка загрузки кэшфлоу');
     const fallbackUsers = currentUser ? [{ name: currentUser.name }] : [];
     renderCfMemberBlocks({}, fallbackUsers);
     renderCfIncomeDays([], fallbackUsers);
@@ -2463,7 +2464,7 @@ async function saveCashflow() {
     const user = row.querySelector('.cf-day-user')?.value || '';
     const day  = parseInt(row.querySelector('.cf-day-num').value) || 0;
     const amt  = parseInt(row.querySelector('.cf-day-amt').value) || 0;
-    if (day > 0 && amt > 0) incomeDays.push({ day, user, amount: amt });
+    if (day >= 1 && day <= 31 && amt > 0) incomeDays.push({ day, user, amount: amt });
   });
 
   const members = {};
@@ -2487,6 +2488,269 @@ async function saveCashflow() {
   } finally {
     btn.disabled = false; btn.textContent = 'Сохранить';
   }
+}
+
+// ─── GOALS / КОПИЛКИ SCREEN ──────────────────────────────────────────────────
+
+async function loadGoalsScreen() {
+  loadSpeedometer();
+  loadDailyFeed();
+  loadGoalsList();
+  loadFamilyOverview();
+}
+
+async function loadSpeedometer() {
+  const container = document.getElementById('bablometr-content');
+  const now = new Date();
+  const m = now.getMonth() + 1, y = now.getFullYear();
+  const ym = `${y}-${String(m).padStart(2, '0')}`;
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const daysElapsed = now.getDate();
+  try {
+    const [summary, cf] = await Promise.all([
+      apiJson('GET', `/api/summary?month=${m}&year=${y}`),
+      apiJson('GET', `/api/cashflow/${ym}`),
+    ]);
+    const spent = summary.total || 0;
+    const plannedInc = Array.isArray(cf.incomeDays)
+      ? cf.incomeDays.reduce((s, e) => s + (e.amount || 0), 0)
+      : Object.values(cf.incomeDays || {}).reduce((s, v) => s + Number(v), 0);
+    if (plannedInc === 0) {
+      container.innerHTML = '<div class="empty-state">Укажите доходы в разделе «График» — тогда баблометр заработает</div>';
+      return;
+    }
+    const expectedByNow = Math.round(plannedInc * daysElapsed / daysInMonth);
+    const pct = expectedByNow > 0 ? spent / expectedByNow : 0;
+    renderSpeedometer(container, spent, expectedByNow, plannedInc, pct, daysElapsed, daysInMonth);
+  } catch {
+    container.innerHTML = '<div class="empty-state">Нет данных для баблометра</div>';
+  }
+}
+
+function renderSpeedometer(container, spent, expectedByNow, plannedInc, pct, daysElapsed, daysInMonth) {
+  const pctFmt = Math.round(pct * 100);
+  const needlePct = Math.min(pct / 1.5, 1) * 100;
+  const color = pctFmt <= 85 ? '#22c55e' : pctFmt <= 110 ? '#f59e0b' : '#ef4444';
+  const verdict = pctFmt <= 85 ? '🟢 Отличный темп!' : pctFmt <= 110 ? '🟡 В норме' : '🔴 Превышение темпа!';
+  container.innerHTML = `
+    <div class="bablometr-gauge">
+      <div class="bablometr-track">
+        <div class="bablometr-needle" style="left:${needlePct}%"></div>
+      </div>
+      <div class="bablometr-pct-label" style="color:${color}">${pctFmt}%</div>
+    </div>
+    <div class="bablometr-verdict">${verdict}</div>
+    <div class="bablometr-stats">
+      <div class="bablometr-stat">
+        <span class="bablometr-stat-label">Потрачено</span>
+        <span class="bablometr-stat-value">${fmt(spent)}</span>
+      </div>
+      <div class="bablometr-stat">
+        <span class="bablometr-stat-label">Ожидалось</span>
+        <span class="bablometr-stat-value">${fmt(expectedByNow)}</span>
+      </div>
+      <div class="bablometr-stat">
+        <span class="bablometr-stat-label">Дней</span>
+        <span class="bablometr-stat-value">${daysElapsed} из ${daysInMonth}</span>
+      </div>
+    </div>`;
+}
+
+async function loadDailyFeed() {
+  const list = document.getElementById('daily-feed-list');
+  const today = new Date();
+  const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  try {
+    const data = await apiJson('GET', `/api/feed/today?date=${localDate}`);
+    renderDailyFeed(list, data.entries || []);
+  } catch {
+    list.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+  }
+}
+
+function renderDailyFeed(container, entries) {
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="empty-state">Ничего не внесено сегодня</div>';
+    return;
+  }
+  const todayStr = formatDate(new Date());
+  container.innerHTML = entries.map(e => {
+    const icon = CATEGORY_ICONS[e.category] || '❓';
+    const desc = esc(e.description || e.category);
+    const pastTag = e.date !== todayStr ? ` <span class="feed-past-date">${formatDayMonth(e.date)}</span>` : '';
+    return `<div class="feed-entry">
+      <span class="feed-icon">${icon}</span>
+      <span class="feed-desc">${desc}${pastTag}</span>
+      <span class="feed-user">${esc(e.user)}</span>
+      <span class="feed-amount">${fmt(e.amount)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function loadGoalsList() {
+  const container = document.getElementById('goals-list');
+  try {
+    const goals = await apiJson('GET', '/api/goals');
+    renderGoals(container, goals);
+  } catch {
+    container.innerHTML = '<div class="empty-state" style="background:var(--card);padding:14px 16px;border-radius:var(--radius-sm)">Ошибка загрузки целей</div>';
+  }
+}
+
+function renderGoals(container, goals) {
+  if (goals.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="background:var(--card);padding:14px 16px;border-radius:var(--radius-sm)">Нет копилок. Нажмите «+ Новая» чтобы создать!</div>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const goal of goals) {
+    const current = (goal.contributions || []).reduce((s, c) => s + (c.amount || 0), 0);
+    const pct = goal.targetAmount > 0 ? Math.min(current / goal.targetAmount * 100, 100) : 0;
+    const done = pct >= 100;
+    const card = document.createElement('div');
+    card.className = 'goal-card card';
+    card.innerHTML = `
+      <div class="goal-header">
+        <span class="goal-emoji">${goal.emoji || '🎯'}</span>
+        <div class="goal-info">
+          <div class="goal-name">${esc(goal.name)}</div>
+          <div class="goal-amounts">${fmt(current)} из ${fmt(goal.targetAmount)}</div>
+        </div>
+        <span class="goal-pct">${Math.round(pct)}%</span>
+      </div>
+      <div class="goal-progress">
+        <div class="goal-progress-fill${done ? ' done' : ''}" style="width:${pct}%"></div>
+      </div>
+      <div class="goal-actions">
+        <button class="btn btn-primary btn-sm" data-action="contribute">+ Пополнить</button>
+        <button class="btn btn-ghost btn-sm" data-action="delete">Удалить</button>
+      </div>`;
+    card.querySelector('[data-action="contribute"]').addEventListener('click', () => openGoalContribute(goal));
+    card.querySelector('[data-action="delete"]').addEventListener('click', () => deleteGoalById(goal.id));
+    container.appendChild(card);
+  }
+}
+
+let goalContributeId = null;
+
+function openGoalModal(mode, goal = null) {
+  document.getElementById('goal-add-form').classList.toggle('hidden', mode !== 'add');
+  document.getElementById('goal-contribute-form').classList.toggle('hidden', mode !== 'contribute');
+  document.getElementById('goal-modal-title').textContent = mode === 'add' ? 'Новая копилка' : `Пополнить: ${goal?.name || ''}`;
+  document.getElementById('goal-modal-overlay').classList.remove('hidden');
+  document.getElementById('goal-modal').classList.add('open');
+  if (mode === 'add') {
+    document.getElementById('goal-name-input').value = '';
+    document.getElementById('goal-target-input').value = '';
+    document.getElementById('goal-emoji-input').value = '🎯';
+  } else {
+    document.getElementById('goal-contribute-amount').value = '';
+    goalContributeId = goal?.id || null;
+  }
+}
+
+function closeGoalModal() {
+  document.getElementById('goal-modal-overlay').classList.add('hidden');
+  document.getElementById('goal-modal').classList.remove('open');
+  goalContributeId = null;
+}
+
+function openGoalContribute(goal) {
+  openGoalModal('contribute', goal);
+}
+
+async function createGoal() {
+  const name = document.getElementById('goal-name-input').value.trim();
+  const target = parseInt(document.getElementById('goal-target-input').value) || 0;
+  const emoji = document.getElementById('goal-emoji-input').value.trim() || '🎯';
+  if (!name || target <= 0) { showToastError('Укажите название и сумму'); return; }
+  const btn = document.getElementById('btn-goal-create');
+  btn.disabled = true;
+  try {
+    await apiJson('POST', '/api/goals', { name, targetAmount: target, emoji });
+    closeGoalModal();
+    loadGoalsList();
+    showToastSuccess('Копилка создана!');
+  } catch {
+    showToastError('Ошибка создания');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function contributeToGoal() {
+  if (!goalContributeId) return;
+  const amount = parseInt(document.getElementById('goal-contribute-amount').value) || 0;
+  if (amount <= 0) { showToastError('Укажите сумму'); return; }
+  const btn = document.getElementById('btn-goal-contribute');
+  btn.disabled = true;
+  try {
+    await apiJson('POST', `/api/goals/${goalContributeId}/contribute`, { amount });
+    closeGoalModal();
+    loadGoalsList();
+    showToastSuccess('Пополнено!');
+  } catch {
+    showToastError('Ошибка пополнения');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteGoalById(id) {
+  if (!confirm('Удалить копилку?')) return;
+  try {
+    await apiJson('DELETE', `/api/goals/${id}`);
+    loadGoalsList();
+    showToastSuccess('Копилка удалена');
+  } catch {
+    showToastError('Ошибка удаления');
+  }
+}
+
+async function loadFamilyOverview() {
+  const container = document.getElementById('family-overview-list');
+  const now = new Date();
+  const m = now.getMonth() + 1, y = now.getFullYear();
+  try {
+    const summary = await apiJson('GET', `/api/summary?month=${m}&year=${y}`);
+    renderFamilyOverview(container, summary);
+  } catch {
+    container.innerHTML = '<div class="empty-state">Нет данных</div>';
+  }
+}
+
+function renderFamilyOverview(container, summary) {
+  const byUser = summary.byUser || {};
+  const users = Object.entries(byUser).sort(([, a], [, b]) => (b.total || 0) - (a.total || 0));
+  if (users.length === 0) {
+    container.innerHTML = '<div class="empty-state">Нет расходов за этот месяц</div>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const [userName, udata] of users) {
+    const topCats = Object.entries(udata.byCategory || {})
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([cat, amt]) => `${CATEGORY_ICONS[cat] || '❓'} ${fmt(amt)}`)
+      .join(' · ');
+    const row = document.createElement('div');
+    row.className = 'family-overview-row';
+    row.innerHTML = `
+      <div class="family-ov-top">
+        <span class="family-ov-name">${esc(userName)}</span>
+        <span class="family-ov-total">${fmt(udata.total || 0)}</span>
+      </div>
+      ${topCats ? `<div class="family-ov-cats">${topCats}</div>` : ''}`;
+    container.appendChild(row);
+  }
+}
+
+function initGoalsScreen() {
+  document.getElementById('btn-add-goal').addEventListener('click', () => openGoalModal('add'));
+  document.getElementById('goal-modal-close').addEventListener('click', closeGoalModal);
+  document.getElementById('goal-modal-overlay').addEventListener('click', closeGoalModal);
+  document.getElementById('btn-goal-create').addEventListener('click', createGoal);
+  document.getElementById('btn-goal-contribute').addEventListener('click', contributeToGoal);
 }
 
 // ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
