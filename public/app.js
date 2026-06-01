@@ -1327,9 +1327,9 @@ async function openAdminPanel(month, year) {
       row.innerHTML = `
         <div class="admin-user-info">
           <div class="admin-user-name">${esc(u.name)} ${u.isGoogle ? '<span class="admin-badge-google">G</span>' : ''} ${u.isAdmin ? '<span class="admin-badge-admin">admin</span>' : ''}</div>
-          <div class="admin-user-meta">${esc(u.login)}${u.lastDate ? ` · последний расход ${u.lastDate}` : ''}</div>
+          <div class="admin-user-meta">${esc(u.login)}${u.lastDate ? ` · последний ${u.lastDate}` : ''}</div>
         </div>
-        <span class="admin-stat-entries">${u.expenseCount} зап.</span>
+        <span class="admin-stat-entries">${u.expenseCount} зап.${u.expenseTotal > 0 ? ' · ' + fmt(u.expenseTotal) : ''}</span>
         <button class="admin-user-del" title="Удалить"
           ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
       `;
@@ -2137,7 +2137,7 @@ function setupEventListeners() {
 
   // Cashflow
   document.getElementById('btn-cf-add-day').addEventListener('click', () => {
-    document.getElementById('cf-income-days').appendChild(makeCfDayRow('', 0));
+    document.getElementById('cf-income-days').appendChild(makeCfDayRow('', 0, currentUser?.name || ''));
   });
   document.getElementById('btn-cf-save').addEventListener('click', saveCashflow);
 
@@ -2393,19 +2393,33 @@ function renderCfMemberBlocks(cf, users) {
   updateCfTotal();
 }
 
-function renderCfIncomeDays(incomeDays) {
+let cfUserNames = [];
+
+function renderCfIncomeDays(incomeDays, users) {
+  cfUserNames = (users || []).map(u => u.name || u);
   const container = document.getElementById('cf-income-days');
   container.innerHTML = '';
-  for (const [day, amt] of Object.entries(incomeDays)) {
-    container.appendChild(makeCfDayRow(day, amt));
+  if (Array.isArray(incomeDays)) {
+    for (const e of incomeDays) {
+      container.appendChild(makeCfDayRow(e.day || '', e.amount || 0, e.user || ''));
+    }
+  } else {
+    // backward compat: old dict format, assign to current user
+    for (const [day, amt] of Object.entries(incomeDays)) {
+      container.appendChild(makeCfDayRow(day, amt, currentUser?.name || ''));
+    }
   }
 }
 
-function makeCfDayRow(day, amt) {
+function makeCfDayRow(day, amt, user) {
   const row = document.createElement('div');
   row.className = 'cf-day-row';
+  const opts = cfUserNames.map(n =>
+    `<option value="${n}"${n === user ? ' selected' : ''}>${n}</option>`
+  ).join('');
   row.innerHTML = `
-    <span class="cf-day-label">День</span>
+    <select class="cf-day-user">${opts}</select>
+    <span class="cf-day-label">д.</span>
     <input class="cf-day-num" type="number" value="${day}" min="1" max="31" inputmode="numeric" />
     <input class="cf-day-amt" type="number" value="${amt || ''}" placeholder="0" inputmode="numeric" />
     <span class="cf-day-currency">₽</span>
@@ -2422,9 +2436,12 @@ async function loadCashflowSection() {
       apiJson('GET', `/api/cashflow/${ym}`),
       apiJson('GET', '/api/users'),
     ]);
-    renderCfMemberBlocks(cf, users.length ? users : [{ name: currentUser?.name || 'Я' }]);
-    renderCfIncomeDays(cf.incomeDays || { '10': 0, '25': 0 });
-    const totalInc = Object.values(cf.incomeDays || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+    const cfUsers = users.length ? users : [{ name: currentUser?.name || 'Я' }];
+    renderCfMemberBlocks(cf, cfUsers);
+    renderCfIncomeDays(cf.incomeDays || [], cfUsers);
+    const totalInc = Array.isArray(cf.incomeDays)
+      ? cf.incomeDays.reduce((s, e) => s + (e.amount || 0), 0)
+      : Object.values(cf.incomeDays || {}).reduce((s, v) => s + (Number(v) || 0), 0);
     const incRow = document.getElementById('cf-income-total-row');
     if (totalInc > 0) {
       document.getElementById('cf-income-total-amt').textContent = fmt(totalInc);
@@ -2433,18 +2450,20 @@ async function loadCashflowSection() {
       incRow.classList.add('hidden');
     }
   } catch {
-    renderCfMemberBlocks({}, currentUser ? [{ name: currentUser.name }] : []);
-    renderCfIncomeDays({ '10': 0, '25': 0 });
+    const fallbackUsers = currentUser ? [{ name: currentUser.name }] : [];
+    renderCfMemberBlocks({}, fallbackUsers);
+    renderCfIncomeDays([], fallbackUsers);
     document.getElementById('cf-income-total-row').classList.add('hidden');
   }
 }
 
 async function saveCashflow() {
-  const incomeDays = {};
+  const incomeDays = [];
   document.querySelectorAll('.cf-day-row').forEach(row => {
-    const day = row.querySelector('.cf-day-num').value.trim();
-    const amt = parseInt(row.querySelector('.cf-day-amt').value) || 0;
-    if (day && amt > 0) incomeDays[day] = (incomeDays[day] || 0) + amt;
+    const user = row.querySelector('.cf-day-user')?.value || '';
+    const day  = parseInt(row.querySelector('.cf-day-num').value) || 0;
+    const amt  = parseInt(row.querySelector('.cf-day-amt').value) || 0;
+    if (day > 0 && amt > 0) incomeDays.push({ day, user, amount: amt });
   });
 
   const members = {};

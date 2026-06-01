@@ -415,13 +415,13 @@ app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
   const year  = req.query.year  ? parseInt(req.query.year)  : now.getFullYear();
   const ym    = `${year}-${String(month).padStart(2, '0')}`;
 
-  const stats   = getUserStats();
+  const stats   = getUserStats(month, year);
   const families = [...new Set(stats.map(u => u.family))];
 
   const familyIncome = {};
   for (const famId of families) {
     const cf = getCashflow(ym, famId);
-    familyIncome[famId] = Object.values(cf.incomeDays || {}).reduce((s, v) => s + v, 0);
+    familyIncome[famId] = incomeDayTotal(cf.incomeDays);
   }
 
   res.json({ totalFamilies: families.length, totalUsers: stats.length, users: stats, familyIncome, month, year });
@@ -497,6 +497,27 @@ function cfStartBalance(cf) {
   return (cf.debit||0) + (cf.credit||0) + (cf.cash||0);
 }
 
+// Normalize incomeDays to { "day": totalAmount } dict (supports both old dict and new array format)
+function incomeDayTotals(incomeDays) {
+  if (Array.isArray(incomeDays)) {
+    const totals = {};
+    for (const e of incomeDays) {
+      const d = String(e.day);
+      totals[d] = (totals[d] || 0) + (e.amount || 0);
+    }
+    return totals;
+  }
+  return incomeDays || {};
+}
+
+// Total income for the month
+function incomeDayTotal(incomeDays) {
+  if (Array.isArray(incomeDays)) {
+    return incomeDays.reduce((s, e) => s + (e.amount || 0), 0);
+  }
+  return Object.values(incomeDays || {}).reduce((s, v) => s + v, 0);
+}
+
 app.get('/api/cashflow/:ym', authMiddleware, (req, res) => {
   res.json(getCashflow(req.params.ym, req.user.family));
 });
@@ -513,12 +534,12 @@ app.get('/api/cashflow-chart/:ym', authMiddleware, async (req, res) => {
 
   const cf = getCashflow(ym, req.user.family);
   const startBalance = cfStartBalance(cf);
-  if (!startBalance && !Object.keys(cf.incomeDays || {}).length) {
+  const incomeDays = incomeDayTotals(cf.incomeDays);
+  if (!startBalance && !Object.keys(incomeDays).length) {
     return res.status(400).json({ error: 'Нет данных баланса. Заполните поля и сохраните.' });
   }
 
   const dailyTotals = getMonthDailyTotals(month, year, req.user.family);
-  const incomeDays = cf.incomeDays || {};
 
   const now = new Date();
   const isCurrentMonth = now.getMonth() + 1 === month && now.getFullYear() === year;
@@ -602,7 +623,7 @@ app.get('/api/unified-chart-data/:ym', authMiddleware, (req, res) => {
   // Cashflow data
   const cf = getCashflow(ym, family);
   const startBalance = cfStartBalance(cf);
-  const incomeDays = cf.incomeDays || {};
+  const incomeDays = incomeDayTotals(cf.incomeDays);
   const hasBalance = startBalance > 0 || Object.keys(incomeDays).length > 0;
 
   // Days to show: 1 through yesterday (current month) or full month
@@ -680,7 +701,7 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   // Cashflow income (поступления по дням, баланс не используем)
   const ym      = `${curYear}-${String(curMonth).padStart(2, '0')}`;
   const cf      = getCashflow(ym, family);
-  const totalInc = Object.values(cf.incomeDays || {}).reduce((s, v) => s + v, 0);
+  const totalInc = incomeDayTotal(cf.incomeDays);
 
   // Days context
   const daysInMonth  = new Date(curYear, curMonth, 0).getDate();
