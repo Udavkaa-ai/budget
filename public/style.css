@@ -1634,6 +1634,22 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════ CASHFLOW ══ */
+.cf-member-block {
+  margin-bottom: 12px;
+}
+.cf-member-block:not(:last-child) {
+  border-bottom: 1px solid rgba(89,71,224,0.08);
+  padding-bottom: 12px;
+}
+.cf-member-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
 .cf-balance-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

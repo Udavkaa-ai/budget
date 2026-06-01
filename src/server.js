@@ -489,6 +489,14 @@ app.put('/api/budget-plan', authMiddleware, async (req, res) => {
 
 // ─── Cashflow Routes ──────────────────────────────────────────────────────────
 
+// Sum balance across all members (new format) or fall back to old flat fields
+function cfStartBalance(cf) {
+  if (cf.members && Object.keys(cf.members).length > 0) {
+    return Object.values(cf.members).reduce((s, m) => s + (m.debit||0) + (m.credit||0) + (m.savings||0), 0);
+  }
+  return (cf.debit||0) + (cf.credit||0) + (cf.cash||0);
+}
+
 app.get('/api/cashflow/:ym', authMiddleware, (req, res) => {
   res.json(getCashflow(req.params.ym, req.user.family));
 });
@@ -504,7 +512,7 @@ app.get('/api/cashflow-chart/:ym', authMiddleware, async (req, res) => {
   const year = parseInt(yearStr), month = parseInt(monthStr);
 
   const cf = getCashflow(ym, req.user.family);
-  const startBalance = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
+  const startBalance = cfStartBalance(cf);
   if (!startBalance && !Object.keys(cf.incomeDays || {}).length) {
     return res.status(400).json({ error: 'Нет данных баланса. Заполните поля и сохраните.' });
   }
@@ -593,7 +601,7 @@ app.get('/api/unified-chart-data/:ym', authMiddleware, (req, res) => {
 
   // Cashflow data
   const cf = getCashflow(ym, family);
-  const startBalance = (cf.debit || 0) + (cf.credit || 0) + (cf.cash || 0);
+  const startBalance = cfStartBalance(cf);
   const incomeDays = cf.incomeDays || {};
   const hasBalance = startBalance > 0 || Object.keys(incomeDays).length > 0;
 
