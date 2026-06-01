@@ -2532,7 +2532,7 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
   //             sweeps 240° clockwise through the top (12 o'clock = 270°).
   //
   // 0%→150°  70%→255°  90%→285°  160%→30°
-  const CX = 100, CY = 100, R = 75, SW = 18;
+  const CX = 100, CY = 112, R = 75, SW = 18;
   const START_A = 150, END_A = 30;
   const TOTAL_SWEEP = 240; // degrees, clockwise in SVG
   const SCALE_MAX = 160;
@@ -2566,11 +2566,20 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
     return `<line x1="${xi}" y1="${yi}" x2="${xo}" y2="${yo}" stroke="rgba(255,255,255,0.75)" stroke-width="2.5"/>`;
   }
 
+  // Label position: outside arc track
+  function labelPt(deg) { return pt(deg, R + SW / 2 + 14); }
+
   const color   = pctFmt <= 70 ? '#22c55e' : pctFmt <= 90 ? '#f59e0b' : '#ef4444';
   const verdict = pctFmt <= 70 ? 'Экономим 🟢' : pctFmt <= 90 ? 'В норме 🟡' : 'Перерасход 🔴';
+  const labelFill = 'rgba(26,21,48,0.65)';
+
+  const [l0x, l0y]   = labelPt(START_A);   // 0%   at 150° (lower-left)
+  const [l70x, l70y] = labelPt(gEnd);      // 70%  at 255° (upper-left)
+  const [l90x, l90y] = labelPt(yEnd);      // 90%  at 285° (upper-right)
+  const [l160x, l160y] = labelPt(END_A);   // 160% at 30°  (lower-right)
 
   container.innerHTML = `
-    <svg viewBox="0 0 200 142" class="speedometer-svg">
+    <svg viewBox="0 0 200 178" class="speedometer-svg">
       <!-- Background track -->
       <path d="${arc(START_A, END_A, R)}" fill="none" stroke="rgba(89,71,224,0.14)" stroke-width="${SW}"/>
       <!-- Green zone 0-70% -->
@@ -2591,9 +2600,11 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
       <!-- Value -->
       <text x="${CX}" y="${CY - 16}" text-anchor="middle" fill="${color}" font-size="26" font-weight="800" font-family="Onest,sans-serif">${pctFmt}%</text>
       <text x="${CX}" y="${CY - 2}"  text-anchor="middle" fill="rgba(26,21,48,0.5)" font-size="8" font-family="Onest,sans-serif" letter-spacing="0.6">ФАКТ / ПЛАН</text>
-      <!-- Scale ends -->
-      <text x="26"  y="140" text-anchor="middle" fill="#16a34a" font-size="7.5" font-family="Onest,sans-serif">0%</text>
-      <text x="174" y="140" text-anchor="middle" fill="#dc2626" font-size="7.5" font-family="Onest,sans-serif">160%</text>
+      <!-- Scale labels outside arc track -->
+      <text x="${l0x}"   y="${l0y}"   text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">0%</text>
+      <text x="${l70x}"  y="${l70y}"  text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">70%</text>
+      <text x="${l90x}"  y="${l90y}"  text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">90%</text>
+      <text x="${l160x}" y="${l160y}" text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">160%</text>
     </svg>
     <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
     <div class="bablometr-stats">
