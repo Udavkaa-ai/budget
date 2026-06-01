@@ -2137,9 +2137,6 @@ function setupEventListeners() {
   });
 
   // Cashflow
-  ['cf-debit','cf-credit','cf-cash'].forEach(id =>
-    document.getElementById(id).addEventListener('input', updateCfTotal)
-  );
   document.getElementById('btn-cf-add-day').addEventListener('click', () => {
     document.getElementById('cf-income-days').appendChild(makeCfDayRow('', 0));
   });
@@ -2407,10 +2404,48 @@ function cfYm() {
 }
 
 function updateCfTotal() {
-  const debit  = parseInt(document.getElementById('cf-debit').value)  || 0;
-  const credit = parseInt(document.getElementById('cf-credit').value) || 0;
-  const cash   = parseInt(document.getElementById('cf-cash').value)   || 0;
-  document.getElementById('cf-total').textContent = fmt(debit + credit + cash);
+  let total = 0;
+  document.querySelectorAll('.cf-member-input').forEach(inp => {
+    total += parseInt(inp.value) || 0;
+  });
+  document.getElementById('cf-total').textContent = fmt(total);
+}
+
+function renderCfMemberBlocks(cf, users) {
+  const container = document.getElementById('cf-balance-members');
+  container.innerHTML = '';
+  const members = cf.members || {};
+
+  // Backward compat: if old flat format and only 1 user, pre-fill their block
+  const oldFlat = !cf.members && (cf.debit || cf.credit || cf.cash);
+
+  users.forEach((user, idx) => {
+    const m = members[user.name] || (oldFlat && idx === 0 ? { debit: cf.debit, credit: cf.credit, savings: cf.cash } : {});
+    const block = document.createElement('div');
+    block.className = 'cf-member-block';
+    block.innerHTML = `
+      <div class="cf-member-name">${user.name}</div>
+      <div class="cf-balance-grid">
+        <div class="form-group">
+          <label>Дебетовая</label>
+          <input type="number" class="cf-member-input" data-user="${user.name}" data-field="debit"
+            inputmode="numeric" placeholder="0" value="${m.debit || ''}" />
+        </div>
+        <div class="form-group">
+          <label>Кредитная</label>
+          <input type="number" class="cf-member-input" data-user="${user.name}" data-field="credit"
+            inputmode="numeric" placeholder="0" value="${m.credit || ''}" />
+        </div>
+        <div class="form-group">
+          <label>Сбережения</label>
+          <input type="number" class="cf-member-input" data-user="${user.name}" data-field="savings"
+            inputmode="numeric" placeholder="0" value="${m.savings || ''}" />
+        </div>
+      </div>`;
+    block.querySelectorAll('.cf-member-input').forEach(inp => inp.addEventListener('input', updateCfTotal));
+    container.appendChild(block);
+  });
+  updateCfTotal();
 }
 
 function renderCfIncomeDays(incomeDays) {
@@ -2438,11 +2473,11 @@ function makeCfDayRow(day, amt) {
 async function loadCashflowSection() {
   const ym = cfYm();
   try {
-    const cf = await apiJson('GET', `/api/cashflow/${ym}`);
-    document.getElementById('cf-debit').value  = cf.debit  || '';
-    document.getElementById('cf-credit').value = cf.credit || '';
-    document.getElementById('cf-cash').value   = cf.cash   || '';
-    updateCfTotal();
+    const [cf, users] = await Promise.all([
+      apiJson('GET', `/api/cashflow/${ym}`),
+      apiJson('GET', '/api/users'),
+    ]);
+    renderCfMemberBlocks(cf, users.length ? users : [{ name: currentUser?.name || 'Я' }]);
     renderCfIncomeDays(cf.incomeDays || { '10': 0, '25': 0 });
     const totalInc = Object.values(cf.incomeDays || {}).reduce((s, v) => s + (Number(v) || 0), 0);
     const incRow = document.getElementById('cf-income-total-row');
@@ -2453,6 +2488,7 @@ async function loadCashflowSection() {
       incRow.classList.add('hidden');
     }
   } catch {
+    renderCfMemberBlocks({}, currentUser ? [{ name: currentUser.name }] : []);
     renderCfIncomeDays({ '10': 0, '25': 0 });
     document.getElementById('cf-income-total-row').classList.add('hidden');
   }
@@ -2466,12 +2502,15 @@ async function saveCashflow() {
     if (day && amt > 0) incomeDays[day] = (incomeDays[day] || 0) + amt;
   });
 
-  const body = {
-    debit:  parseInt(document.getElementById('cf-debit').value)  || 0,
-    credit: parseInt(document.getElementById('cf-credit').value) || 0,
-    cash:   parseInt(document.getElementById('cf-cash').value)   || 0,
-    incomeDays,
-  };
+  const members = {};
+  document.querySelectorAll('.cf-member-input').forEach(inp => {
+    const user = inp.dataset.user;
+    const field = inp.dataset.field;
+    if (!members[user]) members[user] = { debit: 0, credit: 0, savings: 0 };
+    members[user][field] = parseInt(inp.value) || 0;
+  });
+
+  const body = { members, incomeDays };
 
   const btn = document.getElementById('btn-cf-save');
   btn.disabled = true; btn.textContent = 'Сохраняю...';
