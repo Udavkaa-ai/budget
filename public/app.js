@@ -1329,7 +1329,7 @@ async function openAdminPanel(month, year) {
           <div class="admin-user-name">${esc(u.name)} ${u.isGoogle ? '<span class="admin-badge-google">G</span>' : ''} ${u.isAdmin ? '<span class="admin-badge-admin">admin</span>' : ''}</div>
           <div class="admin-user-meta">${esc(u.login)}${u.lastDate ? ` · последний ${u.lastDate}` : ''}</div>
         </div>
-        <span class="admin-stat-entries">${u.expenseCount} зап.${u.expenseTotal > 0 ? ' · ' + fmt(u.expenseTotal) : ''}</span>
+        <span class="admin-stat-entries">${u.expenseCount} зап.</span>
         <button class="admin-user-del" title="Удалить"
           ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
       `;
