@@ -592,26 +592,37 @@ export function getUserByLogin(login) {
 }
 
 /** Статистика по каждому пользователю: количество записей и дата последней */
-export function getUserStats() {
+export function getUserStats(month, year) {
   // DD.MM.YYYY (with possible missing leading zeros) → YYYYMMDD for correct sort
   const toSortKey = (d) => {
     const [dd, mm, yyyy] = d.split('.');
     return `${yyyy}${mm.padStart(2,'0')}${dd.padStart(2,'0')}`;
   };
 
+  const mm = month ? String(month).padStart(2, '0') : null;
+  const yyyy = year ? String(year) : null;
+
   return (data.users || []).map(u => {
     const familyId = u.family || 'family1';
-    const userExp = (data.expenses || []).filter(
+    const allExp = (data.expenses || []).filter(
       e => e.user === u.name && fam(e.family) === fam(familyId)
     );
-    const lastExp = [...userExp].sort((a, b) => toSortKey(b.date).localeCompare(toSortKey(a.date)))[0];
+    // Filter to selected month if provided; keep all for lastDate
+    const periodExp = mm && yyyy
+      ? allExp.filter(e => {
+          const parts = e.date.split('.');
+          return parts[1]?.padStart(2,'0') === mm && parts[2] === yyyy;
+        })
+      : allExp;
+    const lastExp = [...allExp].sort((a, b) => toSortKey(b.date).localeCompare(toSortKey(a.date)))[0];
     return {
       name: u.name,
       login: u.login,
       family: familyId,
       isAdmin: u.isAdmin || false,
       isGoogle: !!u.googleId,
-      expenseCount: userExp.length,
+      expenseCount: periodExp.length,
+      expenseTotal: periodExp.reduce((s, e) => s + (e.amount || 0), 0),
       lastDate: lastExp ? lastExp.date.split('.').map((p,i) => i<2 ? p.padStart(2,'0') : p).join('.') : null,
     };
   });

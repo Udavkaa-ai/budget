@@ -1695,12 +1695,26 @@ html, body {
   overflow: hidden;
 }
 
+.cf-day-user {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  border: 1.5px solid rgba(89,71,224,0.18);
+  border-radius: 20px;
+  background: rgba(89,71,224,0.06);
+  padding: 4px 8px;
+  min-width: 64px;
+  max-width: 90px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cf-day-user:focus { outline: none; border-color: var(--primary); }
+
 .cf-day-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
   flex-shrink: 0;
-  font-weight: 500;
-  width: 36px;
 }
 
 .cf-day-num {
