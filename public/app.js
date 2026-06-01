@@ -1905,10 +1905,9 @@ async function initApp() {
   initSocket();
   initCategoryGrid();
   setupEventListeners();
-
-  await loadSettings();
   initPullToRefresh();
-  navigate('budget');
+  navigate('budget');   // load content immediately, don't wait for settings
+  loadSettings();       // run in background
 }
 
 function setupEventListeners() {
