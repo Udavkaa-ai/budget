@@ -596,11 +596,9 @@ let compareChart = null;
 
 async function loadSummary() {
   const gen = ++summaryGen;
-  const excludeFixed = document.getElementById('summary-exclude-fixed').checked;
   const params = new URLSearchParams({
     ...(summaryMonth ? { month: summaryMonth } : {}),
     ...(summaryYear ? { year: summaryYear } : {}),
-    excludeFixed,
   });
 
   document.getElementById('summary-month-label').textContent = getMonthName(summaryMonth, summaryYear);
@@ -1015,7 +1013,6 @@ let lastChartData = null; // store for fullscreen reuse
 
 async function loadChart() {
   const gen = ++chartGen;
-  const excludeFixed = document.getElementById('chart-exclude-fixed').checked;
   const ym = cfYm();
 
   document.getElementById('chart-month-label').textContent = getMonthName(chartMonth, chartYear);
@@ -1032,7 +1029,7 @@ async function loadChart() {
   container.insertBefore(loadingEl, document.getElementById('chart-expand-btn'));
 
   try {
-    const data = await apiJson('GET', `/api/unified-chart-data/${ym}?excludeFixed=${excludeFixed}`);
+    const data = await apiJson('GET', `/api/unified-chart-data/${ym}`);
     if (gen !== chartGen) return;
 
     lastChartData = data;
@@ -1197,14 +1194,11 @@ async function loadSettingsScreen() {
     const data = await apiJson('GET', '/api/settings');
     appSettings = data;
 
-    // Fixed expenses list — editable by all family members
-    renderFixedExpensesEditable(data.fixedExpensesList || []);
-
-    // Info
     const infoPlanned = document.getElementById('info-planned');
-    const infoFixed = document.getElementById('info-fixed');
     if (infoPlanned) infoPlanned.textContent = fmt(data.plannedMonthly || 0);
-    if (infoFixed) infoFixed.textContent = fmt(data.plannedFixed || 0);
+
+    const plannedInput = document.getElementById('setting-planned-monthly');
+    if (plannedInput) plannedInput.value = data.plannedMonthly || '';
   } catch {
     showToastError('Ошибка загрузки настроек');
   }
@@ -1212,54 +1206,6 @@ async function loadSettingsScreen() {
   if (currentUser?.isAdmin) {
     document.getElementById('admin-panel-btn-section').classList.remove('hidden');
     document.getElementById('admin-update-section').classList.remove('hidden');
-    document.getElementById('admin-budget-section').classList.remove('hidden');
-    // Load family budget settings for this admin's own family by default
-    const users = await apiJson('GET', '/api/admin/users').catch(() => []);
-    if (Array.isArray(users)) {
-      const families = [...new Set(users.map(u => u.family || 'family1'))];
-      loadAdminFamilies(families);
-    }
-  }
-}
-
-// ─── FIXED EXPENSES (editable by family) ──────────────────────────────────────
-
-function renderFixedExpensesEditable(list) {
-  const container = document.getElementById('fixed-expenses-list');
-  container.innerHTML = '';
-  for (const item of list) {
-    container.appendChild(buildFixedItemRow(item.name, item.amount));
-  }
-}
-
-function buildFixedItemRow(name = '', amount = '') {
-  const row = document.createElement('div');
-  row.className = 'fixed-item-edit';
-  row.innerHTML = `
-    <input class="fixed-item-name-input" type="text" value="${esc(name)}" placeholder="Название" />
-    <input class="fixed-item-amount-input" type="number" value="${amount || ''}" placeholder="0" inputmode="numeric" />
-    <button class="fixed-item-del-btn" title="Удалить">✕</button>
-  `;
-  row.querySelector('.fixed-item-del-btn').addEventListener('click', () => row.remove());
-  return row;
-}
-
-async function saveFixedExpenses() {
-  const items = [...document.querySelectorAll('.fixed-item-edit')].map(row => ({
-    name:   row.querySelector('.fixed-item-name-input').value.trim(),
-    amount: parseInt(row.querySelector('.fixed-item-amount-input').value) || 0,
-  })).filter(i => i.name);
-
-  const btn = document.getElementById('btn-fixed-save');
-  btn.disabled = true;
-  try {
-    const res = await apiJson('PUT', '/api/family-budget/fixed-expenses', { fixedExpensesList: items });
-    if (res.ok) showToastSuccess('Постоянные расходы сохранены');
-    else showToastError(res.error || 'Ошибка сохранения');
-  } catch {
-    showToastError('Ошибка соединения');
-  } finally {
-    btn.disabled = false;
   }
 }
 
@@ -1402,61 +1348,6 @@ function closeAdminPanel() {
 
 function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ─── ADMIN: BUDGET SETTINGS PER FAMILY ───────────────────────────────────────
-
-async function loadAdminFamilies(families) {
-  const container = document.getElementById('admin-families-list');
-  container.innerHTML = '';
-  const tmplCard = document.getElementById('tmpl-family-budget');
-  const tmplItem = document.getElementById('tmpl-fixed-item');
-
-  for (const familyId of families) {
-    const settings = await apiJson('GET', `/api/admin/family-settings/${encodeURIComponent(familyId)}`);
-
-    const card = tmplCard.content.cloneNode(true).firstElementChild;
-    card.querySelector('.family-budget-id').textContent = familyId;
-    card.querySelector('.fb-planned-monthly').value = settings.plannedMonthly || '';
-    card.querySelector('.fb-planned-fixed').value   = settings.plannedFixed   || '';
-    card.querySelector('.fb-fixed-day').value        = settings.fixedExpensesDay || '';
-
-    const fixedList = card.querySelector('.fb-fixed-list');
-
-    function addFixedItem(name = '', amount = '') {
-      const row = tmplItem.content.cloneNode(true).firstElementChild;
-      row.querySelector('.fb-item-name').value   = name;
-      row.querySelector('.fb-item-amount').value = amount || '';
-      row.querySelector('.fb-item-del').addEventListener('click', () => row.remove());
-      fixedList.appendChild(row);
-    }
-
-    for (const item of (settings.fixedExpensesList || [])) {
-      addFixedItem(item.name, item.amount);
-    }
-
-    card.querySelector('.fb-add-item').addEventListener('click', () => addFixedItem());
-
-    card.querySelector('.fb-save').addEventListener('click', async () => {
-      const items = [...fixedList.querySelectorAll('.fb-item-row')].map(row => ({
-        name:   row.querySelector('.fb-item-name').value.trim(),
-        amount: parseInt(row.querySelector('.fb-item-amount').value) || 0,
-      })).filter(i => i.name);
-
-      const body = {
-        plannedMonthly:    parseInt(card.querySelector('.fb-planned-monthly').value) || 0,
-        plannedFixed:      parseInt(card.querySelector('.fb-planned-fixed').value)   || 0,
-        fixedExpensesDay:  parseInt(card.querySelector('.fb-fixed-day').value)        || 15,
-        fixedExpensesList: items,
-      };
-
-      const res = await apiJson('PUT', `/api/admin/family-settings/${encodeURIComponent(familyId)}`, body);
-      if (res.ok) showToastSuccess(`Настройки группы «${familyId}» сохранены`);
-      else showToastError(res.error || 'Ошибка сохранения');
-    });
-
-    container.appendChild(card);
-  }
 }
 
 async function loadSettings() {
@@ -1704,7 +1595,7 @@ async function confirmParsedExpenses() {
 
 function buildExpenseItem(exp, canDelete, { showDate = false, showCategory = true, showUser = true } = {}) {
   const item = document.createElement('div');
-  item.className = 'expense-item' + (exp.isFixed ? ' is-fixed' : '');
+  item.className = 'expense-item';
   item.dataset.id = exp.id;
 
   item.innerHTML = `
@@ -1715,7 +1606,6 @@ function buildExpenseItem(exp, canDelete, { showDate = false, showCategory = tru
         ${showUser ? `<span class="expense-user-tag">${exp.user}</span>` : ''}
         ${showCategory ? `<span>${exp.category}</span>` : ''}
         ${showDate && exp.date ? `<span class="expense-date-tag">${formatDayMonth(exp.date)}</span>` : ''}
-        ${exp.isFixed ? '<span class="expense-fixed-tag">📌 пост.</span>' : ''}
       </div>
     </div>
     <div class="expense-right">
@@ -2089,8 +1979,6 @@ function setupEventListeners() {
     summaryYear = next.getFullYear();
     loadSummary();
   });
-  document.getElementById('summary-exclude-fixed').addEventListener('change', loadSummary);
-
   // Compare toggle
   document.getElementById('btn-summary-compare').addEventListener('click', () => {
     summaryCompareMode = !summaryCompareMode;
@@ -2129,8 +2017,6 @@ function setupEventListeners() {
     chartYear = next.getFullYear();
     loadChart(); loadCashflowSection();
   });
-  document.getElementById('chart-exclude-fixed').addEventListener('change', loadChart);
-
   // Chart expand / fullscreen
   document.getElementById('chart-expand-btn').addEventListener('click', openChartFullscreen);
   document.getElementById('chart-fs-close').addEventListener('click', closeChartFullscreen);
@@ -2165,16 +2051,18 @@ function setupEventListeners() {
     });
   });
 
-  // Retag button
-  document.getElementById('btn-fixed-add').addEventListener('click', () => {
-    document.getElementById('fixed-expenses-list').appendChild(buildFixedItemRow());
-  });
-  document.getElementById('btn-fixed-save').addEventListener('click', saveFixedExpenses);
-
-  document.getElementById('btn-retag').addEventListener('click', async () => {
-    const res = await apiJson('POST', '/api/settings/retag');
-    showToastSuccess(`Перепомечено записей: ${res.count}`);
-    refreshCurrentScreen();
+  // Planned budget save
+  document.getElementById('btn-save-planned').addEventListener('click', async () => {
+    const val = parseInt(document.getElementById('setting-planned-monthly').value) || 0;
+    const res = await apiJson('PUT', '/api/settings', { key: 'plannedMonthly', value: val });
+    if (res.ok) {
+      appSettings.plannedMonthly = val;
+      const infoPlanned = document.getElementById('info-planned');
+      if (infoPlanned) infoPlanned.textContent = fmt(val);
+      showToastSuccess('Плановый бюджет сохранён');
+    } else {
+      showToastError(res.error || 'Ошибка сохранения');
+    }
   });
 
   // Export button — download with auth

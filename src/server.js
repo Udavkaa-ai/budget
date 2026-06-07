@@ -19,8 +19,6 @@ import {
   importFromCSV,
   getSettings,
   updateSetting,
-  toggleExpenseFixed,
-  retagFixedExpenses,
   getCategoryExpenses,
   getExpensesForMonth,
   deleteExpense,
@@ -226,15 +224,6 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Переключить isFixed
-app.post('/api/expenses/:id/toggle-fixed', authMiddleware, async (req, res) => {
-  const result = await toggleExpenseFixed(req.params.id, req.user.family);
-  if (result === null) return res.status(404).json({ error: 'Не найдено' });
-
-  io.to(req.user.family).emit('expense:updated', { id: req.params.id, isFixed: result, by: req.user.name });
-  res.json({ ok: true, isFixed: result });
-});
-
 // ─── View Routes ──────────────────────────────────────────────────────────────
 
 // Мои расходы сегодня
@@ -324,10 +313,7 @@ app.get('/api/settings', authMiddleware, (req, res) => {
   res.json({
     ...getSettings(req.user.family),
     categories: CATEGORIES,
-    plannedMonthly:    budget.plannedMonthly,
-    plannedFixed:      budget.plannedFixed,
-    fixedExpensesDay:  budget.fixedExpensesDay,
-    fixedExpensesList: budget.fixedExpensesList,
+    plannedMonthly: budget.plannedMonthly,
   });
 });
 
@@ -337,24 +323,6 @@ app.put('/api/settings', authMiddleware, async (req, res) => {
 
   await updateSetting(key, value, req.user.family);
   io.to(req.user.family).emit('settings:updated', { key, value, by: req.user.name });
-  res.json({ ok: true });
-});
-
-// Перепометить постоянные расходы
-app.post('/api/settings/retag', authMiddleware, async (req, res) => {
-  const count = await retagFixedExpenses(req.user.family);
-  io.to(req.user.family).emit('expense:retagged', { count, by: req.user.name });
-  res.json({ ok: true, count });
-});
-
-// Семья редактирует свой список постоянных расходов (без прав администратора)
-app.put('/api/family-budget/fixed-expenses', authMiddleware, async (req, res) => {
-  const { fixedExpensesList } = req.body || {};
-  if (!Array.isArray(fixedExpensesList)) {
-    return res.status(400).json({ error: 'Неверный формат данных' });
-  }
-  await saveFamilyBudgetSettings(req.user.family, { fixedExpensesList });
-  io.to(req.user.family).emit('settings:updated', { by: req.user.name });
   res.json({ ok: true });
 });
 
@@ -434,12 +402,9 @@ app.get('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware,
 });
 
 app.put('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware, async (req, res) => {
-  const { plannedMonthly, plannedFixed, fixedExpensesDay, fixedExpensesList } = req.body || {};
+  const { plannedMonthly } = req.body || {};
   await saveFamilyBudgetSettings(req.params.familyId, {
-    plannedMonthly:    plannedMonthly    !== undefined ? Number(plannedMonthly)    : undefined,
-    plannedFixed:      plannedFixed      !== undefined ? Number(plannedFixed)      : undefined,
-    fixedExpensesDay:  fixedExpensesDay  !== undefined ? Number(fixedExpensesDay)  : undefined,
-    fixedExpensesList: fixedExpensesList,
+    plannedMonthly: plannedMonthly !== undefined ? Number(plannedMonthly) : undefined,
   });
   res.json({ ok: true });
 });
@@ -776,10 +741,6 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
     .sort(([, a], [, b]) => b - a).slice(0, 8)
     .map(([c, a]) => `  ${c}: ${a.toLocaleString('ru')} ₽`).join('\n');
 
-  // Fixed expenses
-  const fixedList  = (settings.fixedExpensesList || []).map(f => `  ${f.name}: ${f.amount.toLocaleString('ru')} ₽`).join('\n');
-  const fixedTotal = (settings.fixedExpensesList || []).reduce((s, f) => s + f.amount, 0);
-
   // Planned income total
   const plannedInc = Object.values(incomes).reduce((s, v) => s + v, 0) || settings.plannedMonthly || 0;
 
@@ -814,10 +775,6 @@ ${prev.total > 0 ? prevCatLines : '(нет данных)'}
 
 ${prev2.monthName}: ${prev2.total.toLocaleString('ru')} ₽
 ${prev2.total > 0 ? prev2CatLines : '(нет данных)'}
-
-=== ОБЯЗАТЕЛЬНЫЕ ЕЖЕМЕСЯЧНЫЕ РАСХОДЫ ===
-${fixedList || '  (не указаны)'}
-Итого постоянных: ${fixedTotal.toLocaleString('ru')} ₽
 
 === ПЛАН/ЛИМИТЫ ===
 Плановые расходы на месяц: ${(settings.plannedMonthly || 0).toLocaleString('ru')} ₽
