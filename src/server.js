@@ -402,9 +402,10 @@ app.get('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware,
 });
 
 app.put('/api/admin/family-settings/:familyId', authMiddleware, adminMiddleware, async (req, res) => {
-  const { plannedMonthly } = req.body || {};
+  const { plannedMonthly, familyName } = req.body || {};
   await saveFamilyBudgetSettings(req.params.familyId, {
     plannedMonthly: plannedMonthly !== undefined ? Number(plannedMonthly) : undefined,
+    familyName:     familyName     !== undefined ? String(familyName)     : undefined,
   });
   res.json({ ok: true });
 });
