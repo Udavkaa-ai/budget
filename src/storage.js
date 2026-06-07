@@ -27,26 +27,20 @@ function familySettings(familyId) {
 }
 
 /**
- * Бюджетные настройки семьи (план, постоянные расходы).
+ * Бюджетные настройки семьи.
  * Берём из family settings, иначе — из глобального конфига.
  */
 export function getFamilyBudgetSettings(familyId) {
   const fs = familySettings(familyId);
   return {
-    plannedMonthly:    fs.plannedMonthly    ?? config.plannedMonthly,
-    plannedFixed:      fs.plannedFixed      ?? config.plannedFixed,
-    fixedExpensesDay:  fs.fixedExpensesDay  ?? config.fixedExpensesDay,
-    fixedExpensesList: fs.fixedExpensesList ?? config.fixedExpensesList,
+    plannedMonthly: fs.plannedMonthly ?? config.plannedMonthly,
   };
 }
 
 /** Сохранить бюджетные настройки семьи */
-export async function saveFamilyBudgetSettings(familyId, { plannedMonthly, plannedFixed, fixedExpensesDay, fixedExpensesList }) {
+export async function saveFamilyBudgetSettings(familyId, { plannedMonthly }) {
   const fs = familySettings(familyId);
-  if (plannedMonthly   !== undefined) fs.plannedMonthly   = plannedMonthly;
-  if (plannedFixed     !== undefined) fs.plannedFixed     = plannedFixed;
-  if (fixedExpensesDay !== undefined) fs.fixedExpensesDay = fixedExpensesDay;
-  if (fixedExpensesList !== undefined) fs.fixedExpensesList = fixedExpensesList;
+  if (plannedMonthly !== undefined) fs.plannedMonthly = plannedMonthly;
   debouncedSave();
 }
 
@@ -144,9 +138,6 @@ export async function appendExpenses(expenses, familyId) {
   const f = fam(familyId);
 
   for (const exp of expenses) {
-    const descLower = (exp.description || '').toLowerCase();
-    const isFixed = config.fixedKeywords.some(kw => descLower.includes(kw));
-
     data.expenses.push({
       id: generateId(),
       date: exp.date,
@@ -155,7 +146,6 @@ export async function appendExpenses(expenses, familyId) {
       amount: exp.amount,
       user: exp.user || '',
       family: f,
-      isFixed,
       createdAt: timestamp
     });
   }
@@ -450,37 +440,6 @@ export function getExpensesForMonth(month = null, year = null, familyId) {
 }
 
 /**
- * Переключить isFixed
- */
-export async function toggleExpenseFixed(id, familyId) {
-  const f = fam(familyId);
-  const exp = data.expenses.find(e => e.id === id && fam(e.family) === f);
-  if (!exp) return null;
-  exp.isFixed = !exp.isFixed;
-  debouncedSave();
-  return exp.isFixed;
-}
-
-/**
- * Ретроактивно проставить isFixed по ключевым словам
- */
-export async function retagFixedExpenses(familyId) {
-  const f = fam(familyId);
-  let tagged = 0;
-  for (const exp of data.expenses) {
-    if (fam(exp.family) !== f) continue;
-    const descLower = (exp.description || '').toLowerCase();
-    const shouldBeFixed = config.fixedKeywords.some(kw => descLower.includes(kw));
-    if (shouldBeFixed && !exp.isFixed) {
-      exp.isFixed = true;
-      tagged++;
-    }
-  }
-  if (tagged > 0) debouncedSave();
-  return tagged;
-}
-
-/**
  * Удалить расход
  */
 export async function deleteExpense(id, familyId) {
@@ -499,8 +458,8 @@ export function getTodayFeed(familyId, localDateStr) {
   const prefix = localDateStr || new Date().toISOString().slice(0, 10);
   const entries = (data.expenses || [])
     .filter(e => fam(e.family) === f && e.createdAt && e.createdAt.startsWith(prefix))
-    .map(({ id, date, category, description, amount, user, isFixed, createdAt }) => ({
-      type: 'expense', id, date, category, description, amount, user, isFixed, createdAt,
+    .map(({ id, date, category, description, amount, user, createdAt }) => ({
+      type: 'expense', id, date, category, description, amount, user, createdAt,
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { entries };

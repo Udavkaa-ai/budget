@@ -32,22 +32,8 @@ export const config = {
 
   // Бюджет — общие плановые расходы за месяц
   plannedMonthly: parseInt(process.env.PLANNED_MONTHLY) || 194000,
-  // Фиксированные обязательные расходы (ипотека 31k, ЖКХ 12k, кружки 14k)
-  plannedFixed: parseInt(process.env.PLANNED_FIXED) || 57000,
-  // День списания фиксированных расходов
-  fixedExpensesDay: parseInt(process.env.FIXED_EXPENSES_DAY) || 15,
   // День начала отслеживания (null = автоопределение по первой записи)
   trackingStartDay: process.env.TRACKING_START_DAY ? parseInt(process.env.TRACKING_START_DAY) : null,
-
-  // Список постоянных расходов (для настройки "не учитывать постоянные")
-  fixedExpensesList: [
-    { name: 'Ипотека', amount: 31000 },
-    { name: 'ЖКХ', amount: 12000 },
-    { name: 'Садик и уроки', amount: 14000 },
-  ],
-  // Ключевые слова для авто-пометки постоянных расходов при вводе
-  fixedKeywords: (process.env.FIXED_KEYWORDS || 'ипотека,жкх,коммунальн,садик,допурок,кружок')
-    .split(',').map(s => s.trim().toLowerCase()),
 
   // === Веб-приложение ===
   port: parseInt(process.env.PORT) || 3000,
