@@ -1199,6 +1199,10 @@ async function loadSettingsScreen() {
 
     const plannedInput = document.getElementById('setting-planned-monthly');
     if (plannedInput) plannedInput.value = data.plannedMonthly || '';
+
+    const familyNameInput = document.getElementById('setting-family-name');
+    if (familyNameInput) familyNameInput.value = data.familyName || '';
+    updateFamilyChip(data.familyName || '');
   } catch {
     showToastError('Ошибка загрузки настроек');
   }
@@ -1206,6 +1210,17 @@ async function loadSettingsScreen() {
   if (currentUser?.isAdmin) {
     document.getElementById('admin-panel-btn-section').classList.remove('hidden');
     document.getElementById('admin-update-section').classList.remove('hidden');
+  }
+}
+
+function updateFamilyChip(name) {
+  const chip = document.getElementById('topbar-family');
+  if (!chip) return;
+  if (name) {
+    chip.textContent = name;
+    chip.classList.remove('hidden');
+  } else {
+    chip.classList.add('hidden');
   }
 }
 
@@ -2049,6 +2064,19 @@ function setupEventListeners() {
     btn.addEventListener('click', () => {
       document.getElementById('form-amount').value = btn.dataset.amount;
     });
+  });
+
+  // Family name save
+  document.getElementById('btn-save-family-name').addEventListener('click', async () => {
+    const val = document.getElementById('setting-family-name').value.trim();
+    const res = await apiJson('PUT', '/api/settings', { key: 'familyName', value: val });
+    if (res.ok) {
+      appSettings.familyName = val;
+      updateFamilyChip(val);
+      showToastSuccess('Название семьи сохранено');
+    } else {
+      showToastError(res.error || 'Ошибка сохранения');
+    }
   });
 
   // Planned budget save

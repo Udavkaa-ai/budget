@@ -76,6 +76,7 @@
       <span id="topbar-title">Бюджет</span>
     </div>
     <div class="topbar-right">
+      <span id="topbar-family" class="family-chip hidden"></span>
       <span id="topbar-user" class="user-chip"></span>
       <button id="btn-logout" class="icon-btn" title="Выйти">⎋</button>
     </div>
@@ -225,6 +226,15 @@
     <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
     <div id="screen-settings" class="screen">
       <div class="settings-list">
+        <div class="settings-section">
+          <div class="settings-title">Семья</div>
+          <div class="form-group">
+            <label>Название семьи</label>
+            <input id="setting-family-name" type="text" placeholder="Например: Семья Ивановых" maxlength="40" class="form-control" />
+          </div>
+          <button id="btn-save-family-name" class="btn btn-primary btn-full">Сохранить</button>
+        </div>
+
         <div class="settings-section">
           <div class="settings-title">Плановый бюджет</div>
           <div class="form-group">
