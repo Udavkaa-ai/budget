@@ -1226,6 +1226,43 @@ function updateFamilyChip(name) {
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────────────────────
 
+function renderFamilyNameView(container, famId, name) {
+  container.innerHTML = `
+    <div class="admin-family-name-view">
+      <span class="admin-family-id">${esc(famId)}</span>
+      ${name ? `<span class="admin-family-display-name">${esc(name)}</span>` : ''}
+      <button class="admin-family-name-edit-btn icon-btn" title="Переименовать">✏️</button>
+    </div>`;
+  container.querySelector('.admin-family-name-edit-btn').addEventListener('click', () => {
+    renderFamilyNameEdit(container, famId, name);
+  });
+}
+
+function renderFamilyNameEdit(container, famId, currentName) {
+  container.innerHTML = `
+    <div class="admin-family-name-row">
+      <input class="admin-family-name-input" type="text" placeholder="Название семьи" value="${esc(currentName)}" maxlength="40" />
+      <button class="admin-family-name-save btn btn-sm btn-primary">✓</button>
+      <button class="admin-family-name-cancel btn btn-sm btn-outline">✕</button>
+    </div>`;
+  const input = container.querySelector('.admin-family-name-input');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  container.querySelector('.admin-family-name-cancel').addEventListener('click', () => {
+    renderFamilyNameView(container, famId, currentName);
+  });
+  container.querySelector('.admin-family-name-save').addEventListener('click', async () => {
+    const nameVal = input.value.trim();
+    const res = await apiJson('PUT', `/api/admin/family-settings/${encodeURIComponent(famId)}`, { familyName: nameVal });
+    if (res.ok) {
+      showToastSuccess(nameVal ? `Название «${nameVal}» сохранено` : 'Название удалено');
+      renderFamilyNameView(container, famId, nameVal);
+    } else {
+      showToastError(res.error || 'Ошибка');
+    }
+  });
+}
+
 async function openAdminPanel(month, year) {
   document.getElementById('admin-overlay').classList.remove('hidden');
   document.getElementById('admin-panel').classList.remove('hidden');
@@ -1257,12 +1294,23 @@ async function openAdminPanel(month, year) {
 
   const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 
+  // Month nav goes into the non-scrollable nav bar (outside body) — fixes iOS touch issue
+  const nav = document.getElementById('admin-panel-nav');
+  nav.innerHTML = `
+    <button id="admin-prev-month" class="icon-btn">◀</button>
+    <span class="nav-date-label">${MONTH_NAMES[m-1]} ${y}</span>
+    <button id="admin-next-month" class="icon-btn">▶</button>
+  `;
+  nav.querySelector('#admin-prev-month').addEventListener('click', () => {
+    const prev = new Date(y, m - 2, 1);
+    openAdminPanel(prev.getMonth() + 1, prev.getFullYear());
+  });
+  nav.querySelector('#admin-next-month').addEventListener('click', () => {
+    const next = new Date(y, m, 1);
+    openAdminPanel(next.getMonth() + 1, next.getFullYear());
+  });
+
   body.innerHTML = `
-    <div class="admin-month-picker">
-      <button id="admin-prev-month" class="icon-btn">◀</button>
-      <span id="admin-month-label" class="nav-date-label">${MONTH_NAMES[m-1]} ${y}</span>
-      <button id="admin-next-month" class="icon-btn">▶</button>
-    </div>
     <div class="admin-stats-summary">
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalFamilies}</div><div class="admin-stat-label">семей</div></div>
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalUsers}</div><div class="admin-stat-label">пользователей</div></div>
@@ -1270,15 +1318,6 @@ async function openAdminPanel(month, year) {
     </div>
     <div id="admin-families-stat"></div>
   `;
-
-  body.querySelector('#admin-prev-month').addEventListener('click', () => {
-    const prev = new Date(y, m - 2, 1);
-    openAdminPanel(prev.getMonth() + 1, prev.getFullYear());
-  });
-  body.querySelector('#admin-next-month').addEventListener('click', () => {
-    const next = new Date(y, m, 1);
-    openAdminPanel(next.getMonth() + 1, next.getFullYear());
-  });
 
   // Load family names in parallel
   const familyIds = Object.keys(byFamily);
@@ -1292,20 +1331,12 @@ async function openAdminPanel(month, year) {
     const block = document.createElement('div');
     block.className = 'admin-family-block';
     const currentName = famSettings[famId]?.familyName || '';
-    block.innerHTML = `
-      <div class="admin-family-header">
-        <div class="admin-family-id">${esc(famId)}</div>
-        <div class="admin-family-name-row">
-          <input class="admin-family-name-input" type="text" placeholder="Название семьи" value="${esc(currentName)}" maxlength="40" />
-          <button class="admin-family-name-save btn btn-sm btn-outline">Сохранить</button>
-        </div>
-      </div>`;
-    block.querySelector('.admin-family-name-save').addEventListener('click', async () => {
-      const nameVal = block.querySelector('.admin-family-name-input').value.trim();
-      const res = await apiJson('PUT', `/api/admin/family-settings/${encodeURIComponent(famId)}`, { familyName: nameVal });
-      if (res.ok) showToastSuccess(`Название «${nameVal || famId}» сохранено`);
-      else showToastError(res.error || 'Ошибка');
-    });
+
+    // Family name: view mode by default, switch to edit on pencil click
+    const nameHeader = document.createElement('div');
+    nameHeader.className = 'admin-family-header';
+    renderFamilyNameView(nameHeader, famId, currentName);
+    block.appendChild(nameHeader);
     for (const u of members) {
       const row = document.createElement('div');
       row.className = 'admin-user-row';
