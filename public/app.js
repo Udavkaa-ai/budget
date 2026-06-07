@@ -1256,17 +1256,12 @@ async function openAdminPanel(month, year) {
   }
 
   const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-  const monthOpts = MONTH_NAMES.map((name, i) =>
-    `<option value="${i+1}" ${i+1 === m ? 'selected' : ''}>${name}</option>`
-  ).join('');
-  const yearOpts = [y-1, y, y+1].map(yr =>
-    `<option value="${yr}" ${yr === y ? 'selected' : ''}>${yr}</option>`
-  ).join('');
 
   body.innerHTML = `
     <div class="admin-month-picker">
-      <select id="admin-sel-month">${monthOpts}</select>
-      <select id="admin-sel-year">${yearOpts}</select>
+      <button id="admin-prev-month" class="icon-btn">◀</button>
+      <span id="admin-month-label" class="nav-date-label">${MONTH_NAMES[m-1]} ${y}</span>
+      <button id="admin-next-month" class="icon-btn">▶</button>
     </div>
     <div class="admin-stats-summary">
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalFamilies}</div><div class="admin-stat-label">семей</div></div>
@@ -1276,18 +1271,41 @@ async function openAdminPanel(month, year) {
     <div id="admin-families-stat"></div>
   `;
 
-  body.querySelector('#admin-sel-month').addEventListener('change', () => {
-    openAdminPanel(parseInt(body.querySelector('#admin-sel-month').value), parseInt(body.querySelector('#admin-sel-year').value));
+  body.querySelector('#admin-prev-month').addEventListener('click', () => {
+    const prev = new Date(y, m - 2, 1);
+    openAdminPanel(prev.getMonth() + 1, prev.getFullYear());
   });
-  body.querySelector('#admin-sel-year').addEventListener('change', () => {
-    openAdminPanel(parseInt(body.querySelector('#admin-sel-month').value), parseInt(body.querySelector('#admin-sel-year').value));
+  body.querySelector('#admin-next-month').addEventListener('click', () => {
+    const next = new Date(y, m, 1);
+    openAdminPanel(next.getMonth() + 1, next.getFullYear());
   });
+
+  // Load family names in parallel
+  const familyIds = Object.keys(byFamily);
+  const famSettingsArr = await Promise.all(
+    familyIds.map(fid => apiJson('GET', `/api/admin/family-settings/${encodeURIComponent(fid)}`).catch(() => ({})))
+  );
+  const famSettings = Object.fromEntries(familyIds.map((fid, i) => [fid, famSettingsArr[i]]));
 
   const familyStat = body.querySelector('#admin-families-stat');
   for (const [famId, members] of Object.entries(byFamily)) {
     const block = document.createElement('div');
     block.className = 'admin-family-block';
-    block.innerHTML = `<div class="admin-family-id">${esc(famId)}</div>`;
+    const currentName = famSettings[famId]?.familyName || '';
+    block.innerHTML = `
+      <div class="admin-family-header">
+        <div class="admin-family-id">${esc(famId)}</div>
+        <div class="admin-family-name-row">
+          <input class="admin-family-name-input" type="text" placeholder="Название семьи" value="${esc(currentName)}" maxlength="40" />
+          <button class="admin-family-name-save btn btn-sm btn-outline">Сохранить</button>
+        </div>
+      </div>`;
+    block.querySelector('.admin-family-name-save').addEventListener('click', async () => {
+      const nameVal = block.querySelector('.admin-family-name-input').value.trim();
+      const res = await apiJson('PUT', `/api/admin/family-settings/${encodeURIComponent(famId)}`, { familyName: nameVal });
+      if (res.ok) showToastSuccess(`Название «${nameVal || famId}» сохранено`);
+      else showToastError(res.error || 'Ошибка');
+    });
     for (const u of members) {
       const row = document.createElement('div');
       row.className = 'admin-user-row';

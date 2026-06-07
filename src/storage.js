@@ -34,13 +34,15 @@ export function getFamilyBudgetSettings(familyId) {
   const fs = familySettings(familyId);
   return {
     plannedMonthly: fs.plannedMonthly ?? config.plannedMonthly,
+    familyName:     fs.familyName    ?? '',
   };
 }
 
 /** Сохранить бюджетные настройки семьи */
-export async function saveFamilyBudgetSettings(familyId, { plannedMonthly }) {
+export async function saveFamilyBudgetSettings(familyId, { plannedMonthly, familyName }) {
   const fs = familySettings(familyId);
   if (plannedMonthly !== undefined) fs.plannedMonthly = plannedMonthly;
+  if (familyName     !== undefined) fs.familyName     = familyName;
   debouncedSave();
 }
 
