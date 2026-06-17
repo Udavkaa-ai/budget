@@ -642,8 +642,8 @@ function renderSummaryView() {
     ? (data.byUser[summaryUserFilter]?.total || 0)
     : data.total;
   const filterLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
-  const totalIncome = Object.values(lastPlanData?.incomes || {}).reduce((s, v) => s + v, 0);
-  const remaining = totalIncome > 0 ? totalIncome - data.total : null;
+  const plannedMonthly = appSettings.plannedMonthly || 0;
+  const remaining = plannedMonthly > 0 ? plannedMonthly - data.total : null;
   const remainHtml = remaining !== null
     ? `<div class="summary-остаток-row"><span>Остаток от плана</span><span class="summary-остаток-amt ${remaining >= 0 ? 'ok' : 'over'}">${fmt(remaining)}</span></div>`
     : '';
@@ -833,6 +833,16 @@ async function loadCategoryDetail(cat, month, year) {
     ...(year ? { year } : {}),
     ...(summaryUserFilter ? { user: summaryUserFilter } : {}),
   });
+
+  // Update total bar: show this category's amount (filtered by user if active)
+  if (lastSummaryData) {
+    const catAmount = summaryUserFilter
+      ? (lastSummaryData.byUser[summaryUserFilter]?.byCategory[cat] || 0)
+      : (lastSummaryData.byCategory[cat] || 0);
+    const uLabel = summaryUserFilter ? ` · ${summaryUserFilter}` : '';
+    document.getElementById('summary-total-bar').innerHTML =
+      `<div class="summary-total-main"><span>${CATEGORY_ICONS[cat] || ''} ${esc(cat)}${uLabel}</span><span class="highlight-total">${fmt(catAmount)}</span></div>`;
+  }
 
   document.getElementById('summary-categories').classList.add('hidden');
   document.getElementById('summary-compare-panel').classList.add('hidden');
@@ -1193,9 +1203,6 @@ async function loadSettingsScreen() {
   try {
     const data = await apiJson('GET', '/api/settings');
     appSettings = data;
-
-    const infoPlanned = document.getElementById('info-planned');
-    if (infoPlanned) infoPlanned.textContent = fmt(data.plannedMonthly || 0);
 
     const plannedInput = document.getElementById('setting-planned-monthly');
     if (plannedInput) plannedInput.value = data.plannedMonthly || '';
