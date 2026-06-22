@@ -2466,6 +2466,7 @@ async function saveCashflow() {
 
 async function loadGoalsScreen() {
   loadSpeedometer();
+  loadSpeedChart();
   loadDailyFeed();
   loadGoalsList();
   loadFamilyOverview();
@@ -2593,6 +2594,169 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
         <span class="bablometr-stat-value">${daysElapsed} из ${daysInMonth}</span>
       </div>
     </div>`;
+}
+
+async function loadSpeedChart() {
+  const container = document.getElementById('speed-chart-container');
+  const now = new Date();
+  const m = now.getMonth() + 1, y = now.getFullYear();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const todayDay = now.getDate();
+  const plannedMonthly = appSettings.plannedMonthly || 0;
+  if (!plannedMonthly) {
+    container.innerHTML = '<div class="empty-state">Нет планового бюджета</div>';
+    return;
+  }
+  try {
+    const ym = `${y}${String(m).padStart(2, '0')}`;
+    const chartData = await apiJson('GET', `/api/unified-chart-data/${ym}`);
+    const userExpenses = chartData.userExpenses || {};
+    // Sum all users' daily expenses
+    const dailyTotals = Array(daysInMonth).fill(0);
+    for (const userDays of Object.values(userExpenses)) {
+      for (let i = 0; i < userDays.length && i < daysInMonth; i++) {
+        dailyTotals[i] += userDays[i] || 0;
+      }
+    }
+    // Build data points: ratio at midnight = cumulative through end of day d-1
+    // Point for day 1 = 0 (nothing spent yet at midnight before day 1)
+    // Point for day d = cumulative[0..d-2] / (plannedMonthly * (d-1) / daysInMonth) * 100
+    const labels = [];
+    const ratios = [];
+    // Day 1 at midnight: 0 spent, plan = 0 → show 100% neutral or skip; use day number as X
+    // We plot from day 1 (midnight before day 1) to today's midnight
+    let cumulative = 0;
+    for (let d = 1; d <= todayDay; d++) {
+      labels.push(d);
+      // At midnight of day d: cumulative spending through end of day d-1
+      const expected = plannedMonthly * (d - 1) / daysInMonth;
+      if (d === 1) {
+        ratios.push(null); // no data yet at very start
+      } else {
+        const ratio = expected > 0 ? Math.round(cumulative / expected * 100) : 100;
+        ratios.push(ratio);
+      }
+      if (d <= daysInMonth) {
+        cumulative += dailyTotals[d - 1] || 0;
+      }
+    }
+    // Also add today's current state as the last point if today > 1
+    if (todayDay > 1) {
+      const expected = plannedMonthly * todayDay / daysInMonth;
+      const currentRatio = expected > 0 ? Math.round(cumulative / expected * 100) : 100;
+      labels[labels.length - 1] = todayDay;
+      ratios[ratios.length - 1] = currentRatio;
+    }
+
+    container.innerHTML = '<canvas id="speed-chart-canvas"></canvas>';
+    const canvas = document.getElementById('speed-chart-canvas');
+
+    // Build segment colors based on ratio value
+    function ratioColor(v) {
+      if (v === null) return 'rgba(150,150,150,0.5)';
+      if (v < 70) return '#22c55e';
+      if (v < 90) return '#f59e0b';
+      return '#ef4444';
+    }
+
+    // Point colors
+    const pointColors = ratios.map(ratioColor);
+
+    // Reference line + colored segments, drawn before dataset points
+    const segmentPlugin = {
+      id: 'speedSegmentColors',
+      beforeDatasetsDraw(chart) {
+        const { ctx, chartArea, scales } = chart;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
+        ctx.clip();
+        // 100% reference line
+        const y100 = scales.y.getPixelForValue(100);
+        ctx.beginPath();
+        ctx.setLineDash([6, 4]);
+        ctx.moveTo(chartArea.left, y100);
+        ctx.lineTo(chartArea.right, y100);
+        ctx.strokeStyle = 'rgba(239,68,68,0.45)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Colored line segments
+        const ds = chart.data.datasets[0];
+        const pts = ds.data;
+        const meta = chart.getDatasetMeta(0);
+        if (meta.data.length) {
+          for (let i = 0; i < pts.length - 1; i++) {
+            if (pts[i] === null || pts[i + 1] === null) continue;
+            const p1 = meta.data[i];
+            const p2 = meta.data[i + 1];
+            const avg = (pts[i] + pts[i + 1]) / 2;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = ratioColor(avg);
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+    };
+
+    new Chart(canvas, {
+      type: 'line',
+      plugins: [segmentPlugin],
+      data: {
+        labels,
+        datasets: [{
+          data: ratios,
+          borderColor: 'transparent',
+          borderWidth: 2.5,
+          tension: 0.3,
+          pointBackgroundColor: pointColors,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          spanGaps: false,
+          fill: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          datalabels: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => `День ${items[0].label}`,
+              label: (item) => item.raw !== null ? `${item.raw}%` : '—',
+            }
+          },
+          annotation: undefined,
+        },
+        scales: {
+          x: {
+            title: { display: false },
+            grid: { display: false },
+            ticks: { font: { size: 11 }, maxRotation: 0 },
+          },
+          y: {
+            min: 0,
+            suggestedMax: 150,
+            ticks: {
+              callback: v => `${v}%`,
+              font: { size: 11 },
+              stepSize: 50,
+            },
+            grid: { color: 'rgba(0,0,0,0.06)' },
+          }
+        }
+      }
+    });
+
+  } catch (e) {
+    container.innerHTML = '<div class="empty-state">Нет данных</div>';
+  }
 }
 
 async function loadDailyFeed() {
