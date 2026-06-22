@@ -2466,7 +2466,7 @@ async function saveCashflow() {
 
 async function loadGoalsScreen() {
   loadSpeedometer();
-  loadSpeedChart();
+  try { loadSpeedChart(); } catch (e) { console.error('speedChart', e); }
   loadDailyFeed();
   loadGoalsList();
   loadFamilyOverview();
@@ -2637,7 +2637,8 @@ function loadSpeedChart(m, y) {
 
 async function _renderSpeedChart(m, y, isCurrent, todayDay) {
   const container = document.getElementById('speed-chart-container');
-  const plannedMonthly = appSettings.plannedMonthly || 0;
+  if (!container) return;
+  const plannedMonthly = appSettings?.plannedMonthly || 0;
   if (!plannedMonthly) {
     container.innerHTML = '<div class="empty-state">Нет планового бюджета</div>';
     return;
@@ -2645,7 +2646,20 @@ async function _renderSpeedChart(m, y, isCurrent, todayDay) {
   container.innerHTML = '<div class="loading">Загрузка...</div>';
   try {
     const ym = `${y}-${String(m).padStart(2, '0')}`;
-    const chartData = await apiJson('GET', `/api/unified-chart-data/${ym}`);
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 10000);
+    let chartData;
+    try {
+      const res = await fetch(`/api/unified-chart-data/${ym}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: abort.signal,
+      });
+      clearTimeout(timer);
+      chartData = res.ok ? await res.json() : {};
+    } catch {
+      clearTimeout(timer);
+      chartData = {};
+    }
     const userExpenses = chartData.userExpenses || {};
     const daysInMonth = new Date(y, m, 0).getDate();
     const lastDay = isCurrent ? todayDay : daysInMonth;
