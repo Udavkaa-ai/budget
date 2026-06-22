@@ -2599,19 +2599,19 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
 let speedChartMonth = null; // { m, y } — currently viewed month
 
 function loadSpeedChart(m, y) {
+  const MNAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
   const now = new Date();
   const curM = now.getMonth() + 1, curY = now.getFullYear();
   if (!m) { m = curM; y = curY; }
   speedChartMonth = { m, y };
 
-  const isPast = y < curY || (y === curY && m < curM);
   const isCurrent = y === curY && m === curM;
 
   // Update nav UI
   const label = document.getElementById('speed-chart-month-label');
   const btnNext = document.getElementById('speed-chart-next');
   const btnPrev = document.getElementById('speed-chart-prev');
-  if (label) label.textContent = `${MONTH_NAMES[m - 1]} ${y}`;
+  if (label) label.textContent = `${MNAMES[m - 1]} ${y}`;
   if (btnNext) btnNext.disabled = isCurrent;
 
   // Wire nav buttons (replace listeners by cloning)
@@ -2632,10 +2632,10 @@ function loadSpeedChart(m, y) {
     });
   }
 
-  _renderSpeedChart(m, y, isPast, isCurrent, curM, curY, now.getDate());
+  _renderSpeedChart(m, y, isCurrent, now.getDate());
 }
 
-async function _renderSpeedChart(m, y, isPast, isCurrent, curM, curY, todayDay) {
+async function _renderSpeedChart(m, y, isCurrent, todayDay) {
   const container = document.getElementById('speed-chart-container');
   const plannedMonthly = appSettings.plannedMonthly || 0;
   if (!plannedMonthly) {
@@ -2644,14 +2644,13 @@ async function _renderSpeedChart(m, y, isPast, isCurrent, curM, curY, todayDay) 
   }
   container.innerHTML = '<div class="loading">Загрузка...</div>';
   try {
-    const ym = `${y}${String(m).padStart(2, '0')}`;
+    const ym = `${y}-${String(m).padStart(2, '0')}`;
     const chartData = await apiJson('GET', `/api/unified-chart-data/${ym}`);
     const userExpenses = chartData.userExpenses || {};
     const daysInMonth = new Date(y, m, 0).getDate();
-
-    // For current month show up to today; for past months show full month
     const lastDay = isCurrent ? todayDay : daysInMonth;
 
+    // Sum all users into daily totals array (index 0 = day 1)
     const dailyTotals = Array(daysInMonth).fill(0);
     for (const userDays of Object.values(userExpenses)) {
       for (let i = 0; i < userDays.length && i < daysInMonth; i++) {
@@ -2659,23 +2658,15 @@ async function _renderSpeedChart(m, y, isPast, isCurrent, curM, curY, todayDay) 
       }
     }
 
+    // Point for day d: cumulative_spent_through_day_d / (plan * d / daysInMonth) * 100
     const labels = [];
     const ratios = [];
     let cumulative = 0;
     for (let d = 1; d <= lastDay; d++) {
-      labels.push(d);
-      const expected = plannedMonthly * (d - 1) / daysInMonth;
-      if (d === 1) {
-        ratios.push(null);
-      } else {
-        ratios.push(expected > 0 ? Math.round(cumulative / expected * 100) : 100);
-      }
       cumulative += dailyTotals[d - 1] || 0;
-    }
-    // Last point: ratio vs plan through end of lastDay (or current moment for current month)
-    if (lastDay > 1) {
-      const expected = plannedMonthly * lastDay / daysInMonth;
-      ratios[ratios.length - 1] = expected > 0 ? Math.round(cumulative / expected * 100) : 100;
+      labels.push(d);
+      const expected = plannedMonthly * d / daysInMonth;
+      ratios.push(Math.round(cumulative / expected * 100));
     }
 
     container.innerHTML = '<canvas id="speed-chart-canvas"></canvas>';
