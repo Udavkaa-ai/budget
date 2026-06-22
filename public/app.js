@@ -2596,62 +2596,91 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
     </div>`;
 }
 
-async function loadSpeedChart() {
-  const container = document.getElementById('speed-chart-container');
+let speedChartMonth = null; // { m, y } — currently viewed month
+
+function loadSpeedChart(m, y) {
   const now = new Date();
-  const m = now.getMonth() + 1, y = now.getFullYear();
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const todayDay = now.getDate();
+  const curM = now.getMonth() + 1, curY = now.getFullYear();
+  if (!m) { m = curM; y = curY; }
+  speedChartMonth = { m, y };
+
+  const isPast = y < curY || (y === curY && m < curM);
+  const isCurrent = y === curY && m === curM;
+
+  // Update nav UI
+  const label = document.getElementById('speed-chart-month-label');
+  const btnNext = document.getElementById('speed-chart-next');
+  const btnPrev = document.getElementById('speed-chart-prev');
+  if (label) label.textContent = `${MONTH_NAMES[m - 1]} ${y}`;
+  if (btnNext) btnNext.disabled = isCurrent;
+
+  // Wire nav buttons (replace listeners by cloning)
+  if (btnPrev) {
+    const prev = btnPrev.cloneNode(true);
+    btnPrev.parentNode.replaceChild(prev, btnPrev);
+    prev.addEventListener('click', () => {
+      const d = new Date(y, m - 2, 1);
+      loadSpeedChart(d.getMonth() + 1, d.getFullYear());
+    });
+  }
+  if (btnNext && !isCurrent) {
+    const next = btnNext.cloneNode(true);
+    btnNext.parentNode.replaceChild(next, btnNext);
+    next.addEventListener('click', () => {
+      const d = new Date(y, m, 1);
+      loadSpeedChart(d.getMonth() + 1, d.getFullYear());
+    });
+  }
+
+  _renderSpeedChart(m, y, isPast, isCurrent, curM, curY, now.getDate());
+}
+
+async function _renderSpeedChart(m, y, isPast, isCurrent, curM, curY, todayDay) {
+  const container = document.getElementById('speed-chart-container');
   const plannedMonthly = appSettings.plannedMonthly || 0;
   if (!plannedMonthly) {
     container.innerHTML = '<div class="empty-state">Нет планового бюджета</div>';
     return;
   }
+  container.innerHTML = '<div class="loading">Загрузка...</div>';
   try {
     const ym = `${y}${String(m).padStart(2, '0')}`;
     const chartData = await apiJson('GET', `/api/unified-chart-data/${ym}`);
     const userExpenses = chartData.userExpenses || {};
-    // Sum all users' daily expenses
+    const daysInMonth = new Date(y, m, 0).getDate();
+
+    // For current month show up to today; for past months show full month
+    const lastDay = isCurrent ? todayDay : daysInMonth;
+
     const dailyTotals = Array(daysInMonth).fill(0);
     for (const userDays of Object.values(userExpenses)) {
       for (let i = 0; i < userDays.length && i < daysInMonth; i++) {
         dailyTotals[i] += userDays[i] || 0;
       }
     }
-    // Build data points: ratio at midnight = cumulative through end of day d-1
-    // Point for day 1 = 0 (nothing spent yet at midnight before day 1)
-    // Point for day d = cumulative[0..d-2] / (plannedMonthly * (d-1) / daysInMonth) * 100
+
     const labels = [];
     const ratios = [];
-    // Day 1 at midnight: 0 spent, plan = 0 → show 100% neutral or skip; use day number as X
-    // We plot from day 1 (midnight before day 1) to today's midnight
     let cumulative = 0;
-    for (let d = 1; d <= todayDay; d++) {
+    for (let d = 1; d <= lastDay; d++) {
       labels.push(d);
-      // At midnight of day d: cumulative spending through end of day d-1
       const expected = plannedMonthly * (d - 1) / daysInMonth;
       if (d === 1) {
-        ratios.push(null); // no data yet at very start
+        ratios.push(null);
       } else {
-        const ratio = expected > 0 ? Math.round(cumulative / expected * 100) : 100;
-        ratios.push(ratio);
+        ratios.push(expected > 0 ? Math.round(cumulative / expected * 100) : 100);
       }
-      if (d <= daysInMonth) {
-        cumulative += dailyTotals[d - 1] || 0;
-      }
+      cumulative += dailyTotals[d - 1] || 0;
     }
-    // Also add today's current state as the last point if today > 1
-    if (todayDay > 1) {
-      const expected = plannedMonthly * todayDay / daysInMonth;
-      const currentRatio = expected > 0 ? Math.round(cumulative / expected * 100) : 100;
-      labels[labels.length - 1] = todayDay;
-      ratios[ratios.length - 1] = currentRatio;
+    // Last point: ratio vs plan through end of lastDay (or current moment for current month)
+    if (lastDay > 1) {
+      const expected = plannedMonthly * lastDay / daysInMonth;
+      ratios[ratios.length - 1] = expected > 0 ? Math.round(cumulative / expected * 100) : 100;
     }
 
     container.innerHTML = '<canvas id="speed-chart-canvas"></canvas>';
     const canvas = document.getElementById('speed-chart-canvas');
 
-    // Build segment colors based on ratio value
     function ratioColor(v) {
       if (v === null) return 'rgba(150,150,150,0.5)';
       if (v < 70) return '#22c55e';
@@ -2659,10 +2688,8 @@ async function loadSpeedChart() {
       return '#ef4444';
     }
 
-    // Point colors
     const pointColors = ratios.map(ratioColor);
 
-    // Reference line + colored segments, drawn before dataset points
     const segmentPlugin = {
       id: 'speedSegmentColors',
       beforeDatasetsDraw(chart) {
@@ -2671,7 +2698,6 @@ async function loadSpeedChart() {
         ctx.beginPath();
         ctx.rect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
         ctx.clip();
-        // 100% reference line
         const y100 = scales.y.getPixelForValue(100);
         ctx.beginPath();
         ctx.setLineDash([6, 4]);
@@ -2681,23 +2707,17 @@ async function loadSpeedChart() {
         ctx.lineWidth = 1.5;
         ctx.stroke();
         ctx.setLineDash([]);
-        // Colored line segments
-        const ds = chart.data.datasets[0];
-        const pts = ds.data;
+        const pts = chart.data.datasets[0].data;
         const meta = chart.getDatasetMeta(0);
-        if (meta.data.length) {
-          for (let i = 0; i < pts.length - 1; i++) {
-            if (pts[i] === null || pts[i + 1] === null) continue;
-            const p1 = meta.data[i];
-            const p2 = meta.data[i + 1];
-            const avg = (pts[i] + pts[i + 1]) / 2;
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = ratioColor(avg);
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-          }
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (pts[i] === null || pts[i + 1] === null) continue;
+          const p1 = meta.data[i], p2 = meta.data[i + 1];
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = ratioColor((pts[i] + pts[i + 1]) / 2);
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
         }
         ctx.restore();
       }
@@ -2732,29 +2752,22 @@ async function loadSpeedChart() {
               label: (item) => item.raw !== null ? `${item.raw}%` : '—',
             }
           },
-          annotation: undefined,
         },
         scales: {
           x: {
-            title: { display: false },
             grid: { display: false },
             ticks: { font: { size: 11 }, maxRotation: 0 },
           },
           y: {
             min: 0,
             suggestedMax: 150,
-            ticks: {
-              callback: v => `${v}%`,
-              font: { size: 11 },
-              stepSize: 50,
-            },
+            ticks: { callback: v => `${v}%`, font: { size: 11 }, stepSize: 50 },
             grid: { color: 'rgba(0,0,0,0.06)' },
           }
         }
       }
     });
-
-  } catch (e) {
+  } catch {
     container.innerHTML = '<div class="empty-state">Нет данных</div>';
   }
 }
