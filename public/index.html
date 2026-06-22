@@ -202,7 +202,14 @@
 
       <!-- Speed chart -->
       <div class="card speed-chart-card">
-        <div class="speed-chart-title">📈 Скорость трат</div>
+        <div class="speed-chart-header">
+          <span class="speed-chart-title">📈 Скорость трат</span>
+          <div class="speed-chart-nav">
+            <button id="speed-chart-prev" class="icon-btn">◀</button>
+            <span id="speed-chart-month-label"></span>
+            <button id="speed-chart-next" class="icon-btn">▶</button>
+          </div>
+        </div>
         <div id="speed-chart-container"><div class="loading">Загрузка...</div></div>
       </div>
 
