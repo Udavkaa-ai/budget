@@ -248,6 +248,23 @@ app.get('/api/expenses/month', authMiddleware, (req, res) => {
   res.json(getExpensesForMonth(month, year, req.user.family));
 });
 
+// Расходы за конкретный день по дате траты (date=YYYY-MM-DD, опц. user=...)
+app.get('/api/expenses/day', authMiddleware, (req, res) => {
+  const { date, user } = req.query;
+  if (!date) return res.status(400).json({ error: 'date required' });
+  const [y, m, d] = date.split('-');
+  const dateKey = `${d}.${m}.${y}`;
+  const family = req.user.family;
+  const f = fam(family);
+  const entries = (data.expenses || [])
+    .filter(e => fam(e.family) === f && e.date === dateKey && (!user || e.user === user))
+    .map(({ id, date, category, description, amount, user, createdAt }) => ({
+      id, date, category, description, amount, user, createdAt,
+    }))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  res.json({ entries });
+});
+
 // Расходы по категории
 app.get('/api/expenses/category/:cat', authMiddleware, (req, res) => {
   const month = req.query.month ? parseInt(req.query.month) : null;
