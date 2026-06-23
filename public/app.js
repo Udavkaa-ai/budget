@@ -426,8 +426,6 @@ async function loadBudget() {
   const gen = ++budgetGen;
   const dateStr = formatDate(budgetDate);
   document.getElementById('budget-date-label').textContent = dateLabel(budgetDate);
-  try { loadSpeedometer(); } catch (e) { console.error('speedometer', e); }
-
   // Disable "next" if today
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const bd = new Date(budgetDate); bd.setHours(0, 0, 0, 0);
@@ -2597,6 +2595,7 @@ async function saveCashflow() {
 // ─── GOALS / ЦЕЛИ SCREEN ─────────────────────────────────────────────────────
 
 async function loadGoalsScreen() {
+  loadSpeedometer();
   loadGoalsList();
   try {
     const planData = await apiJson('GET', '/api/budget-plan');
