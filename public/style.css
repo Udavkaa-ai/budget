@@ -1089,7 +1089,7 @@ html, body {
 .compare-chart-wrapper canvas { width: 100% !important; }
 
 /* ── Heatmap ── */
-.heatmap-card { margin: 8px 16px; padding: 14px 16px; }
+.heatmap-card { padding: 14px 16px; }
 .heatmap-header { margin-bottom: 10px; }
 .heatmap-title { font-size: 15px; font-weight: 700; color: var(--text); display: block; margin-bottom: 6px; }
 .heatmap-legend {
