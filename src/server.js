@@ -39,6 +39,7 @@ import {
   updateUser,
   deleteUser,
   getTodayFeed,
+  getDayExpenses,
   getFamilyBudgetSettings,
   saveFamilyBudgetSettings,
   getUserByGoogleId,
@@ -254,15 +255,7 @@ app.get('/api/expenses/day', authMiddleware, (req, res) => {
   if (!date) return res.status(400).json({ error: 'date required' });
   const [y, m, d] = date.split('-');
   const dateKey = `${d}.${m}.${y}`;
-  const family = req.user.family;
-  const f = fam(family);
-  const entries = (data.expenses || [])
-    .filter(e => fam(e.family) === f && e.date === dateKey && (!user || e.user === user))
-    .map(({ id, date, category, description, amount, user, createdAt }) => ({
-      id, date, category, description, amount, user, createdAt,
-    }))
-    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  res.json({ entries });
+  res.json(getDayExpenses(dateKey, req.user.family, user || null));
 });
 
 // Расходы по категории

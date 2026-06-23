@@ -467,6 +467,17 @@ export function getTodayFeed(familyId, localDateStr) {
   return { entries };
 }
 
+export function getDayExpenses(dateKey, familyId, userName = null) {
+  const f = fam(familyId);
+  const entries = (data.expenses || [])
+    .filter(e => fam(e.family) === f && e.date === dateKey && (!userName || e.user === userName))
+    .map(({ id, date, category, description, amount, user, createdAt }) => ({
+      id, date, category, description, amount, user, createdAt,
+    }))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return { entries };
+}
+
 // ─── Goals ────────────────────────────────────────────────────────────────────
 
 export function getGoals(familyId) {
