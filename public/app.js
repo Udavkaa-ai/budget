@@ -632,6 +632,17 @@ async function loadHeatMap() {
   } catch { /* show zeros */ }
 
   const scale = summaryUserFilter ? 0.5 : 1;
+  const thresholds = [2000, 5000, 10000, 20000].map(v => v * scale);
+  const tLabel = v => v >= 1000 ? (v % 1000 === 0 ? `${v/1000}к` : `${v/1000}к`) : String(v);
+  const legend = document.querySelector('.heatmap-legend');
+  if (legend) legend.innerHTML = [
+    `<span class="hm-dot hm-c0"></span>0`,
+    `<span class="hm-dot hm-c1"></span>${tLabel(thresholds[0])}`,
+    `<span class="hm-dot hm-c2"></span>${tLabel(thresholds[1])}`,
+    `<span class="hm-dot hm-c3"></span>${tLabel(thresholds[2])}`,
+    `<span class="hm-dot hm-c4"></span>${tLabel(thresholds[3])}`,
+    `<span class="hm-dot hm-c5"></span>${tLabel(thresholds[3])}+`,
+  ].join('');
   function colorClass(v) {
     if (v === 0)                return 'hm-c0';
     if (v <= 2000  * scale)     return 'hm-c1';
