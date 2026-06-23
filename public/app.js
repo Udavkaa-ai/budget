@@ -702,7 +702,8 @@ async function showHeatmapDayDetail(dateStr, dayNum, detailEl) {
   detailEl.classList.remove('hidden');
   detailEl.innerHTML = `<div class="heatmap-day-detail-title">${parseInt(dayNum)} ${getMonthName(parseInt(m), parseInt(y))}</div><div class="loading" style="font-size:13px">Загрузка...</div>`;
   try {
-    const data = await apiJson('GET', `/api/feed/today?date=${dateStr}`);
+    const userParam = summaryUserFilter ? `&user=${encodeURIComponent(summaryUserFilter)}` : '';
+    const data = await apiJson('GET', `/api/expenses/day?date=${dateStr}${userParam}`);
     const entries = data.entries || [];
     if (entries.length === 0) {
       detailEl.querySelector('.loading').outerHTML = '<div class="empty-state" style="font-size:13px;padding:8px 0">Нет расходов в этот день</div>';
