@@ -1,5 +1,5 @@
 // Service Worker — network-first: всегда свежие файлы, кэш только при офлайне
-const CACHE = 'budget-v4';
+const CACHE = 'budget-v5';
 const STATIC = ['/', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {
