@@ -1088,6 +1088,73 @@ html, body {
 }
 .compare-chart-wrapper canvas { width: 100% !important; }
 
+/* ── Heatmap ── */
+.heatmap-card { margin: 8px 16px 0; padding: 14px 16px; }
+.heatmap-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.heatmap-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.heatmap-legend {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-muted);
+}
+.hm-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-left: 5px;
+}
+.hm-dot.hm-c0 { background: rgba(0,0,0,0.06); }
+.hm-dot.hm-c1 { background: #bbf7d0; }
+.hm-dot.hm-c2 { background: #4ade80; }
+.hm-dot.hm-c3 { background: #fbbf24; }
+.hm-dot.hm-c4 { background: #f97316; }
+.hm-dot.hm-c5 { background: #ef4444; }
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.hm-weekday {
+  text-align: center; font-size: 10px; font-weight: 600;
+  color: var(--text-muted); padding-bottom: 2px; text-transform: uppercase;
+}
+.hm-cell {
+  aspect-ratio: 1;
+  border-radius: 7px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  position: relative;
+  min-width: 0;
+}
+.hm-cell:hover { transform: scale(1.12); z-index: 1; }
+.hm-cell.hm-active { box-shadow: 0 0 0 2px var(--primary); }
+.hm-cell.hm-empty { cursor: default; background: transparent; }
+.hm-cell.hm-c0 { background: rgba(0,0,0,0.05); }
+.hm-cell.hm-c1 { background: #bbf7d0; }
+.hm-cell.hm-c2 { background: #4ade80; }
+.hm-cell.hm-c3 { background: #fbbf24; }
+.hm-cell.hm-c4 { background: #f97316; }
+.hm-cell.hm-c5 { background: #ef4444; }
+.hm-day-num {
+  font-size: 11px; font-weight: 700;
+  color: rgba(0,0,0,0.65); line-height: 1;
+}
+.hm-day-amt {
+  font-size: 9px; color: rgba(0,0,0,0.5); line-height: 1; margin-top: 1px;
+}
+.hm-cell.hm-c4 .hm-day-num,
+.hm-cell.hm-c5 .hm-day-num { color: rgba(255,255,255,0.9); }
+.hm-cell.hm-c4 .hm-day-amt,
+.hm-cell.hm-c5 .hm-day-amt { color: rgba(255,255,255,0.7); }
+
+.heatmap-day-detail {
+  margin-top: 12px; border-top: 1px solid var(--border-soft); padding-top: 10px;
+}
+.heatmap-day-detail-title {
+  font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px;
+}
+
 .category-list { display: flex; flex-direction: column; gap: 8px; }
 
 .category-item {
