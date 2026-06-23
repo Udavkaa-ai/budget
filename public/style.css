@@ -2297,7 +2297,6 @@ html, body {
 /* ═══════════════════════════════════════════ GOALS SCREEN ══ */
 
 .bablometr-card {
-  margin: 12px 16px 0;
   padding: 16px;
 }
 .bablometr-title {
@@ -2345,7 +2344,6 @@ html, body {
 
 /* Daily feed */
 .speed-chart-card {
-  margin: 12px 16px 0;
   padding: 14px 16px;
 }
 .speed-chart-header {
@@ -2491,7 +2489,6 @@ html, body {
 
 /* Family overview */
 .family-overview-card {
-  margin: 12px 16px;
   padding: 14px 16px;
 }
 .family-overview-row {

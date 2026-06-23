@@ -365,7 +365,8 @@ function initSocket() {
   });
 
   socket.on('budget-plan:updated', () => {
-    if (currentScreen === 'summary') loadSummary();
+    if (currentScreen === 'goals') loadGoalsScreen();
+    else if (currentScreen === 'summary') loadSummary();
   });
 
   socket.on('goals:updated', () => {
@@ -384,7 +385,7 @@ const SCREEN_TITLES = {
   summary: 'Месяц',
   chart: 'График',
   settings: 'Настройки',
-  goals: 'Копилки',
+  goals: 'Цели',
 };
 
 let currentScreen = 'budget';
@@ -425,6 +426,7 @@ async function loadBudget() {
   const gen = ++budgetGen;
   const dateStr = formatDate(budgetDate);
   document.getElementById('budget-date-label').textContent = dateLabel(budgetDate);
+  try { loadSpeedometer(); } catch (e) { console.error('speedometer', e); }
 
   // Disable "next" if today
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -738,8 +740,8 @@ async function loadSummary() {
   document.getElementById('category-detail').classList.add('hidden');
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
-  document.getElementById('summary-plan-section').classList.remove('hidden');
   loadHeatMap();
+  try { loadSpeedChart(summaryMonth, summaryYear); } catch (e) { console.error('speedChart', e); }
 
   try {
     const [data, planData] = await Promise.all([
@@ -754,13 +756,8 @@ async function loadSummary() {
     const users = Object.keys(data.byUser || {});
     planPartnerName = users.find(u => u !== currentUser.name) || 'Партнёр';
 
-    // Income values kept in lastPlanData (no longer shown as inputs)
-
-    // Populate category budgets table (compact: icon + name + input only)
-    renderPlanBreakdown(planData.categoryBudgets || {});
-    updatePlanTotals();
-
     renderSummaryView();
+    renderFamilyOverview(document.getElementById('family-overview-list'), data);
   } catch {
     showToastError('Ошибка загрузки статистики');
   }
@@ -809,8 +806,6 @@ function renderSummaryView() {
     });
     byUserEl.appendChild(chip);
   }
-
-  document.getElementById('summary-plan-section').classList.remove('hidden');
 
   if (summaryCompareMode) {
     document.getElementById('summary-categories').classList.add('hidden');
@@ -981,7 +976,6 @@ async function loadCategoryDetail(cat, month, year) {
 
   document.getElementById('summary-categories').classList.add('hidden');
   document.getElementById('summary-compare-panel').classList.add('hidden');
-  document.getElementById('summary-plan-section').classList.add('hidden');
   document.getElementById('summary-heatmap').classList.add('hidden');
   document.getElementById('summary-by-user').classList.add('hidden');
 
@@ -2600,14 +2594,15 @@ async function saveCashflow() {
   }
 }
 
-// ─── GOALS / КОПИЛКИ SCREEN ──────────────────────────────────────────────────
+// ─── GOALS / ЦЕЛИ SCREEN ─────────────────────────────────────────────────────
 
 async function loadGoalsScreen() {
-  loadSpeedometer();
-  try { loadSpeedChart(); } catch (e) { console.error('speedChart', e); }
-  loadDailyFeed();
   loadGoalsList();
-  loadFamilyOverview();
+  try {
+    const planData = await apiJson('GET', '/api/budget-plan');
+    lastPlanData = planData;
+    renderPlanBreakdown(planData.categoryBudgets || {});
+  } catch (e) { console.error('goals plan', e); }
 }
 
 async function loadSpeedometer() {

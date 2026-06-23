@@ -88,6 +88,13 @@
 
     <!-- ── BUDGET ──────────────────────────────────────────────────── -->
     <div id="screen-budget" class="screen active">
+
+      <!-- Баблометр -->
+      <div class="card bablometr-card">
+        <div class="bablometr-title">💸 Баблометр</div>
+        <div id="bablometr-content"><div class="loading">Загрузка...</div></div>
+      </div>
+
       <div class="nav-date-row">
         <button id="budget-prev" class="icon-btn">◀</button>
         <span id="budget-date-label" class="nav-date-label"></span>
@@ -134,7 +141,27 @@
         <div id="heatmap-day-detail" class="heatmap-day-detail hidden"></div>
       </div>
 
+      <!-- Speed chart -->
+      <div class="card speed-chart-card">
+        <div class="speed-chart-header">
+          <span class="speed-chart-title">📈 Скорость трат</span>
+          <div class="speed-chart-nav">
+            <button id="speed-chart-prev" class="icon-btn">◀</button>
+            <span id="speed-chart-month-label"></span>
+            <button id="speed-chart-next" class="icon-btn">▶</button>
+          </div>
+        </div>
+        <div id="speed-chart-container"><div class="loading">Загрузка...</div></div>
+      </div>
+
       <div id="summary-categories" class="category-list"></div>
+
+      <!-- Family spending overview -->
+      <div class="card family-overview-card">
+        <div class="settings-title">👥 Семейные расходы за месяц</div>
+        <div id="family-overview-list"><div class="loading">Загрузка...</div></div>
+      </div>
+
       <!-- Compare chart panel -->
       <div id="summary-compare-panel" class="hidden">
         <div class="compare-chart-wrapper">
@@ -153,17 +180,8 @@
         <div id="category-detail-list" class="expenses-list"></div>
       </div>
 
-      <!-- Plan section (merged from planning tab) -->
       <div class="card analysis-cta-card">
         <button id="btn-get-analysis" class="btn btn-primary btn-full">🤖 Финансовый анализ</button>
-      </div>
-
-      <div id="summary-plan-section">
-        <div class="card summary-plan-card">
-          <div class="settings-title">Лимиты по категориям</div>
-          <div id="plan-table"></div>
-          <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
-        </div>
       </div>
     </div>
 
@@ -209,47 +227,25 @@
       <div id="cf-chart-container" class="hidden"></div>
     </div>
 
-    <!-- ── GOALS / КОПИЛКИ ──────────────────────────────────────────── -->
+    <!-- ── GOALS / ЦЕЛИ ──────────────────────────────────────────────── -->
     <div id="screen-goals" class="screen">
 
-      <!-- Баблометр -->
-      <div class="card bablometr-card">
-        <div class="bablometr-title">💸 Баблометр</div>
-        <div id="bablometr-content"><div class="loading">Загрузка...</div></div>
-      </div>
-
-      <!-- Speed chart -->
-      <div class="card speed-chart-card">
-        <div class="speed-chart-header">
-          <span class="speed-chart-title">📈 Скорость трат</span>
-          <div class="speed-chart-nav">
-            <button id="speed-chart-prev" class="icon-btn">◀</button>
-            <span id="speed-chart-month-label"></span>
-            <button id="speed-chart-next" class="icon-btn">▶</button>
-          </div>
+      <!-- Лимиты по категориям -->
+      <div id="goals-plan-section">
+        <div class="card summary-plan-card">
+          <div class="settings-title">Лимиты по категориям</div>
+          <div id="plan-table"></div>
+          <button id="btn-save-plan" class="btn btn-primary btn-full" style="margin-top:12px">Сохранить</button>
         </div>
-        <div id="speed-chart-container"><div class="loading">Загрузка...</div></div>
       </div>
 
-      <!-- Daily feed -->
-      <div class="card feed-card">
-        <div class="feed-title">📥 Внесено сегодня</div>
-        <div id="daily-feed-list"><div class="loading">Загрузка...</div></div>
-      </div>
-
-      <!-- Goals / копилки -->
+      <!-- Goals / цели -->
       <div class="goals-section">
         <div class="goals-section-header">
-          <span class="settings-title" style="margin:0">🎯 Копилки</span>
+          <span class="settings-title" style="margin:0">🎯 Цели</span>
           <button id="btn-add-goal" class="btn btn-primary btn-sm">+ Новая</button>
         </div>
         <div id="goals-list"></div>
-      </div>
-
-      <!-- Family spending overview -->
-      <div class="card family-overview-card">
-        <div class="settings-title">👥 Семейные расходы за месяц</div>
-        <div id="family-overview-list"><div class="loading">Загрузка...</div></div>
       </div>
 
     </div>
@@ -290,7 +286,7 @@
         <div class="settings-section">
           <div class="settings-title">О приложении</div>
           <div class="settings-info">
-            <div style="color:var(--text-muted);font-size:13px">Версия 2.3.0</div>
+            <div style="color:var(--text-muted);font-size:13px">Версия 2.4.0</div>
           </div>
         </div>
 
@@ -351,7 +347,7 @@
     </button>
     <button class="nav-btn" data-screen="goals">
       <span class="nav-icon">🎯</span>
-      <span class="nav-label">Копилки</span>
+      <span class="nav-label">Цели</span>
     </button>
   </nav>
 
