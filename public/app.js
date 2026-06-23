@@ -594,6 +594,122 @@ let lastSummaryData = null;
 let lastPlanData = null;
 let compareChart = null;
 
+let heatmapSelectedDay = null;
+
+async function loadHeatMap() {
+  const grid = document.getElementById('heatmap-grid');
+  const detail = document.getElementById('heatmap-day-detail');
+  if (!grid) return;
+  const m = summaryMonth || (new Date().getMonth() + 1);
+  const y = summaryYear || new Date().getFullYear();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const ym = `${y}-${String(m).padStart(2, '0')}`;
+
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);font-size:13px">Загрузка...</div>';
+  detail.classList.add('hidden');
+  heatmapSelectedDay = null;
+
+  let dailyTotals = Array(daysInMonth).fill(0);
+  try {
+    const abort = new AbortController();
+    setTimeout(() => abort.abort(), 8000);
+    const res = await fetch(`/api/unified-chart-data/${ym}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: abort.signal,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      for (const userDays of Object.values(data.userExpenses || {})) {
+        for (let i = 0; i < userDays.length && i < daysInMonth; i++) {
+          dailyTotals[i] += userDays[i] || 0;
+        }
+      }
+    }
+  } catch { /* show zeros */ }
+
+  function colorClass(v) {
+    if (v === 0)       return 'hm-c0';
+    if (v <= 2000)     return 'hm-c1';
+    if (v <= 5000)     return 'hm-c2';
+    if (v <= 10000)    return 'hm-c3';
+    if (v <= 20000)    return 'hm-c4';
+    return 'hm-c5';
+  }
+  function fmtShort(v) {
+    if (v === 0) return '';
+    if (v >= 1000) return Math.round(v / 1000) + 'к';
+    return String(v);
+  }
+
+  // Monday-first: offset = (dayOfWeek(1st) + 6) % 7
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const offset = (firstDow + 6) % 7;
+  const DAYS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+
+  let html = DAYS.map(d => `<div class="hm-weekday">${d}</div>`).join('');
+  // blank cells before 1st
+  for (let i = 0; i < offset; i++) html += '<div class="hm-cell hm-empty"></div>';
+  // day cells
+  for (let d = 1; d <= daysInMonth; d++) {
+    const amt = dailyTotals[d - 1];
+    const cls = colorClass(amt);
+    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    html += `<div class="hm-cell ${cls}" data-date="${dateStr}" data-day="${d}">
+      <span class="hm-day-num">${d}</span>
+      ${amt > 0 ? `<span class="hm-day-amt">${fmtShort(amt)}</span>` : ''}
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  // Click: show day detail
+  grid.querySelectorAll('.hm-cell[data-date]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const dateStr = cell.dataset.date;
+      const dayNum = cell.dataset.day;
+      if (heatmapSelectedDay === dateStr) {
+        // toggle off
+        cell.classList.remove('hm-active');
+        detail.classList.add('hidden');
+        heatmapSelectedDay = null;
+        return;
+      }
+      grid.querySelectorAll('.hm-active').forEach(c => c.classList.remove('hm-active'));
+      cell.classList.add('hm-active');
+      heatmapSelectedDay = dateStr;
+      showHeatmapDayDetail(dateStr, dayNum, detail);
+    });
+  });
+}
+
+async function showHeatmapDayDetail(dateStr, dayNum, detailEl) {
+  const [y, m] = dateStr.split('-');
+  detailEl.classList.remove('hidden');
+  detailEl.innerHTML = `<div class="heatmap-day-detail-title">${parseInt(dayNum)} ${getMonthName(parseInt(m), parseInt(y))}</div><div class="loading" style="font-size:13px">Загрузка...</div>`;
+  try {
+    const data = await apiJson('GET', `/api/feed/today?date=${dateStr}`);
+    const entries = data.entries || [];
+    if (entries.length === 0) {
+      detailEl.querySelector('.loading').outerHTML = '<div class="empty-state" style="font-size:13px;padding:8px 0">Нет расходов в этот день</div>';
+      return;
+    }
+    const rows = entries.map(e => `
+      <div class="feed-entry">
+        <span class="feed-cat-icon">${CATEGORY_ICONS[e.category] || '❓'}</span>
+        <div class="feed-entry-info">
+          <span class="feed-entry-desc">${esc(e.description || e.category)}</span>
+          <span class="feed-entry-meta">${esc(e.user || '')}${e.category ? ` · ${esc(e.category)}` : ''}</span>
+        </div>
+        <span class="feed-entry-amt">${fmt(e.amount)}</span>
+      </div>`).join('');
+    const total = entries.reduce((s, e) => s + (e.amount || 0), 0);
+    detailEl.innerHTML = `
+      <div class="heatmap-day-detail-title">${parseInt(dayNum)} ${getMonthName(parseInt(m), parseInt(y))} · ${fmt(total)}</div>
+      ${rows}`;
+  } catch {
+    detailEl.innerHTML = '<div class="empty-state" style="font-size:13px">Ошибка загрузки</div>';
+  }
+}
+
 async function loadSummary() {
   const gen = ++summaryGen;
   const params = new URLSearchParams({
@@ -606,6 +722,7 @@ async function loadSummary() {
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
   document.getElementById('summary-plan-section').classList.remove('hidden');
+  loadHeatMap();
 
   try {
     const [data, planData] = await Promise.all([
@@ -847,6 +964,8 @@ async function loadCategoryDetail(cat, month, year) {
   document.getElementById('summary-categories').classList.add('hidden');
   document.getElementById('summary-compare-panel').classList.add('hidden');
   document.getElementById('summary-plan-section').classList.add('hidden');
+  document.getElementById('summary-heatmap').classList.add('hidden');
+  document.getElementById('summary-by-user').classList.add('hidden');
 
   const detail = document.getElementById('category-detail');
   detail.classList.remove('hidden');
@@ -2063,6 +2182,7 @@ function setupEventListeners() {
     document.getElementById('category-detail').classList.add('hidden');
     document.getElementById('summary-by-user').classList.remove('hidden');
     document.getElementById('summary-total-bar').classList.remove('hidden');
+    document.getElementById('summary-heatmap').classList.remove('hidden');
     renderSummaryView();
   });
 
