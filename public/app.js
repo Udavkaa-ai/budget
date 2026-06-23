@@ -619,7 +619,11 @@ async function loadHeatMap() {
     });
     if (res.ok) {
       const data = await res.json();
-      for (const userDays of Object.values(data.userExpenses || {})) {
+      const allExpenses = data.userExpenses || {};
+      const filteredExpenses = summaryUserFilter
+        ? (allExpenses[summaryUserFilter] ? { [summaryUserFilter]: allExpenses[summaryUserFilter] } : {})
+        : allExpenses;
+      for (const userDays of Object.values(filteredExpenses)) {
         for (let i = 0; i < userDays.length && i < daysInMonth; i++) {
           dailyTotals[i] += userDays[i] || 0;
         }
@@ -788,6 +792,7 @@ function renderSummaryView() {
       document.getElementById('category-detail').classList.add('hidden');
       if (summaryCompareMode) { return; }
       renderSummaryView();
+      loadHeatMap();
     });
     byUserEl.appendChild(chip);
   }
