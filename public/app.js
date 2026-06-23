@@ -631,12 +631,13 @@ async function loadHeatMap() {
     }
   } catch { /* show zeros */ }
 
+  const scale = summaryUserFilter ? 0.5 : 1;
   function colorClass(v) {
-    if (v === 0)       return 'hm-c0';
-    if (v <= 2000)     return 'hm-c1';
-    if (v <= 5000)     return 'hm-c2';
-    if (v <= 10000)    return 'hm-c3';
-    if (v <= 20000)    return 'hm-c4';
+    if (v === 0)                return 'hm-c0';
+    if (v <= 2000  * scale)     return 'hm-c1';
+    if (v <= 5000  * scale)     return 'hm-c2';
+    if (v <= 10000 * scale)     return 'hm-c3';
+    if (v <= 20000 * scale)     return 'hm-c4';
     return 'hm-c5';
   }
   function fmtShort(v) {
