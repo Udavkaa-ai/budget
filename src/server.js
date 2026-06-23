@@ -754,14 +754,26 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   const actualRemain  = totalInc   > 0 ? totalInc   - cur.total : null;
   const savingsDelta  = plannedSaving !== null && actualRemain !== null ? actualRemain - plannedSaving : null;
 
+  // Income schedule context: advance by 10th, salary by 25th
+  const expectedRemainingIncome = isCurrentMon && plannedInc > 0
+    ? Math.max(0, plannedInc - totalInc)
+    : 0;
+  const incomeScheduleNote = isCurrentMon ? (() => {
+    const d = daysElapsed;
+    if (d < 10) return 'Ожидаются обе выплаты: аванс (к 10-му) и зарплата (к 25-му)';
+    if (d < 25) return 'Аванс уже должен быть получен. Зарплата ожидается к 25-му числу';
+    return 'Обе выплаты (аванс и зарплата) уже должны быть получены';
+  })() : null;
+
   // Build report text for the AI
   const reportText = `Семейный бюджет — ${cur.monthName}
-Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}${expectedByNow !== null ? `\nТемп трат: ${cur.total.toLocaleString('ru')} ₽ (ожидалось к этому дню ~${expectedByNow.toLocaleString('ru')} ₽ по бюджету)` : ''}
+Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}${expectedByNow !== null ? `\nТемп трат: ${cur.total.toLocaleString('ru')} ₽ (ожидалось к этому дню ~${expectedByNow.toLocaleString('ru')} ₽ по плановому бюджету)` : ''}
 
 === ДОХОДЫ ===
-Запланировано: ${plannedInc.toLocaleString('ru')} ₽
+Плановый доход за месяц: ${plannedInc.toLocaleString('ru')} ₽
 ${Object.entries(incomes).map(([n, v]) => `  ${n}: ${v.toLocaleString('ru')} ₽`).join('\n') || '  (не указаны)'}
-Фактически получено (кэшфлоу): ${totalInc > 0 ? totalInc.toLocaleString('ru') + ' ₽' : 'не указано'}
+График выплат: аванс — не позднее 10-го числа, зарплата — не позднее 25-го (при выходных — раньше). Выплаты надёжные.${incomeScheduleNote ? `\nСтатус: ${incomeScheduleNote}` : ''}
+Фактически получено (кэшфлоу): ${totalInc > 0 ? totalInc.toLocaleString('ru') + ' ₽' : 'не зафиксировано'}${expectedRemainingIncome > 0 ? `\nОжидается до конца месяца: ~${expectedRemainingIncome.toLocaleString('ru')} ₽` : ''}
 
 === РАСХОДЫ ${cur.monthName.toUpperCase()} ===
 Итого: ${cur.total.toLocaleString('ru')} ₽${plannedInc ? ` (${Math.round(cur.total / plannedInc * 100)}% от дохода)` : ''}
