@@ -654,6 +654,215 @@ async function getFinancialAnalysis() {
   }
 }
 
+// ─── PDF REPORT ───────────────────────────────────────────────────────────────
+
+async function generatePdfReport() {
+  const btn = document.getElementById('btn-pdf-report');
+  btn.disabled = true;
+  btn.textContent = '⏳ Формирую отчёт...';
+
+  try {
+    const m = summaryMonth || (new Date().getMonth() + 1);
+    const y = summaryYear || new Date().getFullYear();
+
+    // Fetch 3 months of data
+    const makeParams = (mo, yr) => new URLSearchParams({ month: mo, year: yr }).toString();
+    const prevDate = new Date(y, m - 2, 1);
+    const prev2Date = new Date(y, m - 3, 1);
+
+    const [data, planData, prev, prev2] = await Promise.all([
+      apiJson('GET', `/api/summary?${makeParams(m, y)}`),
+      apiJson('GET', '/api/budget-plan'),
+      apiJson('GET', `/api/summary?${makeParams(prevDate.getMonth() + 1, prevDate.getFullYear())}`),
+      apiJson('GET', `/api/summary?${makeParams(prev2Date.getMonth() + 1, prev2Date.getFullYear())}`),
+    ]);
+
+    const html = buildReportHTML({ data, planData, prev, prev2, m, y });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) {
+      win.addEventListener('load', () => {
+        setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 300);
+      });
+    }
+  } catch (e) {
+    showToastError('Ошибка формирования отчёта');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📄 Скачать PDF отчёт';
+  }
+}
+
+function buildReportHTML({ data, planData, prev, prev2, m, y }) {
+  const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь',
+                     'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня',
+                      'июля','августа','сентября','октября','ноября','декабря'];
+  const monthLabel = `${MONTHS_RU[m - 1]} ${y}`;
+  const today = new Date();
+  const dateLabel = `${today.getDate()} ${MONTHS_GEN[today.getMonth()]} ${today.getFullYear()}`;
+
+  const prevDate = new Date(y, m - 2, 1);
+  const prev2Date = new Date(y, m - 3, 1);
+
+  const budgets = planData?.categoryBudgets || {};
+  const incomes = planData?.incomes || {};
+  const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
+
+  function fmtNum(n) {
+    return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
+  }
+
+  // Category chart: horizontal bars
+  const allCats = Object.keys(CATEGORY_ICONS);
+  const catData = allCats.map(cat => ({
+    cat,
+    icon: CATEGORY_ICONS[cat],
+    spent: data.byCategory?.[cat] || 0,
+    limit: budgets[cat] || 0,
+    prev: prev.byCategory?.[cat] || 0,
+    prev2: prev2.byCategory?.[cat] || 0,
+  })).filter(c => c.spent > 0 || c.limit > 0).sort((a, b) => b.spent - a.spent);
+
+  const maxBar = Math.max(...catData.map(c => Math.max(c.spent, c.limit)), 1);
+
+  const barRows = catData.map(c => {
+    const spentPct = Math.round(c.spent / maxBar * 100);
+    const limitPct = c.limit ? Math.round(c.limit / maxBar * 100) : 0;
+    const over = c.limit > 0 && c.spent > c.limit;
+    const barColor = over ? '#ef4444' : '#3b82f6';
+    const trend = c.prev > 0 ? Math.round((c.spent - c.prev) / c.prev * 100) : null;
+    const trendHtml = trend !== null
+      ? `<span style="color:${trend > 10 ? '#ef4444' : trend < -10 ? '#22c55e' : '#6b7280'};font-size:11px">${trend > 0 ? '▲' : '▼'}${Math.abs(trend)}%</span>`
+      : '';
+    return `
+      <tr>
+        <td style="width:120px;white-space:nowrap">${c.icon} ${c.cat}</td>
+        <td style="width:100%;padding:0 8px">
+          <div style="position:relative;height:18px;background:#f1f5f9;border-radius:4px;overflow:hidden">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:${spentPct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
+            ${c.limit ? `<div style="position:absolute;left:${limitPct}%;top:0;bottom:0;width:2px;background:#f59e0b;z-index:1"></div>` : ''}
+          </div>
+        </td>
+        <td style="white-space:nowrap;text-align:right;font-weight:600">${fmtNum(c.spent)}</td>
+        <td style="white-space:nowrap;text-align:right;color:#6b7280;font-size:12px">${c.limit ? `/ ${fmtNum(c.limit)}` : ''}</td>
+        <td style="white-space:nowrap;text-align:right;width:48px">${trendHtml}</td>
+      </tr>`;
+  }).join('');
+
+  // User breakdown table
+  const userRows = Object.entries(data.byUser || {}).map(([name, ud]) => {
+    const inc = incomes[name] || 0;
+    const pct = inc > 0 ? Math.round(ud.total / inc * 100) : '—';
+    return `<tr>
+      <td>${name}</td>
+      <td style="text-align:right;font-weight:600">${fmtNum(ud.total)}</td>
+      <td style="text-align:right;color:#6b7280">${inc ? fmtNum(inc) : '—'}</td>
+      <td style="text-align:right">${inc ? pct + '%' : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  // 3-month trend for top categories (by current month spend)
+  const top5 = catData.slice(0, 5);
+  const trendRows = top5.map(c => {
+    const arr = [c.prev2, c.prev, c.spent];
+    const svgW = 80, svgH = 30;
+    const mx = Math.max(...arr, 1);
+    const pts = arr.map((v, i) => `${Math.round(i / 2 * svgW)},${Math.round((1 - v / mx) * svgH)}`).join(' ');
+    const miniChart = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="overflow:visible">
+      <polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round"/>
+      ${arr.map((v, i) => `<circle cx="${Math.round(i / 2 * svgW)}" cy="${Math.round((1 - v / mx) * svgH)}" r="3" fill="#3b82f6"/>`).join('')}
+    </svg>`;
+    return `<tr>
+      <td>${c.icon} ${c.cat}</td>
+      <td style="text-align:right">${fmtNum(c.prev2)}</td>
+      <td style="text-align:right">${fmtNum(c.prev)}</td>
+      <td style="text-align:right;font-weight:600">${fmtNum(c.spent)}</td>
+      <td style="text-align:center;padding:0 8px">${miniChart}</td>
+    </tr>`;
+  }).join('');
+
+  const savingsRate = totalIncome > 0 ? Math.round((totalIncome - data.total) / totalIncome * 100) : null;
+  const savingsHtml = savingsRate !== null
+    ? `<div class="stat-box"><div class="stat-label">Норма сбережений</div><div class="stat-value" style="color:${savingsRate >= 0 ? '#22c55e' : '#ef4444'}">${savingsRate}%</div></div>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Отчёт за ${monthLabel}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1e293b; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; font-size: 13px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 2px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 20px 0 10px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+  .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+  .stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .stat-box { background: #f8fafc; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; }
+  .stat-label { font-size: 11px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-value { font-size: 20px; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 6px 4px; }
+  th { font-size: 11px; color: #64748b; text-align: left; border-bottom: 1px solid #e2e8f0; }
+  tr:not(:last-child) td { border-bottom: 1px solid #f1f5f9; }
+  .legend { display: flex; gap: 16px; font-size: 11px; color: #64748b; margin-top: 6px; }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+  @media print {
+    body { padding: 0; }
+    h2 { page-break-after: avoid; }
+    table { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<h1>Семейный бюджет — ${monthLabel}</h1>
+<div class="meta">Отчёт сформирован ${dateLabel}</div>
+
+<h2>Итоги месяца</h2>
+<div class="stats-row">
+  <div class="stat-box">
+    <div class="stat-label">Потрачено</div>
+    <div class="stat-value">${fmtNum(data.total)}</div>
+  </div>
+  ${totalIncome > 0 ? `<div class="stat-box"><div class="stat-label">Доходы</div><div class="stat-value" style="color:#22c55e">${fmtNum(totalIncome)}</div></div>` : ''}
+  ${totalIncome > 0 && planData?.categoryBudgets ? `<div class="stat-box"><div class="stat-label">Бюджет</div><div class="stat-value">${fmtNum(Object.values(budgets).reduce((s,v) => s+v, 0))}</div></div>` : ''}
+  ${savingsHtml}
+</div>
+
+${Object.keys(data.byUser || {}).length > 1 ? `
+<h2>По участникам</h2>
+<table>
+  <thead><tr><th>Участник</th><th style="text-align:right">Расходы</th><th style="text-align:right">Доход</th><th style="text-align:right">% дохода</th></tr></thead>
+  <tbody>${userRows}</tbody>
+</table>` : ''}
+
+<h2>Расходы по категориям</h2>
+<table>${barRows}</table>
+<div class="legend">
+  <span><span class="legend-dot" style="background:#3b82f6"></span>Факт</span>
+  <span><span class="legend-dot" style="background:#f59e0b"></span>Лимит</span>
+  <span><span class="legend-dot" style="background:#ef4444"></span>Превышение</span>
+</div>
+
+${top5.length > 0 ? `
+<h2>Тенденции — топ категорий</h2>
+<table>
+  <thead><tr>
+    <th>Категория</th>
+    <th style="text-align:right">${MONTHS_RU[prev2Date.getMonth()].slice(0,3)}</th>
+    <th style="text-align:right">${MONTHS_RU[prevDate.getMonth()].slice(0,3)}</th>
+    <th style="text-align:right">${MONTHS_RU[m-1].slice(0,3)}</th>
+    <th style="text-align:center">Тренд</th>
+  </tr></thead>
+  <tbody>${trendRows}</tbody>
+</table>` : ''}
+
+</body>
+</html>`;
+}
+
 // ─── SUMMARY SCREEN ───────────────────────────────────────────────────────────
 
 let summaryUserFilter = null; // null = all users
@@ -2275,6 +2484,7 @@ function setupEventListeners() {
   });
 
   document.getElementById('btn-get-analysis').addEventListener('click', getFinancialAnalysis);
+  document.getElementById('btn-pdf-report').addEventListener('click', generatePdfReport);
   document.getElementById('analysis-close').addEventListener('click', closeAnalysis);
   document.getElementById('analysis-share').addEventListener('click', shareAnalysis);
   document.getElementById('analysis-overlay').addEventListener('click', closeAnalysis);
