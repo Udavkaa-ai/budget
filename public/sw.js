@@ -18,6 +18,31 @@ self.addEventListener('activate', e => {
   );
 });
 
+self.addEventListener('push', e => {
+  const data = e.data?.json() || {};
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'Семейный бюджет', {
+      body: data.body || '',
+      icon: '/icon-512.png',
+      badge: '/icon-512.png',
+      data: { url: data.url || '/' },
+      vibrate: [100, 50, 100],
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = e.notification.data?.url || '/';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.includes(self.location.origin));
+      if (existing) return existing.focus();
+      return clients.openWindow(url);
+    })
+  );
+});
+
 self.addEventListener('fetch', e => {
   // API и Socket.IO — только сеть, без кэша
   if (e.request.url.includes('/api/') || e.request.url.includes('/socket.io/')) {

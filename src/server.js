@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import webpush from 'web-push';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -49,6 +50,13 @@ import {
   createInvite,
   getInvite,
   consumeInvite,
+  getOrCreateVapidKeys,
+  savePushSubscription,
+  removePushSubscription,
+  removeUserPushSubscriptions,
+  getFamilyPushSubscriptions,
+  getUserPushEnabled,
+  setUserPushEnabled,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -214,6 +222,21 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   // Уведомляем только пользователей той же семьи
   io.to(req.user.family).emit('expense:added', { expenses: withUser, by: req.user.name });
 
+  // Web Push — отправляем другим участникам семьи у которых включены уведомления
+  const subs = getFamilyPushSubscriptions(req.user.family, req.user.name)
+    .filter(s => getUserPushEnabled(s.userId, req.user.family));
+  if (subs.length) {
+    const total = withUser.reduce((s, e) => s + (e.amount || 0), 0);
+    const desc = withUser.length === 1
+      ? (withUser[0].description || withUser[0].category)
+      : `${withUser.length} расхода(ов)`;
+    sendPushToSubscriptions(subs, {
+      title: `💸 ${req.user.name} добавил расход`,
+      body: `${desc} — ${total.toLocaleString('ru')} ₽`,
+      url: '/',
+    }).catch(() => {});
+  }
+
   res.json({ ok: true, count: withUser.length });
 });
 
@@ -232,6 +255,50 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
   if (!deleted) return res.status(404).json({ error: 'Не найдено' });
 
   io.to(req.user.family).emit('expense:deleted', { id: req.params.id, by: req.user.name });
+  res.json({ ok: true });
+});
+
+// ─── Push Notifications ───────────────────────────────────────────────────────
+
+async function sendPushToSubscriptions(subscriptions, payload) {
+  const results = await Promise.allSettled(
+    subscriptions.map(sub =>
+      webpush.sendNotification(sub, JSON.stringify(payload)).catch(err => {
+        // 410 Gone — подписка протухла, удаляем
+        if (err.statusCode === 410) removePushSubscription(sub.endpoint, sub.family);
+        throw err;
+      })
+    )
+  );
+  return results.filter(r => r.status === 'fulfilled').length;
+}
+
+app.get('/api/push/vapid-key', authMiddleware, (req, res) => {
+  res.json({ publicKey: getOrCreateVapidKeys().publicKey });
+});
+
+app.post('/api/push/subscribe', authMiddleware, (req, res) => {
+  const { subscription } = req.body || {};
+  if (!subscription?.endpoint) return res.status(400).json({ error: 'Нет подписки' });
+  savePushSubscription(subscription, req.user.name, req.user.family);
+  res.json({ ok: true });
+});
+
+app.delete('/api/push/subscribe', authMiddleware, (req, res) => {
+  const { endpoint } = req.body || {};
+  if (endpoint) removePushSubscription(endpoint, req.user.family);
+  else removeUserPushSubscriptions(req.user.name, req.user.family);
+  res.json({ ok: true });
+});
+
+app.get('/api/push/settings', authMiddleware, (req, res) => {
+  res.json({ enabled: getUserPushEnabled(req.user.name, req.user.family) });
+});
+
+app.post('/api/push/settings', authMiddleware, (req, res) => {
+  const { enabled } = req.body || {};
+  setUserPushEnabled(req.user.name, req.user.family, !!enabled);
+  if (!enabled) removeUserPushSubscriptions(req.user.name, req.user.family);
   res.json({ ok: true });
 });
 
@@ -960,6 +1027,14 @@ setInterval(checkReminder, 60 * 1000);
 
 async function start() {
   await loadData();
+
+  // Web Push VAPID (ключи генерируются один раз и хранятся в data)
+  const vapid = getOrCreateVapidKeys();
+  webpush.setVapidDetails(
+    'mailto:budget@app.local',
+    vapid.publicKey,
+    vapid.privateKey,
+  );
 
   // '0.0.0.0' обязательно для Railway — слушаем на всех интерфейсах
   httpServer.listen(config.port, '0.0.0.0', () => {

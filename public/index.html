@@ -271,6 +271,18 @@
           <button id="btn-save-planned" class="btn btn-primary btn-full">Сохранить</button>
         </div>
 
+        <div class="settings-section" id="push-settings-section">
+          <div class="settings-title">Уведомления</div>
+          <label class="toggle-row">
+            <span class="toggle-label">🔔 Уведомлять о расходах партнёра</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="push-toggle" />
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+          <div class="settings-hint">Получайте уведомления когда партнёр добавляет расходы, даже если приложение закрыто.</div>
+        </div>
+
         <div class="settings-section">
           <div class="settings-title">Данные</div>
           <a id="btn-export" class="btn btn-outline btn-full" href="/api/export" download>📥 Экспорт CSV</a>
