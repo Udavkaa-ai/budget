@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { dirname } from 'path';
+import { generateVAPIDKeys } from 'web-push';
 import { config } from './config.js';
 
 let data = {
@@ -8,6 +9,7 @@ let data = {
   settings: {},
   goals: [],
   invites: {},
+  pushSubscriptions: [],
   meta: { created: new Date().toISOString(), version: 1 }
 };
 
@@ -747,4 +749,62 @@ export function getMonthName(month = null, year = null) {
   const m = month || (now.getMonth() + 1);
   const y = year || now.getFullYear();
   return `${months[m - 1]} ${y}`;
+}
+
+// ─── Push Notifications ───────────────────────────────────────────────────────
+
+export function getOrCreateVapidKeys() {
+  if (!data.vapidKeys) {
+    data.vapidKeys = generateVAPIDKeys();
+    debouncedSave();
+  }
+  return data.vapidKeys;
+}
+
+export function savePushSubscription(subscription, userId, family) {
+  if (!data.pushSubscriptions) data.pushSubscriptions = [];
+  // Replace existing subscription for same endpoint
+  const idx = data.pushSubscriptions.findIndex(s => s.endpoint === subscription.endpoint);
+  const entry = { ...subscription, userId, family: fam(family), savedAt: new Date().toISOString() };
+  if (idx >= 0) data.pushSubscriptions[idx] = entry;
+  else data.pushSubscriptions.push(entry);
+  debouncedSave();
+}
+
+export function removePushSubscription(endpoint, family) {
+  if (!data.pushSubscriptions) return;
+  const f = fam(family);
+  data.pushSubscriptions = data.pushSubscriptions.filter(
+    s => !(s.endpoint === endpoint && s.family === f)
+  );
+  debouncedSave();
+}
+
+export function removeUserPushSubscriptions(userId, family) {
+  if (!data.pushSubscriptions) return;
+  const f = fam(family);
+  data.pushSubscriptions = data.pushSubscriptions.filter(
+    s => !(s.userId === userId && s.family === f)
+  );
+  debouncedSave();
+}
+
+export function getFamilyPushSubscriptions(family, excludeUserId = null) {
+  if (!data.pushSubscriptions) return [];
+  const f = fam(family);
+  return data.pushSubscriptions.filter(
+    s => s.family === f && (!excludeUserId || s.userId !== excludeUserId)
+  );
+}
+
+export function getUserPushEnabled(userId, family) {
+  const s = familySettings(family);
+  return s.pushEnabled?.[userId] !== false; // default true
+}
+
+export function setUserPushEnabled(userId, family, enabled) {
+  const s = familySettings(family);
+  if (!s.pushEnabled) s.pushEnabled = {};
+  s.pushEnabled[userId] = enabled;
+  debouncedSave();
 }

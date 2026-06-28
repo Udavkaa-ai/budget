@@ -332,6 +332,50 @@ async function loginSubmit(e) {
   }
 }
 
+// ─── Push Notifications ───────────────────────────────────────────────────────
+
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const settings = await apiJson('GET', '/api/push/settings');
+    updatePushToggleUI(settings.enabled);
+    if (!settings.enabled) return;
+    await subscribeToPush();
+  } catch { /* push not critical */ }
+}
+
+async function subscribeToPush() {
+  if (Notification.permission === 'denied') return;
+  const reg = await navigator.serviceWorker.ready;
+  const { publicKey } = await apiJson('GET', '/api/push/vapid-key');
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+  await apiJson('POST', '/api/push/subscribe', { subscription: sub.toJSON() });
+}
+
+async function unsubscribeFromPush() {
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    await apiJson('DELETE', '/api/push/subscribe', { endpoint: sub.endpoint });
+    await sub.unsubscribe();
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+function updatePushToggleUI(enabled) {
+  const toggle = document.getElementById('push-toggle');
+  if (toggle) toggle.checked = !!enabled;
+}
+
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 
 function initSocket() {
@@ -2076,6 +2120,12 @@ async function initApp() {
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
+  // Hide push section if browser doesn't support it
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    document.getElementById('push-settings-section')?.classList.add('hidden');
+  } else {
+    initPushNotifications();
+  }
 }
 
 function setupEventListeners() {
@@ -2350,6 +2400,33 @@ function setupEventListeners() {
       showToastError(res.error || 'Ошибка сохранения');
     }
   });
+
+  // Push notifications toggle
+  const pushToggle = document.getElementById('push-toggle');
+  if (pushToggle) {
+    pushToggle.addEventListener('change', async () => {
+      const enabled = pushToggle.checked;
+      try {
+        if (enabled) {
+          if (Notification.permission === 'denied') {
+            showToastError('Уведомления заблокированы в браузере. Разрешите их в настройках.');
+            pushToggle.checked = false;
+            return;
+          }
+          await apiJson('POST', '/api/push/settings', { enabled: true });
+          await subscribeToPush();
+          showToastSuccess('Уведомления включены');
+        } else {
+          await apiJson('POST', '/api/push/settings', { enabled: false });
+          await unsubscribeFromPush();
+          showToastSuccess('Уведомления отключены');
+        }
+      } catch {
+        showToastError('Не удалось изменить настройку');
+        pushToggle.checked = !enabled;
+      }
+    });
+  }
 
   // Export button — download with auth
   document.getElementById('btn-export').addEventListener('click', async (e) => {
