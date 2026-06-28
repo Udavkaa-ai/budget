@@ -913,6 +913,8 @@ html, body {
   padding: 0 20px 10px;
   flex-shrink: 0;
 }
+.analysis-header-actions { display: flex; align-items: center; gap: 4px; }
+.analysis-share-btn { font-size: 18px; }
 
 .analysis-body {
   flex: 1;
