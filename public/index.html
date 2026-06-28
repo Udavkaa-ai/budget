@@ -294,6 +294,9 @@
             </label>
           </div>
           <div id="import-result" class="hidden" style="margin-top:8px"></div>
+          <div style="margin-top:8px">
+            <button id="btn-beauty-scan" class="btn btn-outline btn-full">💄 Найти расходы для «Красоты»</button>
+          </div>
         </div>
 
         <div class="settings-section">
@@ -376,6 +379,17 @@
       </div>
     </div>
     <div id="analysis-body" class="analysis-body"></div>
+  </div>
+
+  <!-- Beauty Candidates Sheet -->
+  <div id="beauty-overlay" class="sheet-overlay hidden"></div>
+  <div id="beauty-sheet" class="analysis-sheet">
+    <div class="sheet-handle"></div>
+    <div class="analysis-sheet-header">
+      <span class="sheet-title">💄 Кандидаты в «Красоту»</span>
+      <button id="beauty-close" class="icon-btn">✕</button>
+    </div>
+    <div id="beauty-body" class="analysis-body"></div>
   </div>
 
   <!-- Calendar Date Picker -->

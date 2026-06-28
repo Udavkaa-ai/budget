@@ -467,6 +467,20 @@ html, body {
 .btn-delete:hover { color: var(--danger); background: rgba(255,92,135,0.1); }
 .btn-edit:hover { color: var(--primary); background: var(--primary-light); }
 
+.beauty-candidate-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.beauty-candidate-row input[type=checkbox] { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; }
+.beauty-candidate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.beauty-candidate-desc { font-size: 14px; font-weight: 500; color: var(--text); }
+.beauty-candidate-meta { font-size: 12px; color: var(--text-muted); }
+.beauty-cat-old { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
 .empty-state {
   text-align: center;
   color: var(--text-muted);

@@ -334,6 +334,84 @@ async function loginSubmit(e) {
   }
 }
 
+// ─── BEAUTY RECATEGORIZATION ─────────────────────────────────────────────────
+
+async function openBeautyCandidates() {
+  const btn = document.getElementById('btn-beauty-scan');
+  btn.disabled = true;
+  btn.textContent = '⏳ Ищу...';
+
+  document.getElementById('beauty-sheet').classList.add('open');
+  document.getElementById('beauty-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  const body = document.getElementById('beauty-body');
+  body.innerHTML = '<div class="loading" style="padding:32px;text-align:center">Сканирую расходы...</div>';
+
+  try {
+    const { candidates } = await apiJson('GET', '/api/beauty-candidates');
+
+    if (candidates.length === 0) {
+      body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted)">Ничего не найдено — расходы уже корректно разложены по категориям.</div>';
+      btn.disabled = false;
+      btn.textContent = '💄 Найти расходы для «Красоты»';
+      return;
+    }
+
+    const rows = candidates.map(e => `
+      <label class="beauty-candidate-row">
+        <input type="checkbox" class="beauty-cb" data-id="${e.id}" checked />
+        <span class="beauty-candidate-info">
+          <span class="beauty-candidate-desc">${e.description || '—'}</span>
+          <span class="beauty-candidate-meta">${e.date} · ${fmt(e.amount)} · <span class="beauty-cat-old">${e.category}</span></span>
+        </span>
+      </label>`).join('');
+
+    body.innerHTML = `
+      <div style="padding:12px 16px 6px;color:var(--text-muted);font-size:13px">
+        Найдено <b>${candidates.length}</b> расх. Отметьте нужные и перекатегоризируйте.
+      </div>
+      <div id="beauty-list">${rows}</div>
+      <div style="padding:12px 16px;display:flex;gap:8px">
+        <button id="beauty-select-all" class="btn btn-outline" style="flex:0 0 auto">Все</button>
+        <button id="beauty-confirm" class="btn btn-primary" style="flex:1">💄 Перекатегоризировать</button>
+      </div>`;
+
+    document.getElementById('beauty-select-all').addEventListener('click', () => {
+      const cbs = body.querySelectorAll('.beauty-cb');
+      const allChecked = [...cbs].every(c => c.checked);
+      cbs.forEach(c => c.checked = !allChecked);
+    });
+
+    document.getElementById('beauty-confirm').addEventListener('click', async () => {
+      const ids = [...body.querySelectorAll('.beauty-cb:checked')].map(c => c.dataset.id);
+      if (ids.length === 0) { showToastError('Ничего не выбрано'); return; }
+      const confirmBtn = document.getElementById('beauty-confirm');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '⏳ Применяю...';
+      try {
+        const { updated } = await apiJson('POST', '/api/beauty-recategorize', { ids });
+        showToastSuccess(`Перекатегоризировано: ${updated}`);
+        closeBeautySheet();
+      } catch {
+        showToastError('Ошибка при сохранении');
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '💄 Перекатегоризировать';
+      }
+    });
+  } catch {
+    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted)">Ошибка загрузки</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💄 Найти расходы для «Красоты»';
+  }
+}
+
+function closeBeautySheet() {
+  document.getElementById('beauty-sheet').classList.remove('open');
+  document.getElementById('beauty-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
 async function initPushNotifications() {
@@ -2681,6 +2759,10 @@ function setupEventListeners() {
 
     e.target.value = '';
   });
+
+  document.getElementById('btn-beauty-scan').addEventListener('click', openBeautyCandidates);
+  document.getElementById('beauty-close').addEventListener('click', closeBeautySheet);
+  document.getElementById('beauty-overlay').addEventListener('click', closeBeautySheet);
 
   // Reminder close
   document.getElementById('reminder-close').addEventListener('click', () => {

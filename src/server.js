@@ -57,6 +57,7 @@ import {
   getFamilyPushSubscriptions,
   getUserPushEnabled,
   setUserPushEnabled,
+  getAllFamilyExpenses,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -368,6 +369,38 @@ app.get('/api/chart', authMiddleware, async (req, res) => {
     console.error('Chart error:', err);
     res.status(500).json({ error: 'Ошибка генерации диаграммы' });
   }
+});
+
+// Кандидаты для перекатегоризации в "Красота"
+const BEAUTY_KEYWORDS = [
+  'маникюр','педикюр','стрижк','косметик','парфюм','шампун','тушь','помад',
+  'пудр','тональн','эпиляц','брови','ресниц','укладк','ботокс','лосьон',
+  'скраб','сыворотк','макияж','мейкап','спа','крем','ногт','салон красот',
+  'окраск волос','покраск волос','хайлайтер','консилер',
+];
+
+app.get('/api/beauty-candidates', authMiddleware, (req, res) => {
+  const candidates = getAllFamilyExpenses(req.user.family)
+    .filter(e => {
+      if (e.category === 'Красота') return false;
+      const desc = (e.description || '').toLowerCase();
+      return BEAUTY_KEYWORDS.some(kw => desc.includes(kw));
+    })
+    .map(e => ({ id: e.id, date: e.date, category: e.category, amount: e.amount, description: e.description, user: e.user }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  res.json({ candidates });
+});
+
+app.post('/api/beauty-recategorize', authMiddleware, async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) return res.json({ updated: 0 });
+  let updated = 0;
+  for (const id of ids) {
+    const result = await updateExpense(id, { category: 'Красота' }, req.user.family);
+    if (result) updated++;
+  }
+  if (updated > 0) io.to(req.user.family).emit('expense:updated', { by: req.user.name });
+  res.json({ updated });
 });
 
 // Экспорт CSV
