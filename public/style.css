@@ -445,11 +445,12 @@ html, body {
 .expense-amount.is-income { color: var(--income); }
 
 .expense-actions {
-  width: 28px;
+  display: flex;
+  gap: 2px;
   flex-shrink: 0;
 }
 
-.btn-delete {
+.btn-delete, .btn-edit {
   background: none;
   border: none;
   cursor: pointer;
@@ -461,8 +462,10 @@ html, body {
   transition: all 0.15s;
 }
 
-.expense-item:hover .btn-delete { opacity: 1; }
+.expense-item:hover .btn-delete,
+.expense-item:hover .btn-edit { opacity: 1; }
 .btn-delete:hover { color: var(--danger); background: rgba(255,92,135,0.1); }
+.btn-edit:hover { color: var(--primary); background: var(--primary-light); }
 
 .empty-state {
   text-align: center;

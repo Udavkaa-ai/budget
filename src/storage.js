@@ -444,6 +444,18 @@ export function getExpensesForMonth(month = null, year = null, familyId) {
 /**
  * Удалить расход
  */
+export async function updateExpense(id, { date, category, amount, description }, familyId) {
+  const f = fam(familyId);
+  const exp = data.expenses.find(e => e.id === id && fam(e.family) === f);
+  if (!exp) return null;
+  if (date !== undefined) exp.date = date;
+  if (category !== undefined) exp.category = category;
+  if (amount !== undefined) exp.amount = amount;
+  if (description !== undefined) exp.description = description;
+  debouncedSave();
+  return exp;
+}
+
 export async function deleteExpense(id, familyId) {
   const f = fam(familyId);
   const index = data.expenses.findIndex(e => e.id === id && fam(e.family) === f);

@@ -1620,29 +1620,45 @@ async function submitFormExpense() {
   btn.textContent = 'Сохраняю...';
 
   try {
-    const res = await apiJson('POST', '/api/expenses', {
-      expenses: [{ date: dateStr, category: selectedCategory, amount, description }],
-    });
-    if (res.ok) {
-      showToastSuccess('Расход добавлен');
-      const fab = document.getElementById('fab-add');
-      fab.classList.add('fab--success');
-      setTimeout(() => fab.classList.remove('fab--success'), 700);
-      animateNextLoad = true;
-      closeSheet();
-      loadBudget();
+    if (editingExpenseId) {
+      const res = await apiJson('PUT', `/api/expenses/${editingExpenseId}`, {
+        date: dateStr, category: selectedCategory, amount, description,
+      });
+      if (res.ok) {
+        showToastSuccess('Изменения сохранены');
+        closeSheet();
+        refreshCurrentScreen();
+      } else {
+        showToastError(res.error || 'Ошибка');
+      }
     } else {
-      showToastError(res.error || 'Ошибка');
+      const res = await apiJson('POST', '/api/expenses', {
+        expenses: [{ date: dateStr, category: selectedCategory, amount, description }],
+      });
+      if (res.ok) {
+        showToastSuccess('Расход добавлен');
+        const fab = document.getElementById('fab-add');
+        fab.classList.add('fab--success');
+        setTimeout(() => fab.classList.remove('fab--success'), 700);
+        animateNextLoad = true;
+        closeSheet();
+        loadBudget();
+      } else {
+        showToastError(res.error || 'Ошибка');
+      }
     }
   } catch {
     showToastError('Ошибка соединения');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Добавить расход';
+    btn.textContent = editingExpenseId ? 'Сохранить изменения' : 'Добавить расход';
   }
 }
 
+let editingExpenseId = null;
+
 function resetAddForm() {
+  editingExpenseId = null;
   selectedCategory = null;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('form-amount').value = '';
@@ -1650,7 +1666,34 @@ function resetAddForm() {
   document.getElementById('form-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('parse-result').classList.add('hidden');
   document.getElementById('expense-text').value = '';
+  document.querySelector('.sheet-title').textContent = 'Добавить расход';
+  document.getElementById('btn-add-form').textContent = 'Добавить расход';
   switchAddTab('text');
+}
+
+function openEditExpense(exp) {
+  resetAddForm();
+  editingExpenseId = exp.id;
+
+  // Pre-select category
+  selectedCategory = exp.category;
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.cat === exp.category);
+  });
+
+  // Pre-fill fields
+  document.getElementById('form-amount').value = exp.amount;
+  document.getElementById('form-description').value = exp.description || '';
+  // Convert DD.MM.YYYY → YYYY-MM-DD for date input
+  if (exp.date) {
+    const [d, m, y] = exp.date.split('.');
+    document.getElementById('form-date').value = `${y}-${m}-${d}`;
+  }
+
+  document.querySelector('.sheet-title').textContent = 'Редактировать расход';
+  document.getElementById('btn-add-form').textContent = 'Сохранить изменения';
+  switchAddTab('form');
+  openSheet();
 }
 
 // ─── AI TEXT PARSING ──────────────────────────────────────────────────────────
@@ -1817,7 +1860,7 @@ async function confirmParsedExpenses() {
 
 // ─── EXPENSE ITEM BUILDER ─────────────────────────────────────────────────────
 
-function buildExpenseItem(exp, canDelete, { showDate = false, showCategory = true, showUser = true } = {}) {
+function buildExpenseItem(exp, canEdit, { showDate = false, showCategory = true, showUser = true } = {}) {
   const item = document.createElement('div');
   item.className = 'expense-item';
   item.dataset.id = exp.id;
@@ -1835,12 +1878,16 @@ function buildExpenseItem(exp, canDelete, { showDate = false, showCategory = tru
     <div class="expense-right">
       <span class="expense-amount">${fmt(exp.amount)}</span>
       <div class="expense-actions">
-        ${canDelete ? `<button class="btn-delete" title="Удалить">🗑</button>` : ''}
+        ${canEdit ? `<button class="btn-edit" title="Редактировать">✏️</button><button class="btn-delete" title="Удалить">🗑</button>` : ''}
       </div>
     </div>
   `;
 
-  if (canDelete) {
+  if (canEdit) {
+    item.querySelector('.btn-edit').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openEditExpense(exp);
+    });
     item.querySelector('.btn-delete').addEventListener('click', (e) => {
       e.stopPropagation();
       deleteExpenseUI(exp.id, item);
