@@ -802,7 +802,27 @@ ${prev2.total > 0 ? prev2CatLines : '(нет данных)'}
 === ПЛАН/ЛИМИТЫ ===
 Плановые расходы на месяц: ${(settings.plannedMonthly || 0).toLocaleString('ru')} ₽
 Сумма лимитов по категориям: ${sumLimits.toLocaleString('ru')} ₽
-Лимиты по категориям: ${Object.keys(catLimits).length ? Object.entries(catLimits).map(([c, v]) => `${c}: ${v.toLocaleString('ru')} ₽`).join(', ') : 'не заданы'}
+Лимиты по категориям (для анализа корректировки):
+${(() => {
+  const allCats = new Set([
+    ...Object.keys(cur.byCategory),
+    ...Object.keys(prev.byCategory),
+    ...Object.keys(prev2.byCategory),
+    ...Object.keys(catLimits),
+  ]);
+  return [...allCats].map(cat => {
+    const c = cur.byCategory[cat] || 0;
+    const p = prev.byCategory[cat] || 0;
+    const p2 = prev2.byCategory[cat] || 0;
+    const months = [c, p, p2].filter(v => v > 0);
+    const avg = months.length ? Math.round(months.reduce((s, v) => s + v, 0) / months.length) : 0;
+    const lim = catLimits[cat];
+    const limTxt = lim ? `лимит ${lim.toLocaleString('ru')} ₽` : 'лимит не задан';
+    const avgTxt = avg ? `среднее за ${months.length} мес: ${avg.toLocaleString('ru')} ₽` : '';
+    const gap = lim && avg ? ` → ${avg > lim ? `СИСТЕМАТИЧЕСКИ ПРЕВЫШАЕТ на ${(avg - lim).toLocaleString('ru')} ₽` : avg < lim * 0.7 ? `стабильно ниже лимита на ${(lim - avg).toLocaleString('ru')} ₽` : 'в норме'}` : '';
+    return `  ${cat}: ${limTxt}${avgTxt ? `, ${avgTxt}` : ''}${gap}`;
+  }).join('\n');
+})()}
 
 === СБЕРЕЖЕНИЯ ===
 Плановые сбережения (доход − сумма лимитов): ${plannedSaving !== null ? plannedSaving.toLocaleString('ru') + ' ₽' : 'нет данных'}
