@@ -443,6 +443,11 @@ export function getExpensesForMonth(month = null, year = null, familyId) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export function getAllFamilyExpenses(familyId) {
+  const f = fam(familyId);
+  return data.expenses.filter(e => fam(e.family) === f);
+}
+
 /**
  * Удалить расход
  */
