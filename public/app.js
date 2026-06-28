@@ -528,6 +528,26 @@ function closeSheet() {
 
 // ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
 
+let lastAnalysisText = null;
+
+async function shareAnalysis() {
+  if (!lastAnalysisText) return;
+  const m = summaryMonth || (new Date().getMonth() + 1);
+  const y = summaryYear || new Date().getFullYear();
+  const title = `Финансовый анализ — ${getMonthName(m, y)}`;
+  const plain = lastAnalysisText
+    .replace(/^#{1,3} /gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text: plain });
+    } catch { /* dismissed */ }
+    return;
+  }
+  await navigator.clipboard.writeText(`${title}\n\n${plain}`);
+  showToastSuccess('Скопировано в буфер обмена');
+}
+
 function openAnalysis() {
   document.getElementById('analysis-sheet').classList.add('open');
   document.getElementById('analysis-overlay').classList.remove('hidden');
@@ -563,6 +583,8 @@ async function getFinancialAnalysis() {
 
   const body = document.getElementById('analysis-body');
   body.innerHTML = '<div class="analysis-loading"><div class="analysis-spinner"></div><p>Собираю данные и готовлю анализ…</p></div>';
+  document.getElementById('analysis-share').classList.add('hidden');
+  lastAnalysisText = null;
   openAnalysis();
 
   try {
@@ -575,9 +597,11 @@ async function getFinancialAnalysis() {
       return;
     }
 
-    const html = renderMarkdown(data.report || '');
+    lastAnalysisText = data.report || '';
+    const html = renderMarkdown(lastAnalysisText);
     body.innerHTML = `<div class="analysis-report">${html}</div>
       <div class="analysis-model">Модель: ${data.model || '—'}</div>`;
+    document.getElementById('analysis-share').classList.remove('hidden');
   } catch {
     body.innerHTML = '<div class="analysis-error">⚠️ Ошибка соединения</div>';
   } finally {
@@ -2155,6 +2179,7 @@ function setupEventListeners() {
 
   document.getElementById('btn-get-analysis').addEventListener('click', getFinancialAnalysis);
   document.getElementById('analysis-close').addEventListener('click', closeAnalysis);
+  document.getElementById('analysis-share').addEventListener('click', shareAnalysis);
   document.getElementById('analysis-overlay').addEventListener('click', closeAnalysis);
 
   // Summary navigation
