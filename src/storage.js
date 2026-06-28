@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { dirname } from 'path';
-import { generateVAPIDKeys } from 'web-push';
+import webpush from 'web-push';
 import { config } from './config.js';
 
 let data = {
@@ -755,7 +755,7 @@ export function getMonthName(month = null, year = null) {
 
 export function getOrCreateVapidKeys() {
   if (!data.vapidKeys) {
-    data.vapidKeys = generateVAPIDKeys();
+    data.vapidKeys = webpush.generateVAPIDKeys();
     debouncedSave();
   }
   return data.vapidKeys;
