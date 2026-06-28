@@ -21,6 +21,7 @@ import {
   updateSetting,
   getCategoryExpenses,
   getExpensesForMonth,
+  updateExpense,
   deleteExpense,
   flushData,
   getGoals,
@@ -214,6 +215,15 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   io.to(req.user.family).emit('expense:added', { expenses: withUser, by: req.user.name });
 
   res.json({ ok: true, count: withUser.length });
+});
+
+// Редактировать расход
+app.put('/api/expenses/:id', authMiddleware, async (req, res) => {
+  const { date, category, amount, description } = req.body || {};
+  const updated = await updateExpense(req.params.id, { date, category, amount, description }, req.user.family);
+  if (!updated) return res.status(404).json({ error: 'Не найдено' });
+  io.to(req.user.family).emit('expense:updated', { id: req.params.id, by: req.user.name });
+  res.json({ ok: true, expense: updated });
 });
 
 // Удалить расход
