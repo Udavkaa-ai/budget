@@ -9,17 +9,17 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: 'Build type'
+        description: 'Build type: standalone = testable APK (debug-signed, JS embedded), store = signed with release keystore'
         required: true
-        default: 'debug'
+        default: 'standalone'
         type: choice
         options:
-          - debug
-          - release
+          - standalone
+          - store
 
 jobs:
   build:
-    name: Build ${{ github.event.inputs.build_type || 'debug' }} APK
+    name: Build ${{ github.event.inputs.build_type || 'standalone' }} APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -85,19 +85,24 @@ jobs:
         working-directory: android/android
         run: chmod +x gradlew
 
-      - name: Build debug APK
-        if: ${{ github.event.inputs.build_type != 'release' }}
+      # Standalone build: assembleRelease embeds the JS bundle so the APK works
+      # without a Metro dev server. Expo's generated build.gradle signs the
+      # release buildType with the debug keystore by default — installable for
+      # testing, but NOT suitable for Google Play.
+      - name: Build standalone APK
+        if: ${{ github.event.inputs.build_type != 'store' }}
         working-directory: android/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
-      - name: Build release APK
-        if: ${{ github.event.inputs.build_type == 'release' }}
+      - name: Build store APK
+        if: ${{ github.event.inputs.build_type == 'store' }}
         working-directory: android/android
         run: |
-          # Write keystore from secret
+          # Write keystore from secret and switch release signing to it
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          echo "apply from: '../../release-signing.gradle'" >> app/build.gradle
           ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
@@ -107,19 +112,10 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       # ── Upload APK ────────────────────────────────────────────────────────────
-      - name: Upload debug APK
-        if: ${{ github.event.inputs.build_type != 'release' }}
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: family-budget-debug-${{ github.run_number }}
-          path: android/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
-
-      - name: Upload release APK
-        if: ${{ github.event.inputs.build_type == 'release' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-budget-release-${{ github.run_number }}
+          name: family-budget-${{ github.event.inputs.build_type || 'standalone' }}-${{ github.run_number }}
           path: android/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
@@ -128,13 +124,13 @@ jobs:
         run: |
           echo "## ✅ APK собран" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Тип:** ${{ github.event.inputs.build_type || 'debug' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Тип:** ${{ github.event.inputs.build_type || 'standalone' }} (JS-бандл встроен, Metro не нужен)" >> $GITHUB_STEP_SUMMARY
           echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Скачать: Actions → этот запуск → Artifacts → \`family-budget-*\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Установка на устройство" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "adb install app-debug.apk" >> $GITHUB_STEP_SUMMARY
+          echo "adb install app-release.apk" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "Или просто отправьте APK-файл тестировщику — он устанавливается напрямую." >> $GITHUB_STEP_SUMMARY
