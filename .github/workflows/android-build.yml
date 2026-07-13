@@ -6,6 +6,7 @@ on:
       - android/react-native
     paths:
       - 'android/**'
+      - '.github/workflows/android-build.yml'
   workflow_dispatch:
     inputs:
       build_type:
