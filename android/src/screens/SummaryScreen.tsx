@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, spacing, font, radius } from '../theme';
-import { summary as summaryApi, budgetPlan, ai, type SummaryData, type BudgetPlan } from '../api/client';
+import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
 import { CATEGORIES } from '../classifier';
 import { usePremium } from '../premium';
@@ -47,16 +47,38 @@ export default function SummaryScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState('');
 
+  // Heatmap + drill-down + planned budget
+  const [monthExp, setMonthExp] = useState<Expense[]>([]);
+  const [plannedMonthly, setPlannedMonthly] = useState(0);
+  const [drillCat, setDrillCat] = useState<string | null>(null);
+  const [drillList, setDrillList] = useState<Expense[]>([]);
+
   const load = useCallback(async (m = month, y = year) => {
     setLoading(true);
     try {
-      const [s, p] = await Promise.all([summaryApi.get(m, y), budgetPlan.get()]);
+      const [s, p, me, st] = await Promise.all([
+        summaryApi.get(m, y),
+        budgetPlan.get(),
+        expApi.forMonth(m, y).catch(() => [] as Expense[]),
+        settingsApi.get().catch(() => ({} as { plannedMonthly?: number })),
+      ]);
       setData(s);
       setPlan(p);
+      setMonthExp(Array.isArray(me) ? me : []);
+      setPlannedMonthly(st.plannedMonthly ?? 0);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
   }, [month, year]);
+
+  const openDrill = async (cat: string) => {
+    setDrillCat(cat);
+    setDrillList([]);
+    try {
+      const list = await expApi.byCategory(cat, month, year);
+      setDrillList(Array.isArray(list) ? list : []);
+    } catch { /* ignore */ }
+  };
 
   useEffect(() => { load(); }, []);
 
@@ -138,7 +160,26 @@ export default function SummaryScreen() {
 
   const maxCat = cats[0]?.[1] ?? 1;
   const budgets = plan?.categoryBudgets ?? {};
-  const totalIncome = Object.values(plan?.incomes ?? {}).reduce((s, v) => s + v, 0);
+  const incomes = plan?.incomes ?? {};
+  const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
+
+  // Баблометр: факт против плана, пропорционально прошедшим дням
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
+  const daysPassed = isCurrentMonth ? now.getDate() : daysInMonth;
+  const planToDate = plannedMonthly > 0 ? plannedMonthly * daysPassed / daysInMonth : 0;
+  const gaugePct = planToDate > 0 ? Math.round((data?.total ?? 0) / planToDate * 100) : null;
+
+  // Heatmap: суммы по дням месяца
+  const dayTotals: Record<number, number> = {};
+  for (const e of monthExp) {
+    const d = parseInt(e.date?.split('.')[0] ?? '');
+    if (!isNaN(d)) dayTotals[d] = (dayTotals[d] ?? 0) + e.amount;
+  }
+  const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Пн=0
+  const heatColor = (v: number) =>
+    v === 0 ? t.surface2 : v < 2000 ? '#bbf7d0' : v < 5000 ? '#22c55e' : v < 10000 ? '#f59e0b' : v < 20000 ? '#f97316' : '#ef4444';
+  const heatText = (v: number) => (v === 0 ? t.textMuted : '#1e293b');
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
@@ -164,12 +205,78 @@ export default function SummaryScreen() {
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
-            {totalIncome > 0 && (
+            {plannedMonthly > 0 && (
               <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
+                Остаток от плана {fmt(plannedMonthly - (data?.total ?? 0))}
+              </Text>
+            )}
+            {totalIncome > 0 && (
+              <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 2 }}>
                 Доход {fmt(totalIncome)} · остаток {fmt(totalIncome - (data?.total ?? 0))}
               </Text>
             )}
           </Card>
+
+          {/* Баблометр */}
+          {gaugePct !== null && (
+            <Card>
+              <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Баблометр</Text>
+              <View style={styles.gaugeRow}>
+                <Text style={{
+                  fontSize: 40, fontWeight: '800',
+                  color: gaugePct <= 70 ? '#22c55e' : gaugePct <= 100 ? '#f59e0b' : '#ef4444',
+                }}>
+                  {gaugePct}%
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>ФАКТ / ПЛАН</Text>
+                  <Text style={{ color: t.text, fontSize: font.sm, marginTop: 2 }}>
+                    {gaugePct > 100 ? 'Перерасход 🔴' : gaugePct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.gaugeBg, { backgroundColor: t.surface2 }]}>
+                <View style={[styles.gaugeFill, {
+                  width: `${Math.min(gaugePct, 160) / 1.6}%`,
+                  backgroundColor: gaugePct <= 70 ? '#22c55e' : gaugePct <= 100 ? '#f59e0b' : '#ef4444',
+                }]} />
+              </View>
+              <View style={styles.gaugeStats}>
+                <Text style={{ color: t.textMuted, fontSize: font.xs }}>Потрачено{'\n'}{fmt(data?.total ?? 0)}</Text>
+                <Text style={{ color: t.textMuted, fontSize: font.xs, textAlign: 'center' }}>По плану{'\n'}{fmt(planToDate)}</Text>
+                <Text style={{ color: t.textMuted, fontSize: font.xs, textAlign: 'right' }}>Дней{'\n'}{daysPassed} из {daysInMonth}</Text>
+              </View>
+            </Card>
+          )}
+
+          {/* Heatmap по дням */}
+          {monthExp.length > 0 && (
+            <Card>
+              <Text style={[styles.sectionTitle, { color: t.text }]}>📅 Расходы по дням</Text>
+              <View style={styles.heatGrid}>
+                {['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(d => (
+                  <Text key={d} style={[styles.heatHead, { color: t.textMuted }]}>{d}</Text>
+                ))}
+                {Array.from({ length: firstWeekday }).map((_, i) => (
+                  <View key={`pad${i}`} style={styles.heatCell} />
+                ))}
+                {Array.from({ length: daysInMonth }).map((_, i) => {
+                  const d = i + 1;
+                  const v = dayTotals[d] ?? 0;
+                  return (
+                    <View key={d} style={[styles.heatCell, { backgroundColor: heatColor(v) }]}>
+                      <Text style={{ fontSize: font.xs, fontWeight: '700', color: heatText(v) }}>{d}</Text>
+                      {v > 0 && (
+                        <Text style={{ fontSize: 8, color: '#1e293b' }}>
+                          {v >= 1000 ? `${Math.round(v / 1000)}к` : Math.round(v)}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </Card>
+          )}
 
           {/* AI analysis (premium) */}
           <TouchableOpacity
@@ -191,12 +298,25 @@ export default function SummaryScreen() {
           {data && Object.keys(data.byUser).length > 1 && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>По участникам</Text>
-              {Object.entries(data.byUser).map(([name, ud]) => (
-                <View key={name} style={styles.userRow}>
-                  <Text style={{ color: t.text }}>{name}</Text>
-                  <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(ud.total)}</Text>
-                </View>
-              ))}
+              {Object.entries(data.byUser).map(([name, ud]) => {
+                const inc = incomes[name] ?? 0;
+                const topCats = Object.entries(ud.byCategory ?? {})
+                  .sort(([, a], [, b]) => b - a).slice(0, 3)
+                  .map(([c, v]) => `${ICONS[c] ?? ''} ${fmt(v)}`).join(' · ');
+                return (
+                  <View key={name} style={styles.userRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: t.text }}>
+                        {name}{inc > 0 ? ` · ${Math.round(ud.total / inc * 100)}% дохода` : ''}
+                      </Text>
+                      {!!topCats && (
+                        <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{topCats}</Text>
+                      )}
+                    </View>
+                    <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(ud.total)}</Text>
+                  </View>
+                );
+              })}
             </Card>
           )}
 
@@ -217,7 +337,7 @@ export default function SummaryScreen() {
               const pct = amt / maxCat;
               const limitPct = limit > 0 ? Math.min(limit / maxCat, 1) : 0;
               return (
-                <View key={cat} style={styles.catRow}>
+                <TouchableOpacity key={cat} style={styles.catRow} onPress={() => openDrill(cat)}>
                   <Text style={{ width: 28, fontSize: 18 }}>{ICONS[cat]}</Text>
                   <View style={{ flex: 1 }}>
                     <View style={styles.barBg}>
@@ -234,7 +354,7 @@ export default function SummaryScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.catAmt, { color: over ? '#ef4444' : t.text }]}>{fmt(amt)}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </Card>
@@ -287,6 +407,39 @@ export default function SummaryScreen() {
         </SafeAreaView>
       </Modal>
 
+      {/* Category drill-down */}
+      <Modal visible={!!drillCat} animationType="slide">
+        <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
+          <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
+            <TouchableOpacity onPress={() => setDrillCat(null)}>
+              <Text style={{ color: t.primary }}>← Назад</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: t.text }]}>
+              {drillCat ? `${ICONS[drillCat] ?? ''} ${drillCat}` : ''}
+            </Text>
+            <View style={{ width: 56 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            {drillList.length === 0 && (
+              <ActivityIndicator style={{ marginTop: 40 }} color={t.primary} />
+            )}
+            {drillList.map(e => (
+              <Card key={e.id}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: t.text, fontWeight: '500' }}>{e.description}</Text>
+                    <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                      {e.user} · {e.date}
+                    </Text>
+                  </View>
+                  <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
+                </View>
+              </Card>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
       {/* AI report modal */}
       <Modal visible={aiVisible} animationType="slide">
         <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
@@ -334,4 +487,11 @@ const styles = StyleSheet.create({
   groupTitle:   { fontSize: font.xs, letterSpacing: 0.5, marginBottom: spacing.sm },
   planRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
   planInput:    { width: 120, borderRadius: radius.sm, borderWidth: 1, padding: spacing.sm, fontSize: font.md, textAlign: 'right' },
+  gaugeRow:     { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+  gaugeBg:      { height: 12, borderRadius: 6, overflow: 'hidden' },
+  gaugeFill:    { height: '100%', borderRadius: 6 },
+  gaugeStats:   { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
+  heatGrid:     { flexDirection: 'row', flexWrap: 'wrap' },
+  heatHead:     { width: `${100 / 7}%`, textAlign: 'center', fontSize: font.xs, marginBottom: 4 },
+  heatCell:     { width: `${100 / 7 - 1}%`, aspectRatio: 1, margin: '0.5%', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });

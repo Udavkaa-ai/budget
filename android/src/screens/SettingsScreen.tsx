@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
-import { invites, csv, pushSettings, setToken } from '../api/client';
+import { invites, csv, pushSettings, settings as settingsApi, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 
@@ -21,9 +21,30 @@ export default function SettingsScreen() {
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const [familyName, setFamilyName] = useState('');
+  const [plannedMonthly, setPlannedMonthly] = useState('');
+
   useEffect(() => {
     pushSettings.get().then(r => setPushEnabled(r.enabled)).catch(() => {});
+    settingsApi.get().then(s => {
+      if (s.familyName) setFamilyName(s.familyName);
+      if (s.plannedMonthly) setPlannedMonthly(String(s.plannedMonthly));
+    }).catch(() => {});
   }, []);
+
+  const saveFamilySettings = async () => {
+    setBusy(true);
+    try {
+      if (familyName.trim()) await settingsApi.set('familyName', familyName.trim());
+      const n = parseFloat(plannedMonthly.replace(',', '.'));
+      if (!isNaN(n) && n > 0) await settingsApi.set('plannedMonthly', n);
+      Alert.alert('Сохранено');
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Выйти?', 'Данные на устройстве сохранятся', [
@@ -131,6 +152,30 @@ export default function SettingsScreen() {
         {/* Family */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Семья</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: 4 }}>Название семьи</Text>
+          <TextInput
+            style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+            value={familyName}
+            onChangeText={setFamilyName}
+            placeholder="Например: Ивановы"
+            placeholderTextColor={t.textMuted}
+          />
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: 4 }}>Плановые расходы на месяц, ₽</Text>
+          <TextInput
+            style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+            value={plannedMonthly}
+            onChangeText={setPlannedMonthly}
+            placeholder="300000"
+            placeholderTextColor={t.textMuted}
+            keyboardType="decimal-pad"
+          />
+          <TouchableOpacity
+            style={[styles.upgradeBtn, { backgroundColor: t.primary, marginBottom: spacing.sm }]}
+            onPress={saveFamilySettings}
+            disabled={busy}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700' }}>Сохранить</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.row} onPress={inviteFamily} disabled={busy}>
             <Text style={{ color: t.text }}>👨‍👩‍👧 Пригласить в семью</Text>
             <Text style={{ color: t.textMuted }}>›</Text>

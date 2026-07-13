@@ -40,6 +40,9 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [predicting, setPredicting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [mode, setMode] = useState<'form' | 'text'>('form');
+  const [freeText, setFreeText] = useState('');
+  const [parsing, setParsing] = useState(false);
 
   // Predict category as user types
   useEffect(() => {
@@ -163,6 +166,51 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     }
   };
 
+  // Free-text AI parse (premium): "продукты 2300, вчера такси 450" → expenses
+  const parseFreeText = async () => {
+    if (!freeText.trim()) return;
+    setParsing(true);
+    try {
+      const res = await ai.parseText(freeText.trim());
+      const parsed = res.expenses ?? [];
+      if (parsed.length === 0) { Alert.alert('Не удалось разобрать текст'); return; }
+      const total = parsed.reduce((s, e) => s + (e.amount || 0), 0);
+      const preview = parsed.map(e => `• ${e.description} (${e.category}) — ${e.amount} ₽`).join('\n');
+      Alert.alert(`Распознано: ${parsed.length} поз. на ${Math.round(total)} ₽`, preview, [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Добавить всё',
+          onPress: async () => {
+            await expenses.add({
+              expenses: parsed.map(e => ({
+                date: e.date || todayStr(),
+                category: e.category || 'Прочее',
+                amount: e.amount,
+                description: e.description,
+              })),
+            });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setFreeText('');
+            sheetRef?.current?.close();
+            onAdded();
+          },
+        },
+      ]);
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const switchMode = (m: 'form' | 'text') => {
+    if (m === 'text' && !premium) {
+      Alert.alert('💎 Премиум', 'Ввод текстом через ИИ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+      return;
+    }
+    setMode(m);
+  };
+
   const catBtns = prediction?.mode === 'buttons'
     ? prediction.top3
     : prediction?.mode === 'auto'
@@ -193,6 +241,50 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
           </TouchableOpacity>
         </View>
 
+        {/* Mode toggle */}
+        <View style={styles.modeRow}>
+          <TouchableOpacity
+            style={[styles.modeBtn, { backgroundColor: mode === 'form' ? t.primary : t.surface2 }]}
+            onPress={() => switchMode('form')}
+          >
+            <Text style={{ color: mode === 'form' ? '#fff' : t.text, fontSize: font.sm }}>📋 Форма</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, { backgroundColor: mode === 'text' ? t.primary : t.surface2 }]}
+            onPress={() => switchMode('text')}
+          >
+            <Text style={{ color: mode === 'text' ? '#fff' : t.text, fontSize: font.sm }}>
+              ✍️ Текстом{premium ? '' : ' 💎'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {mode === 'text' ? (
+          <>
+            <Text style={[styles.label, { color: t.textMuted }]}>
+              Напишите расходы в свободной форме — ИИ разберёт их сам
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              value={freeText}
+              onChangeText={setFreeText}
+              placeholder="Пример: продукты 2300, вчера такси 450, кофе 180"
+              placeholderTextColor={t.textMuted}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.submitBtn, { backgroundColor: '#a855f7', opacity: parsing ? 0.6 : 1 }]}
+              onPress={parseFreeText}
+              disabled={parsing}
+            >
+              {parsing
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.submitText}>🤖 Разобрать</Text>
+              }
+            </TouchableOpacity>
+          </>
+        ) : (
+        <>
         {/* Description */}
         <Text style={[styles.label, { color: t.textMuted }]}>Описание</Text>
         <TextInput
@@ -264,6 +356,8 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
             : <Text style={styles.submitText}>Добавить</Text>
           }
         </TouchableOpacity>
+        </>
+        )}
       </BottomSheetScrollView>
     </BottomSheet>
   );
@@ -273,6 +367,9 @@ const styles = StyleSheet.create({
   titleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
   title:     { fontSize: font.xl, fontWeight: '700' },
   scanBtn:   { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  modeRow:   { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  modeBtn:   { flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
+  textArea:  { height: 110, textAlignVertical: 'top', marginTop: spacing.sm },
   label:     { fontSize: font.sm, marginBottom: spacing.xs, marginTop: spacing.md },
   input:     { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md },
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },

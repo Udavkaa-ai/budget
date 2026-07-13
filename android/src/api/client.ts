@@ -115,7 +115,23 @@ export const expenses = {
   add:    (payload: AddExpensePayload) => api.post<{ ok: boolean }>('/api/expenses', payload),
   update: (id: string, data: Partial<Expense>) => api.put<{ ok: boolean }>(`/api/expenses/${id}`, data),
   delete: (id: string) => api.delete<{ ok: boolean }>(`/api/expenses/${id}`),
-  forDay: (date: string) => api.get<{ expenses: Expense[] }>(`/api/expenses/day?date=${date}`),
+  // Server expects YYYY-MM-DD and returns a plain array
+  forDay: async (date: string): Promise<{ expenses: Expense[] }> => {
+    const [d, m, y] = date.split('.');
+    const list = await api.get<Expense[]>(`/api/expenses/day?date=${y}-${m}-${d}`);
+    return { expenses: Array.isArray(list) ? list : [] };
+  },
+  forMonth: (month: number, year: number) =>
+    api.get<Expense[]>(`/api/expenses/month?month=${month}&year=${year}`),
+  byCategory: (cat: string, month: number, year: number) =>
+    api.get<Expense[]>(`/api/expenses/category/${encodeURIComponent(cat)}?month=${month}&year=${year}`),
+};
+
+// ─── Family settings ─────────────────────────────────────────────────────────
+
+export const settings = {
+  get: () => api.get<{ familyName?: string; plannedMonthly?: number }>('/api/settings'),
+  set: (key: string, value: unknown) => api.put<{ ok: boolean }>('/api/settings', { key, value }),
 };
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
@@ -176,6 +192,8 @@ export interface ParsedExpense {
 export const ai = {
   analyze: (month: number, year: number) =>
     api.post<{ report: string; model: string }>('/api/analyze', { month, year }),
+  parseText: (text: string) =>
+    api.post<{ expenses: ParsedExpense[] }>('/api/parse', { text }),
   parseImage: (base64: string, mimeType = 'image/jpeg') =>
     api.post<{ expenses: ParsedExpense[] }>('/api/parse-image', { base64, mimeType }),
 };
