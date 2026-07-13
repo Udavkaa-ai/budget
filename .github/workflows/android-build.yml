@@ -1,0 +1,140 @@
+name: Android APK Build
+
+on:
+  push:
+    branches:
+      - android/react-native
+    paths:
+      - 'android/**'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    name: Build ${{ github.event.inputs.build_type || 'debug' }} APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── Java 17 (required for modern Android Gradle) ──────────────────────────
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ── Node 20 ───────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Accept Android SDK licenses ───────────────────────────────────────────
+      - name: Accept SDK licenses
+        run: |
+          mkdir -p "$ANDROID_HOME/licenses"
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_HOME/licenses/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" >> "$ANDROID_HOME/licenses/android-sdk-license"
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+
+      # ── Install JS deps ───────────────────────────────────────────────────────
+      - name: Install dependencies
+        working-directory: android
+        run: npm install --legacy-peer-deps
+
+      # ── google-services.json ──────────────────────────────────────────────────
+      # For push notifications. Provide GOOGLE_SERVICES_JSON secret in repo settings.
+      # If not set, push notifications won't work but the build will succeed.
+      - name: Write google-services.json
+        working-directory: android
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > google-services.json
+          else
+            cat > google-services.json << 'EOF'
+          {
+            "project_info": { "project_id": "placeholder", "project_number": "000000000000" },
+            "client": [{
+              "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "com.familybudget.app" } },
+              "api_key": [{ "current_key": "placeholder" }],
+              "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
+      # ── Expo prebuild → generate native Android project ──────────────────────
+      - name: Expo prebuild
+        working-directory: android
+        run: npx expo prebuild --platform android --clean --no-install
+        env:
+          EXPO_NO_TELEMETRY: 1
+
+      # ── Gradle build ─────────────────────────────────────────────────────────
+      - name: Make gradlew executable
+        working-directory: android/android
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        working-directory: android/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
+
+      - name: Build release APK
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        working-directory: android/android
+        run: |
+          # Write keystore from secret
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          ./gradlew assembleRelease --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
+          KEYSTORE_PATH: release.jks
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      # ── Upload APK ────────────────────────────────────────────────────────────
+      - name: Upload debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-budget-debug-${{ github.run_number }}
+          path: android/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload release APK
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-budget-release-${{ github.run_number }}
+          path: android/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      # ── Print download instructions ───────────────────────────────────────────
+      - name: Build summary
+        run: |
+          echo "## ✅ APK собран" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Тип:** ${{ github.event.inputs.build_type || 'debug' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Скачать: Actions → этот запуск → Artifacts → \`family-budget-*\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Установка на устройство" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "adb install app-debug.apk" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "Или просто отправьте APK-файл тестировщику — он устанавливается напрямую." >> $GITHUB_STEP_SUMMARY

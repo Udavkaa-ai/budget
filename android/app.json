@@ -30,13 +30,17 @@
     "plugins": [
       "expo-secure-store",
       "expo-sqlite",
-      ["expo-notifications", {
-        "icon": "./assets/notification-icon.png",
-        "color": "#3b82f6"
-      }],
       ["expo-camera", { "cameraPermission": "Разрешите доступ к камере для сканирования чеков." }],
-      ["expo-image-picker", { "photosPermission": "Разрешите доступ к фото для загрузки чеков." }]
+      ["expo-image-picker", { "photosPermission": "Разрешите доступ к фото для загрузки чеков." }],
+      ["expo-notifications", {
+        "icon": "./assets/icon.png",
+        "color": "#3b82f6",
+        "sounds": []
+      }]
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "scheme": "familybudget",
     "extra": {
       "eas": { "projectId": "your-eas-project-id" }

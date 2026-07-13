@@ -1,26 +1,75 @@
 import 'react-native-gesture-handler';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, ActivityIndicator, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 import { AppNavigator } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { initClassifier } from './src/classifier';
+import { importSeed } from './src/classifier/db';
+import { crowd, api } from './src/api/client';
 
-// Init classifier once at startup
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 initClassifier().catch(console.error);
+
+// Download crowd dictionary from server and merge into local DB
+async function syncCrowdDict() {
+  try {
+    const dict = await crowd.getDictionary();
+    const entries = Object.entries(dict).map(([word, category]) => ({
+      word, category: category as string, cnt: 2,
+    }));
+    if (entries.length > 0) await importSeed(entries);
+  } catch { /* offline — use cached seed */ }
+}
+
+// Register device for push notifications and send token to server
+async function registerPushToken() {
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    // Send token to server so family members can receive push when someone adds an expense
+    await api.post('/api/push/subscribe', {
+      endpoint: token,
+      keys: { p256dh: '', auth: '' }, // Expo push — server detects by endpoint prefix
+      platform: 'expo',
+    }).catch(() => {});
+  } catch { /* notifications not available */ }
+}
 
 function Root() {
   const { user, loading, onLoginSuccess } = useAuth();
   const scheme = useColorScheme();
 
+  useEffect(() => {
+    if (user) {
+      syncCrowdDict();
+      registerPushToken();
+    }
+  }, [user]);
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
   }

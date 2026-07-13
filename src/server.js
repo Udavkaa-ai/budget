@@ -229,7 +229,7 @@ app.post('/api/crowd/contribute', authMiddleware, (req, res) => {
     if (typeof w !== 'string' || typeof c !== 'string') continue;
     if (!crowdContrib[w]) crowdContrib[w] = new Set();
     crowdContrib[w].add(req.user.family);
-    if (crowdContrib[w].size >= 20) crowdDict[w] = c; // k-anonymity threshold
+    if (crowdContrib[w].size >= 3) crowdDict[w] = c; // k-anonymity threshold
   }
   res.json({ ok: true });
 });

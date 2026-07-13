@@ -1,0 +1,17 @@
+// Injected by expo prebuild into android/app/build.gradle for release signing.
+// Place KEYSTORE_PATH, KEYSTORE_ALIAS, KEYSTORE_PASSWORD, KEY_PASSWORD in env or github secrets.
+android {
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("KEYSTORE_PATH") ?: "release.jks")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias System.getenv("KEYSTORE_ALIAS") ?: ""
+            keyPassword System.getenv("KEY_PASSWORD") ?: ""
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+}
