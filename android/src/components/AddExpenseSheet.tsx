@@ -5,9 +5,11 @@ import {
 } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme, spacing, font, radius } from '../theme';
 import { CATEGORIES, predict, learn, queueContribution, type PredictResult } from '../classifier';
-import { expenses, type AuthUser } from '../api/client';
+import { expenses, ai, type AuthUser } from '../api/client';
+import { usePremium } from '../premium';
 
 const ICONS: Record<string, string> = {
   Продукты: '🛒', Кафе: '🍽', Транспорт: '🚇', Одежда: '👗', Красота: '💄',
@@ -28,6 +30,7 @@ interface Props {
 
 export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpenseSheet({ user, onAdded }, ref) {
   const t = useTheme();
+  const premium = usePremium();
   const snapPoints = ['70%', '92%'];
 
   const [description, setDescription] = useState('');
@@ -36,6 +39,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [prediction, setPrediction] = useState<PredictResult | null>(null);
   const [predicting, setPredicting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   // Predict category as user types
   useEffect(() => {
@@ -90,6 +94,75 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     }
   };
 
+  // Photo receipt scan (premium): camera/gallery → server AI → add expenses
+  const scanReceipt = () => {
+    if (!premium) {
+      Alert.alert('💎 Премиум', 'Сканирование чеков доступно в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+      return;
+    }
+    Alert.alert('Скан чека', 'Откуда взять фото?', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: '📷 Камера', onPress: () => pickImage(true) },
+      { text: '🖼 Галерея', onPress: () => pickImage(false) },
+    ]);
+  };
+
+  const pickImage = async (camera: boolean) => {
+    try {
+      if (camera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { Alert.alert('Нет доступа к камере'); return; }
+      }
+      const opts: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        base64: true,
+        quality: 0.5,
+      };
+      const result = camera
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync(opts);
+      if (result.canceled || !result.assets?.[0]?.base64) return;
+
+      setScanning(true);
+      const res = await ai.parseImage(result.assets[0].base64);
+      const parsed = res.expenses ?? [];
+      if (parsed.length === 0) {
+        Alert.alert('Не удалось распознать', 'На фото не нашлось расходов');
+        return;
+      }
+      const total = parsed.reduce((s, e) => s + (e.amount || 0), 0);
+      const preview = parsed.slice(0, 6).map(e => `• ${e.description} — ${e.amount} ₽`).join('\n')
+        + (parsed.length > 6 ? `\n… и ещё ${parsed.length - 6}` : '');
+      Alert.alert(
+        `Распознано: ${parsed.length} поз. на ${Math.round(total)} ₽`,
+        preview,
+        [
+          { text: 'Отмена', style: 'cancel' },
+          {
+            text: 'Добавить всё',
+            onPress: async () => {
+              await expenses.add({
+                expenses: parsed.map(e => ({
+                  date: e.date || todayStr(),
+                  category: e.category || 'Прочее',
+                  amount: e.amount,
+                  description: e.description,
+                })),
+              });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              sheetRef?.current?.close();
+              onAdded();
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setScanning(false);
+    }
+  };
+
   const catBtns = prediction?.mode === 'buttons'
     ? prediction.top3
     : prediction?.mode === 'auto'
@@ -106,7 +179,19 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       handleIndicatorStyle={{ backgroundColor: t.border }}
     >
       <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg }}>
-        <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
+          <TouchableOpacity
+            style={[styles.scanBtn, { backgroundColor: t.surface2 }]}
+            onPress={scanReceipt}
+            disabled={scanning}
+          >
+            {scanning
+              ? <ActivityIndicator size="small" color="#a855f7" />
+              : <Text style={{ fontSize: font.sm }}>📸 Чек{premium ? '' : ' 💎'}</Text>
+            }
+          </TouchableOpacity>
+        </View>
 
         {/* Description */}
         <Text style={[styles.label, { color: t.textMuted }]}>Описание</Text>
@@ -185,7 +270,9 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
 });
 
 const styles = StyleSheet.create({
-  title:     { fontSize: font.xl, fontWeight: '700', marginBottom: spacing.lg },
+  titleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
+  title:     { fontSize: font.xl, fontWeight: '700' },
+  scanBtn:   { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   label:     { fontSize: font.sm, marginBottom: spacing.xs, marginTop: spacing.md },
   input:     { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md },
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },

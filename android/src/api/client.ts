@@ -47,11 +47,20 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return res.json();
 }
 
+async function reqText(path: string): Promise<string> {
+  const res = await fetch(`${_serverUrl}${path}`, {
+    headers: { ...((_token) ? { Authorization: `Bearer ${_token}` } : {}) },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
 export const api = {
   get:    <T>(path: string) => req<T>('GET', path),
   post:   <T>(path: string, body: unknown) => req<T>('POST', path, body),
   put:    <T>(path: string, body: unknown) => req<T>('PUT', path, body),
   delete: <T>(path: string) => req<T>('DELETE', path),
+  getText: reqText,
 };
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -74,8 +83,13 @@ export async function mobileLogin(idToken: string): Promise<{ token: string; use
 export function parseJwt(token: string): AuthUser | null {
   try {
     const payload = token.split('.')[1];
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(decoded) as AuthUser;
+    const binary = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    // atob выдаёт latin-1: кириллица в имени превращается в кракозябры,
+    // поэтому раскодируем байты как UTF-8
+    const json = decodeURIComponent(
+      binary.split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''),
+    );
+    return JSON.parse(json) as AuthUser;
   } catch {
     return null;
   }
@@ -119,8 +133,6 @@ export const summary = {
     if (year)  params.set('year',  String(year));
     return api.get<SummaryData>(`/api/summary?${params}`);
   },
-  heatmap: (month: number, year: number) =>
-    api.get<Record<string, number>>(`/api/summary/heatmap?month=${month}&year=${year}`),
 };
 
 // ─── Budget plan ─────────────────────────────────────────────────────────────
@@ -132,7 +144,7 @@ export interface BudgetPlan {
 
 export const budgetPlan = {
   get:  () => api.get<BudgetPlan>('/api/budget-plan'),
-  save: (plan: BudgetPlan) => api.post<{ ok: boolean }>('/api/budget-plan', plan),
+  save: (plan: BudgetPlan) => api.put<{ ok: boolean }>('/api/budget-plan', plan),
 };
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
@@ -154,11 +166,41 @@ export const goals = {
 
 // ─── AI (paid only) ──────────────────────────────────────────────────────────
 
+export interface ParsedExpense {
+  date?: string;
+  category: string;
+  amount: number;
+  description: string;
+}
+
 export const ai = {
   analyze: (month: number, year: number) =>
     api.post<{ report: string; model: string }>('/api/analyze', { month, year }),
-  parseImage: (base64: string) =>
-    api.post<{ expenses: Expense[] }>('/api/parse-image', { image: base64 }),
+  parseImage: (base64: string, mimeType = 'image/jpeg') =>
+    api.post<{ expenses: ParsedExpense[] }>('/api/parse-image', { base64, mimeType }),
+};
+
+// ─── Family invites ──────────────────────────────────────────────────────────
+
+export const invites = {
+  create: () => api.post<{ code: string; link: string }>('/api/invite', {}),
+  join:   (code: string) =>
+    api.post<{ token: string; name: string; login: string }>('/api/invite/join', { code }),
+};
+
+// ─── CSV export / import ─────────────────────────────────────────────────────
+
+export const csv = {
+  export: () => api.getText('/api/export'),
+  import: (text: string) =>
+    api.post<{ ok: boolean; imported?: number }>('/api/import', { csv: text }),
+};
+
+// ─── Push settings (server side) ─────────────────────────────────────────────
+
+export const pushSettings = {
+  get: () => api.get<{ enabled: boolean }>('/api/push/settings'),
+  set: (enabled: boolean) => api.post<{ ok: boolean }>('/api/push/settings', { enabled }),
 };
 
 // ─── Crowd classifier dictionary ─────────────────────────────────────────────

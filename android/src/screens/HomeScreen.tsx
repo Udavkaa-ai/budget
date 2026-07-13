@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  SafeAreaView, RefreshControl, Alert,
+  RefreshControl, Alert, Modal, TextInput, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme, spacing, font, radius } from '../theme';
 import { expenses as expApi, type Expense } from '../api/client';
 import { AddExpenseSheet } from '../components/AddExpenseSheet';
+import { CATEGORIES } from '../classifier';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 
@@ -74,17 +76,53 @@ export default function HomeScreen() {
         text: 'Удалить', style: 'destructive',
         onPress: async () => {
           await expApi.delete(id);
+          setEditing(null);
           setList(prev => prev.filter(e => e.id !== id));
         },
       },
     ]);
   };
 
+  // Edit expense
+  const [editing, setEditing] = useState<Expense | null>(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editAmt, setEditAmt] = useState('');
+  const [editCat, setEditCat] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEdit = (e: Expense) => {
+    setEditing(e);
+    setEditDesc(e.description);
+    setEditAmt(String(e.amount));
+    setEditCat(e.category);
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const amt = parseFloat(editAmt.replace(',', '.'));
+    if (isNaN(amt) || amt <= 0) { Alert.alert('Некорректная сумма'); return; }
+    setSavingEdit(true);
+    try {
+      await expApi.update(editing.id, {
+        description: editDesc.trim(),
+        amount: amt,
+        category: editCat,
+        date: editing.date,
+      });
+      setEditing(null);
+      load();
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const total = list.reduce((s, e) => s + e.amount, 0);
   const isToday = date === todayStr();
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: t.bg }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: t.border }]}>
           <TouchableOpacity onPress={prevDay} style={styles.navBtn}>
@@ -116,6 +154,7 @@ export default function HomeScreen() {
           renderItem={({ item: e }) => (
             <TouchableOpacity
               style={[styles.item, { backgroundColor: t.surface, borderColor: t.border }]}
+              onPress={() => e.user === user?.name && openEdit(e)}
               onLongPress={() => e.user === user?.name && deleteExpense(e.id)}
             >
               <Text style={{ fontSize: 24 }}>{ICONS[e.category] ?? '❓'}</Text>
@@ -127,6 +166,57 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         />
+
+        {/* Edit expense modal */}
+        <Modal visible={!!editing} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalBox, { backgroundColor: t.surface }]}>
+              <Text style={[styles.modalTitle, { color: t.text }]}>Редактировать</Text>
+              <TextInput
+                style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+                value={editDesc}
+                onChangeText={setEditDesc}
+                placeholder="Описание"
+                placeholderTextColor={t.textMuted}
+              />
+              <TextInput
+                style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+                value={editAmt}
+                onChangeText={setEditAmt}
+                placeholder="Сумма, ₽"
+                placeholderTextColor={t.textMuted}
+                keyboardType="decimal-pad"
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                {CATEGORIES.map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.catChip, { backgroundColor: editCat === cat ? t.primary : t.surface2 }]}
+                    onPress={() => setEditCat(cat)}
+                  >
+                    <Text style={{ color: editCat === cat ? '#fff' : t.text, fontSize: font.sm }}>
+                      {ICONS[cat]} {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.surface2 }]} onPress={() => setEditing(null)}>
+                  <Text style={{ color: t.text }}>Отмена</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.primary }]} onPress={saveEdit} disabled={savingEdit}>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Сохранить</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={{ alignItems: 'center', marginTop: spacing.md }}
+                onPress={() => editing && deleteExpense(editing.id)}
+              >
+                <Text style={{ color: t.danger }}>Удалить расход</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* FAB */}
         <TouchableOpacity
@@ -162,4 +252,10 @@ const styles = StyleSheet.create({
   itemMeta:   { fontSize: font.sm, marginTop: 2 },
   itemAmt:    { fontSize: font.md, fontWeight: '700' },
   fab:        { position: 'absolute', bottom: 24, right: 24, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
+  modalBox:   { borderRadius: radius.lg, padding: spacing.lg },
+  modalTitle: { fontSize: font.lg, fontWeight: '700', marginBottom: spacing.md },
+  input:      { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md, marginBottom: spacing.md },
+  catChip:    { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginRight: spacing.sm },
+  modalBtn:   { flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
 });

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme, spacing, font, radius } from '../theme';
@@ -64,7 +65,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: t.bg }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
         <View style={styles.inner}>
           <Text style={[styles.logo, { color: t.text }]}>💰</Text>

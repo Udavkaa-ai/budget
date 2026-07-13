@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, type SummaryData } from '../api/client';
 import { Card } from '../components/Card';
@@ -46,7 +47,7 @@ export default function ChartScreen() {
   const maxVal = Math.max(...data.map(d => d.total), 1);
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: t.bg }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Text style={[styles.title, { color: t.text }]}>График расходов</Text>
       </View>

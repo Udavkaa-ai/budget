@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, Alert, TextInput, Modal, ActivityIndicator,
+  Alert, TextInput, Modal, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, spacing, font, radius } from '../theme';
 import { goals as goalsApi, type Goal } from '../api/client';
 import { Card } from '../components/Card';
@@ -67,7 +68,7 @@ export default function GoalsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: t.bg }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Text style={[styles.title, { color: t.text }]}>🎯 Цели</Text>
         <TouchableOpacity

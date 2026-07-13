@@ -2,6 +2,7 @@ import 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, ActivityIndicator, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -11,6 +12,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { initClassifier } from './src/classifier';
 import { importSeed } from './src/classifier/db';
+import { initPremium } from './src/premium';
 import { crowd, api } from './src/api/client';
 
 Notifications.setNotificationHandler({
@@ -22,6 +24,7 @@ Notifications.setNotificationHandler({
 });
 
 initClassifier().catch(console.error);
+initPremium().catch(console.error);
 
 // Download crowd dictionary from server and merge into local DB
 async function syncCrowdDict() {
@@ -88,9 +91,11 @@ function Root() {
 export default function App() {
   const scheme = useColorScheme();
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <Root />
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <Root />
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
