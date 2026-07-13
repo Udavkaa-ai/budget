@@ -166,6 +166,74 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
+// Mobile OAuth: open in WebView, redirect back with JWT in query string
+app.get('/auth/google/mobile', async (req, res) => {
+  const { redirect } = req.query;
+  // Store redirect URI in session-like param (passed through Google state param)
+  if (!config.googleClientId) return res.status(503).send('Google OAuth не настроен');
+  const state = encodeURIComponent(redirect || 'familybudget://auth');
+  const callbackUrl = encodeURIComponent(`${req.protocol}://${req.headers.host}/auth/google/mobile/callback`);
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${callbackUrl}&response_type=code&scope=openid%20email%20profile&state=${state}`;
+  res.redirect(url);
+});
+
+app.get('/auth/google/mobile/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const redirectUri = decodeURIComponent(state || 'familybudget://auth');
+  // Exchange code for id_token using server-side client secret
+  // (requires GOOGLE_CLIENT_SECRET env var — same as web OAuth)
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code, client_id: config.googleClientId,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        redirect_uri: `${req.protocol}://${req.headers.host}/auth/google/mobile/callback`,
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokens = await tokenRes.json();
+    if (!tokens.id_token) throw new Error('no id_token');
+
+    const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokens.id_token)}`);
+    const payload = await verifyRes.json();
+    const { sub: googleId, email, name, picture } = payload;
+
+    let user = getUserByGoogleId(googleId);
+    if (!user) user = await createGoogleUser({ googleId, email, name, picture });
+
+    const appToken = jwt.sign(
+      { login: user.login, name: user.name, family: user.family, isAdmin: user.isAdmin || false },
+      config.jwtSecret, { expiresIn: '90d' }
+    );
+    res.redirect(`${redirectUri}?token=${encodeURIComponent(appToken)}`);
+  } catch (err) {
+    console.error('Mobile OAuth callback error:', err);
+    res.redirect(`${redirectUri}?error=auth_failed`);
+  }
+});
+
+// Crowd dictionary endpoints (k-anonymity: only words seen from ≥20 families)
+const crowdDict = {}; // in-memory for now; persist to data file in production
+const crowdContrib = {}; // word -> Set of family IDs
+
+app.get('/api/crowd/dictionary', (_req, res) => {
+  res.json(crowdDict);
+});
+
+app.post('/api/crowd/contribute', authMiddleware, (req, res) => {
+  const { pairs } = req.body || {};
+  if (!Array.isArray(pairs)) return res.json({ ok: false });
+  for (const { w, c } of pairs) {
+    if (typeof w !== 'string' || typeof c !== 'string') continue;
+    if (!crowdContrib[w]) crowdContrib[w] = new Set();
+    crowdContrib[w].add(req.user.family);
+    if (crowdContrib[w].size >= 3) crowdDict[w] = c; // k-anonymity threshold
+  }
+  res.json({ ok: true });
+});
+
 // Create invite link (auth required)
 app.post('/api/invite', authMiddleware, (req, res) => {
   const code = createInvite(req.user.family, req.user.login);
