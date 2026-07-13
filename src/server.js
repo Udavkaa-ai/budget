@@ -65,6 +65,9 @@ import { generateChartImage } from './chart.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+// За Railway-прокси req.protocol иначе будет 'http', а Google OAuth требует
+// точного совпадения https-адреса в redirect_uri
+app.set('trust proxy', true);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' },
