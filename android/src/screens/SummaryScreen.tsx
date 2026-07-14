@@ -9,6 +9,7 @@ import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as 
 import { Card } from '../components/Card';
 import { CATEGORIES } from '../classifier';
 import { usePremium } from '../premium';
+import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 
 const ICONS: Record<string, string> = {
@@ -28,6 +29,7 @@ function getMonthName(m: number, y: number) {
 export default function SummaryScreen() {
   const t = useTheme();
   const premium = usePremium();
+  const blocks = useBlocks();
   const { user } = useAuth();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -218,7 +220,7 @@ export default function SummaryScreen() {
           </Card>
 
           {/* Баблометр */}
-          {gaugePct !== null && (
+          {blocks.gauge && gaugePct !== null && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Баблометр</Text>
               <View style={styles.gaugeRow}>
@@ -250,7 +252,7 @@ export default function SummaryScreen() {
           )}
 
           {/* Heatmap по дням */}
-          {monthExp.length > 0 && (
+          {blocks.heatmap && monthExp.length > 0 && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>📅 Расходы по дням</Text>
               <View style={styles.heatGrid}>
@@ -279,7 +281,7 @@ export default function SummaryScreen() {
           )}
 
           {/* AI analysis (premium) */}
-          <TouchableOpacity
+          {blocks.ai && <TouchableOpacity
             style={[styles.aiBtn, { backgroundColor: premium ? '#a855f7' : t.surface, borderColor: '#a855f7' }]}
             onPress={() => {
               if (!premium) {
@@ -292,10 +294,10 @@ export default function SummaryScreen() {
             <Text style={{ color: premium ? '#fff' : '#a855f7', fontWeight: '700' }}>
               🤖 ИИ-анализ месяца{premium ? '' : ' · 💎'}
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
 
           {/* By user */}
-          {data && Object.keys(data.byUser).length > 1 && (
+          {blocks.byUser && data && Object.keys(data.byUser).length > 1 && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>По участникам</Text>
               {Object.entries(data.byUser).map(([name, ud]) => {

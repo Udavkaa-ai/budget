@@ -13,6 +13,7 @@ import { useAuth } from './src/hooks/useAuth';
 import { initClassifier } from './src/classifier';
 import { importSeed } from './src/classifier/db';
 import { initPremium } from './src/premium';
+import { initBlocks } from './src/blocks';
 import { crowd, api } from './src/api/client';
 
 Notifications.setNotificationHandler({
@@ -25,6 +26,7 @@ Notifications.setNotificationHandler({
 
 initClassifier().catch(console.error);
 initPremium().catch(console.error);
+initBlocks().catch(console.error);
 
 // Download crowd dictionary from server and merge into local DB
 async function syncCrowdDict() {

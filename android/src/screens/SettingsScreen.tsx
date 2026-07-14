@@ -9,11 +9,13 @@ import { Card } from '../components/Card';
 import { invites, csv, pushSettings, settings as settingsApi, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
+import { BLOCKS, useBlocks, setBlock } from '../blocks';
 
 export default function SettingsScreen() {
   const t = useTheme();
   const { user, logout, onLoginSuccess } = useAuth();
   const premium = usePremium();
+  const blocks = useBlocks();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [joinVisible, setJoinVisible] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -235,6 +237,27 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
+        {/* Analytics constructor */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Конструктор аналитики</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+            Включайте только те блоки, которыми пользуетесь. Настройка — личная для этого устройства.
+          </Text>
+          {BLOCKS.map(b => (
+            <View key={b.id} style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.text }}>{b.label}</Text>
+                <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{b.hint}</Text>
+              </View>
+              <Switch
+                value={blocks[b.id]}
+                onValueChange={v => setBlock(b.id, v)}
+                trackColor={{ true: t.primary }}
+              />
+            </View>
+          ))}
+        </Card>
+
         {/* Data */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Данные</Text>
@@ -335,7 +358,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: font.sm, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   profileName:  { fontSize: font.xl, fontWeight: '700', marginBottom: 2 },
   row:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md },
-  toggleRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  toggleRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   upgradeBtn:   { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   logoutBtn:    { borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', borderWidth: 1.5, marginBottom: spacing.xl },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
