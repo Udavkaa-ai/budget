@@ -4,6 +4,9 @@ import {
   Switch, Alert, Share, Modal, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useTheme, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
 import { invites, csv, pushSettings, settings as settingsApi, setToken } from '../api/client';
@@ -115,12 +118,48 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       const text = await csv.export();
-      await Share.share({ message: text, title: 'Экспорт расходов (CSV)' });
+      // Отдаём настоящий .csv файл, а не текст в сообщении
+      const stamp = new Date().toISOString().slice(0, 10);
+      const uri = `${FileSystem.cacheDirectory}expenses-${stamp}.csv`;
+      await FileSystem.writeAsStringAsync(uri, text);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: 'Экспорт расходов' });
+      } else {
+        await Share.share({ message: text, title: 'Экспорт расходов (CSV)' });
+      }
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
+  };
+
+  // Импорт: выбор CSV-файла напрямую (вставка текста — запасной вариант)
+  const importCsvFile = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/octet-stream', 'application/vnd.ms-excel'],
+        copyToCacheDirectory: true,
+      });
+      if (res.canceled || !res.assets?.[0]?.uri) return;
+      setBusy(true);
+      let text = await FileSystem.readAsStringAsync(res.assets[0].uri);
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
+      const r = await csv.import(text);
+      Alert.alert('Готово', `Импортировано записей: ${r.imported ?? '—'}`);
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chooseImport = () => {
+    Alert.alert('Импорт CSV', 'Формат экспорта веб-версии или бота', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: '✍️ Вставить текстом', onPress: () => setImportVisible(true) },
+      { text: '📄 Выбрать файл', onPress: importCsvFile },
+    ]);
   };
 
   const importCsv = async () => {
@@ -265,8 +304,8 @@ export default function SettingsScreen() {
             <Text style={{ color: t.text }}>📤 Экспорт в CSV</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={() => setImportVisible(true)}>
-            <Text style={{ color: t.text }}>📥 Импорт из CSV</Text>
+          <TouchableOpacity style={styles.row} onPress={chooseImport} disabled={busy}>
+            <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
         </Card>
