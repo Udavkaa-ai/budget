@@ -371,7 +371,7 @@ export default function SettingsScreen() {
               style={[styles.input, styles.multiline, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
               value={importText}
               onChangeText={setImportText}
-              placeholder="Дата;Категория;Сумма;Описание;Пользователь"
+              placeholder="Дата;Категория;Описание;Сумма;Пользователь"
               placeholderTextColor={t.textMuted}
               multiline
             />

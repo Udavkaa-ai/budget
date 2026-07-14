@@ -115,11 +115,12 @@ export const expenses = {
   add:    (payload: AddExpensePayload) => api.post<{ ok: boolean }>('/api/expenses', payload),
   update: (id: string, data: Partial<Expense>) => api.put<{ ok: boolean }>(`/api/expenses/${id}`, data),
   delete: (id: string) => api.delete<{ ok: boolean }>(`/api/expenses/${id}`),
-  // Server expects YYYY-MM-DD and returns a plain array
+  // Server expects YYYY-MM-DD and returns { entries: [...] }
   forDay: async (date: string): Promise<{ expenses: Expense[] }> => {
     const [d, m, y] = date.split('.');
-    const list = await api.get<Expense[]>(`/api/expenses/day?date=${y}-${m}-${d}`);
-    return { expenses: Array.isArray(list) ? list : [] };
+    const res = await api.get<{ entries?: Expense[] } | Expense[]>(`/api/expenses/day?date=${y}-${m}-${d}`);
+    const list = Array.isArray(res) ? res : res.entries ?? [];
+    return { expenses: list };
   },
   forMonth: (month: number, year: number) =>
     api.get<Expense[]>(`/api/expenses/month?month=${month}&year=${year}`),

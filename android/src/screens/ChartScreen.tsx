@@ -64,6 +64,8 @@ export default function ChartScreen() {
   const [members, setMembers] = useState<Record<string, CashflowMember>>({});
   const [incomeDays, setIncomeDays] = useState<Array<{ day: string; amount: string }>>([]);
   const [savingCf, setSavingCf] = useState(false);
+  const [selDay, setSelDay] = useState<number | null>(null);   // выбранный столбик расходов
+  const [selBal, setSelBal] = useState<number | null>(null);   // выбранный столбик баланса
 
   const load = useCallback(async (m = month, y = year) => {
     setLoading(true);
@@ -175,7 +177,11 @@ export default function ChartScreen() {
               </View>
               <View style={styles.dayChart}>
                 {unified!.labels.map((d, i) => (
-                  <View key={d} style={styles.dayCol}>
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.dayCol, selDay === i && { backgroundColor: t.surface2, borderRadius: 4 }]}
+                    onPress={() => setSelDay(s => s === i ? null : i)}
+                  >
                     <View style={styles.dayBarWrap}>
                       {userNames.map((u, ui) => {
                         const v = unified!.userExpenses[u][i] || 0;
@@ -192,9 +198,19 @@ export default function ChartScreen() {
                     {(i === 0 || (i + 1) % 5 === 0) && (
                       <Text style={{ fontSize: 8, color: t.textMuted }}>{d}</Text>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
+              {selDay !== null && (
+                <Text style={{ color: t.text, fontSize: font.sm, marginTop: spacing.sm }}>
+                  День {selDay + 1}: {userNames
+                    .map(u => ({ u, v: unified!.userExpenses[u][selDay] || 0 }))
+                    .filter(x => x.v > 0)
+                    .map(x => `${x.u} ${fmt(x.v)}`)
+                    .join(' · ') || 'нет расходов'}
+                  {' · итого '}{fmt(dayTotals[selDay] ?? 0)}
+                </Text>
+              )}
             </Card>
           )}
 
@@ -210,7 +226,11 @@ export default function ChartScreen() {
                   const range = Math.max(balMax - Math.min(balMin, 0), 1);
                   const h = Math.max((v - Math.min(balMin, 0)) / range * 100, 2);
                   return (
-                    <View key={i} style={styles.dayCol}>
+                    <TouchableOpacity
+                      key={i}
+                      style={[styles.dayCol, selBal === i && { backgroundColor: t.surface2, borderRadius: 4 }]}
+                      onPress={() => setSelBal(s => s === i ? null : i)}
+                    >
                       <View style={[styles.balBar, {
                         height: h,
                         backgroundColor: v >= 0 ? '#22c55e' : '#ef4444',
@@ -218,10 +238,15 @@ export default function ChartScreen() {
                       {(i === 0 || (i + 1) % 5 === 0) && (
                         <Text style={{ fontSize: 8, color: t.textMuted }}>{i + 1}</Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
+              {selBal !== null && (
+                <Text style={{ color: t.text, fontSize: font.sm, marginTop: spacing.sm }}>
+                  День {selBal + 1}: баланс {fmt(bal[selBal])}
+                </Text>
+              )}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
                 <Text style={{ color: t.textMuted, fontSize: font.xs }}>мин {fmtShort(balMin)}</Text>
                 <Text style={{ color: t.textMuted, fontSize: font.xs }}>сейчас {fmtShort(bal[bal.length - 1])}</Text>
@@ -304,7 +329,7 @@ export default function ChartScreen() {
                   const mx = Math.max(...months6.map(x => x.total), 1);
                   const pct = total / mx;
                   return (
-                    <View key={label} style={styles.barCol}>
+                    <TouchableOpacity key={label} style={styles.barCol} onPress={() => Alert.alert(label, fmt(total))}>
                       <Text style={{ fontSize: 9, color: t.textMuted, marginBottom: 2 }}>
                         {total > 0 ? fmtShort(total) : ''}
                       </Text>
@@ -320,7 +345,7 @@ export default function ChartScreen() {
                       <Text style={{ fontSize: 9, color: t.textMuted, marginTop: 4 }} numberOfLines={1}>
                         {label.split(' ')[0]}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>

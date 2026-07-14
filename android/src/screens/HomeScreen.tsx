@@ -4,6 +4,7 @@ import {
   RefreshControl, Alert, Modal, TextInput, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handler';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme, spacing, font, radius } from '../theme';
 import { expenses as expApi, type Expense } from '../api/client';
@@ -121,6 +122,11 @@ export default function HomeScreen() {
   const total = list.reduce((s, e) => s + e.amount, 0);
   const isToday = date === todayStr();
 
+  // Свайп влево/вправо листает дни
+  const flingLeft = Gesture.Fling().direction(Directions.LEFT).runOnJS(true).onEnd(() => nextDay());
+  const flingRight = Gesture.Fling().direction(Directions.RIGHT).runOnJS(true).onEnd(() => prevDay());
+  const dayFling = Gesture.Exclusive(flingLeft, flingRight);
+
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
         {/* Header */}
@@ -143,6 +149,7 @@ export default function HomeScreen() {
         )}
 
         {/* Expense list */}
+        <GestureDetector gesture={dayFling}>
         <FlatList
           data={list}
           keyExtractor={e => e.id}
@@ -166,6 +173,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         />
+        </GestureDetector>
 
         {/* Edit expense modal */}
         <Modal visible={!!editing} animationType="slide" transparent>

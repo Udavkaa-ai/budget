@@ -58,6 +58,7 @@ export default function SummaryScreen() {
   const [plannedMonthly, setPlannedMonthly] = useState(0);
   const [drillCat, setDrillCat] = useState<string | null>(null);
   const [drillList, setDrillList] = useState<Expense[]>([]);
+  const [drillDay, setDrillDay] = useState<number | null>(null);
 
   const load = useCallback(async (m = month, y = year) => {
     setLoading(true);
@@ -318,17 +319,47 @@ export default function SummaryScreen() {
                   const d = i + 1;
                   const v = dayTotals[d] ?? 0;
                   return (
-                    <View key={d} style={[styles.heatCell, { backgroundColor: heatColor(v) }]}>
+                    <TouchableOpacity
+                      key={d}
+                      style={[styles.heatCell, { backgroundColor: heatColor(v) }]}
+                      onPress={() => v > 0 && setDrillDay(d)}
+                    >
                       <Text style={{ fontSize: font.xs, fontWeight: '700', color: heatText(v) }}>{d}</Text>
                       {v > 0 && (
                         <Text style={{ fontSize: 8, color: '#1e293b' }}>
                           {v >= 1000 ? `${Math.round(v / 1000)}к` : Math.round(v)}
                         </Text>
                       )}
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
+              {/* Расходы выбранного дня — как в вебе */}
+              {drillDay !== null && (
+                <View style={{ marginTop: spacing.md, borderTopWidth: 1, borderTopColor: t.border, paddingTop: spacing.md }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                    <Text style={{ color: t.text, fontWeight: '700' }}>
+                      {drillDay} {getMonthName(month, year).toLowerCase()} · {fmt(dayTotals[drillDay] ?? 0)}
+                    </Text>
+                    <TouchableOpacity onPress={() => setDrillDay(null)}>
+                      <Text style={{ color: t.textMuted }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {monthExp
+                    .filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay)
+                    .sort((a, b) => b.amount - a.amount)
+                    .map(e => (
+                      <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
+                        <Text style={{ width: 26, fontSize: 16 }}>{ICONS[e.category] ?? '❓'}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: t.text }}>{e.description}</Text>
+                          <Text style={{ color: t.textMuted, fontSize: font.xs }}>{e.user} · {e.category}</Text>
+                        </View>
+                        <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
+                      </View>
+                    ))}
+                </View>
+              )}
             </Card>
           )}
 
