@@ -8,6 +8,7 @@ const PLAN_CATEGORIES = [
   { key: 'Дети',        icon: '👶' },
   { key: 'Медицина',    icon: '💊' },
   { key: 'Транспорт',   icon: '🚇' },
+  { key: 'Авто',        icon: '🚗' },
   { key: 'Кафе',        icon: '🍽' },
   { key: 'Одежда',      icon: '👗' },
   { key: 'Красота',     icon: '💄' },
@@ -20,6 +21,7 @@ const CATEGORY_ICONS = {
   'Продукты':     '🛒',
   'Кафе':         '🍽',
   'Транспорт':    '🚇',
+  'Авто':         '🚗',
   'Одежда':       '👗',
   'Красота':      '💄',
   'Медицина':     '💊',
@@ -29,6 +31,31 @@ const CATEGORY_ICONS = {
   'Связь':        '📱',
   'Прочее':       '❓',
 };
+
+const BASE_CATEGORY_KEYS = Object.keys(CATEGORY_ICONS);
+
+// Пользовательские категории семьи: добавляем в иконки и планирование,
+// убираем удалённые (базовые не трогаем)
+function applyCustomCategories() {
+  const customs = appSettings.customCategories || [];
+  const customNames = new Set(customs.map(c => c.name));
+  for (const key of Object.keys(CATEGORY_ICONS)) {
+    if (!BASE_CATEGORY_KEYS.includes(key) && !customNames.has(key)) delete CATEGORY_ICONS[key];
+  }
+  for (let i = PLAN_CATEGORIES.length - 1; i >= 0; i--) {
+    const k = PLAN_CATEGORIES[i].key;
+    if (!BASE_CATEGORY_KEYS.includes(k) && !customNames.has(k)) PLAN_CATEGORIES.splice(i, 1);
+  }
+  for (const c of customs) {
+    CATEGORY_ICONS[c.name] = c.emoji || '🏷️';
+    if (!PLAN_CATEGORIES.some(pc => pc.key === c.name)) {
+      PLAN_CATEGORIES.push({ key: c.name, icon: c.emoji || '🏷️' });
+    }
+  }
+  if (typeof initCategoryGrid === 'function' && document.getElementById('category-grid')) {
+    initCategoryGrid();
+  }
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let token = localStorage.getItem('budget_token');
@@ -1689,6 +1716,8 @@ async function loadSettingsScreen() {
   try {
     const data = await apiJson('GET', '/api/settings');
     appSettings = data;
+    applyCustomCategories();
+    renderCustomCategoriesList();
 
     const plannedInput = document.getElementById('setting-planned-monthly');
     if (plannedInput) plannedInput.value = data.plannedMonthly || '';
@@ -1909,6 +1938,51 @@ function esc(str) {
 
 async function loadSettings() {
   appSettings = await apiJson('GET', '/api/settings');
+  applyCustomCategories();
+}
+
+
+// ─── Пользовательские категории (Настройки) ──────────────────────────────────
+
+function renderCustomCategoriesList() {
+  const box = document.getElementById('custom-cats-list');
+  if (!box) return;
+  const customs = appSettings.customCategories || [];
+  box.innerHTML = customs.length === 0
+    ? '<div style="color:var(--text-muted);font-size:13px">Пока нет своих категорий</div>'
+    : customs.map(c => `
+      <div class="custom-cat-row" style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+        <span>${esc(c.emoji || '🏷️')} ${esc(c.name)}</span>
+        <button class="btn btn-outline btn-cat-del" data-name="${esc(c.name)}" style="padding:4px 10px;font-size:13px">Удалить</button>
+      </div>`).join('');
+  box.querySelectorAll('.btn-cat-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name;
+      if (!confirm(`Удалить «${name}»? Все её расходы будут перенесены в «Прочее».`)) return;
+      try {
+        const r = await apiJson('DELETE', `/api/categories/${encodeURIComponent(name)}`);
+        showToastSuccess(r.moved ? `Категория удалена, перенесено расходов: ${r.moved}` : 'Категория удалена');
+        await loadSettingsScreen();
+      } catch (e) {
+        showToastError('Ошибка удаления категории');
+      }
+    });
+  });
+}
+
+async function addCustomCategoryUI() {
+  const nameInp = document.getElementById('custom-cat-name');
+  const emojiInp = document.getElementById('custom-cat-emoji');
+  const name = (nameInp?.value || '').trim();
+  if (!name) { showToastError('Введите название категории'); return; }
+  try {
+    await apiJson('POST', '/api/categories', { name, emoji: (emojiInp?.value || '').trim() || '🏷️' });
+    nameInp.value = ''; if (emojiInp) emojiInp.value = '';
+    showToastSuccess('Категория добавлена');
+    await loadSettingsScreen();
+  } catch (e) {
+    showToastError('Не удалось добавить категорию');
+  }
 }
 
 // ─── ADD EXPENSE ──────────────────────────────────────────────────────────────
@@ -2761,6 +2835,7 @@ function setupEventListeners() {
   });
 
   document.getElementById('btn-beauty-scan').addEventListener('click', openBeautyCandidates);
+  document.getElementById('btn-custom-cat-add')?.addEventListener('click', addCustomCategoryUI);
   document.getElementById('beauty-close').addEventListener('click', closeBeautySheet);
   document.getElementById('beauty-overlay').addEventListener('click', closeBeautySheet);
 
