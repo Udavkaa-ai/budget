@@ -180,6 +180,28 @@ export const goals = {
   delete:     (id: string) => api.delete<{ ok: boolean }>(`/api/goals/${id}`),
 };
 
+// ─── Cashflow ────────────────────────────────────────────────────────────────
+
+export interface CashflowMember { debit: number; credit: number; savings: number }
+export interface Cashflow {
+  members?: Record<string, CashflowMember>;
+  incomeDays?: Array<{ day: number; user?: string; amount: number }>;
+}
+export interface UnifiedChart {
+  labels: string[];
+  userExpenses: Record<string, number[]>;
+  incomeDays: Record<string, number>;
+  balanceLine: number[] | null;
+  startBalance: number;
+  hasBalance: boolean;
+}
+
+export const cashflow = {
+  get:     (ym: string) => api.get<Cashflow>(`/api/cashflow/${ym}`),
+  save:    (ym: string, body: Cashflow) => api.put<{ ok: boolean }>(`/api/cashflow/${ym}`, body),
+  unified: (ym: string) => api.get<UnifiedChart>(`/api/unified-chart-data/${ym}`),
+};
+
 // ─── AI (paid only) ──────────────────────────────────────────────────────────
 
 export interface ParsedExpense {
