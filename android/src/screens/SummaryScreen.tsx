@@ -49,6 +49,10 @@ export default function SummaryScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState('');
 
+  // Сравнение с прошлым месяцем
+  const [compare, setCompare] = useState(false);
+  const [prevData, setPrevData] = useState<SummaryData | null>(null);
+
   // Heatmap + drill-down + planned budget
   const [monthExp, setMonthExp] = useState<Expense[]>([]);
   const [plannedMonthly, setPlannedMonthly] = useState(0);
@@ -68,6 +72,9 @@ export default function SummaryScreen() {
       setPlan(p);
       setMonthExp(Array.isArray(me) ? me : []);
       setPlannedMonthly(st.plannedMonthly ?? 0);
+      // Прошлый месяц для сравнения
+      const pd = new Date(y, m - 2, 1);
+      summaryApi.get(pd.getMonth() + 1, pd.getFullYear()).then(setPrevData).catch(() => setPrevData(null));
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -203,10 +210,26 @@ export default function SummaryScreen() {
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
         >
+          {/* Сравнить */}
+          <TouchableOpacity
+            style={[styles.compareChip, { backgroundColor: compare ? t.primary : t.surface }]}
+            onPress={() => setCompare(c => !c)}
+          >
+            <Text style={{ color: compare ? '#fff' : t.primary, fontSize: font.sm, fontWeight: '600' }}>
+              ⚖️ Сравнить с прошлым месяцем
+            </Text>
+          </TouchableOpacity>
+
           {/* Total card */}
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
+            {compare && prevData && (
+              <Text style={{ fontSize: font.sm, marginTop: 2, color: (data?.total ?? 0) > prevData.total ? '#ef4444' : '#22c55e' }}>
+                Прошлый месяц: {fmt(prevData.total)}
+                {prevData.total > 0 ? ` (${(data?.total ?? 0) > prevData.total ? '▲' : '▼'}${Math.abs(Math.round(((data?.total ?? 0) - prevData.total) / prevData.total * 100))}%)` : ''}
+              </Text>
+            )}
             {plannedMonthly > 0 && (
               <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
                 Остаток от плана {fmt(plannedMonthly - (data?.total ?? 0))}
@@ -382,6 +405,12 @@ export default function SummaryScreen() {
                     </View>
                     <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
                       {cat}{limit > 0 ? ` · лимит ${fmt(limit)}` : ''}
+                      {compare && prevData ? (() => {
+                        const pv = prevData.byCategory[cat] ?? 0;
+                        if (pv === 0) return ' · новое';
+                        const dpct = Math.round((amt - pv) / pv * 100);
+                        return ` · было ${fmt(pv)} (${dpct > 0 ? '▲' : '▼'}${Math.abs(dpct)}%)`;
+                      })() : ''}
                     </Text>
                   </View>
                   <Text style={[styles.catAmt, { color: over ? '#ef4444' : t.text }]}>{fmt(amt)}</Text>
@@ -528,4 +557,5 @@ const styles = StyleSheet.create({
   speedChart:   { flexDirection: 'row', alignItems: 'flex-end', height: 110, gap: 2 },
   speedCol:     { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   speedBar:     { width: '100%', borderRadius: 3, minHeight: 4 },
+  compareChip:  { alignSelf: 'flex-start', borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.md },
 });
