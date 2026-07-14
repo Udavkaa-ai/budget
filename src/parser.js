@@ -4,6 +4,7 @@ const CATEGORIES = [
   'Продукты',
   'Кафе', 
   'Транспорт',
+  'Авто',
   'Одежда',
   'Красота',
   'Медицина',
@@ -14,11 +15,14 @@ const CATEGORIES = [
   'Прочее'
 ];
 
-const SYSTEM_PROMPT = `Ты — парсер расходов. Извлеки из сообщения пользователя список трат.
+function makeSystemPrompt(extraCats = []) {
+  const allCats = [...CATEGORIES, ...extraCats];
+  const extraLines = extraCats.map(c => `- ${c}: пользовательская категория семьи`).join('\n');
+  return `Ты — парсер расходов. Извлеки из сообщения пользователя список трат.
 
 Для каждой траты определи:
 - date: дата в формате DD.MM.YYYY
-- category: одна из [${CATEGORIES.join(', ')}]
+- category: одна из [${allCats.join(', ')}]
 - amount: сумма в рублях (число)
 - description: краткое описание
 
@@ -32,7 +36,8 @@ const SYSTEM_PROMPT = `Ты — парсер расходов. Извлеки и
 Категории:
 - Продукты: еда, напитки, бытовая химия, магазины
 - Кафе: рестораны, кофейни, доставка еды
-- Транспорт: метро, автобус, такси, бензин
+- Транспорт: метро, автобус, такси
+- Авто: бензин, ОСАГО, ремонт, мойка, запчасти, автомойка
 - Одежда: одежда, обувь, аксессуары
 - Красота: косметика, парфюмерия, салон красоты, маникюр, стрижка
 - Медицина: аптека, врачи, анализы, стоматолог
@@ -41,16 +46,17 @@ const SYSTEM_PROMPT = `Ты — парсер расходов. Извлеки и
 - Дом: мебель, ремонт, техника
 - Связь: телефон, интернет
 - Прочее: всё остальное
-
+${extraLines ? extraLines + '\n' : ''}
 Ответь ТОЛЬКО валидным JSON массивом, без markdown:
 [{"date": "...", "category": "...", "amount": 0, "description": "..."}]
 
 Если расходы не распознаны — верни []`;
+}
 
 /**
  * Запрос к одной модели с таймаутом
  */
-async function callModel(model, userMessage) {
+async function callModel(model, userMessage, systemPrompt = makeSystemPrompt()) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.aiTimeout);
 
@@ -66,7 +72,7 @@ async function callModel(model, userMessage) {
       body: JSON.stringify({
         model,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
         ],
         temperature: 0.1,
@@ -105,7 +111,7 @@ async function callModel(model, userMessage) {
 /**
  * Парсит JSON ответ от модели
  */
-function parseJson(content) {
+function parseJson(content, allCats = CATEGORIES) {
   // Убираем markdown обёртки
   const clean = content
     .replace(/```json\n?/gi, '')
@@ -122,7 +128,7 @@ function parseJson(content) {
   return expenses.filter(exp => 
     exp.date && 
     exp.category && 
-    CATEGORIES.includes(exp.category) &&
+    allCats.includes(exp.category) &&
     typeof exp.amount === 'number' && 
     exp.amount > 0
   );
@@ -131,7 +137,7 @@ function parseJson(content) {
 /**
  * Основная функция — пробует модели по цепочке
  */
-export async function parseExpenses(text) {
+export async function parseExpenses(text, extraCats = []) {
   const today = new Date();
   const todayStr = formatDate(today);
   const userMessage = `Сегодня: ${todayStr}\n\nРасходы: ${text}`;
@@ -141,7 +147,7 @@ export async function parseExpenses(text) {
   for (const model of config.aiModels) {
     console.log(`🔄 Пробую модель: ${model}`);
     
-    const result = await callModel(model, userMessage);
+    const result = await callModel(model, userMessage, makeSystemPrompt(extraCats));
     
     if (!result.success) {
       console.warn(`⚠️  ${model}: ${result.error}`);
@@ -150,7 +156,7 @@ export async function parseExpenses(text) {
     }
 
     try {
-      const expenses = parseJson(result.content);
+      const expenses = parseJson(result.content, [...CATEGORIES, ...extraCats]);
       console.log(`✅ ${model}: распознано ${expenses.length} записей`);
       return { expenses, model };
     } catch (parseError) {
@@ -288,7 +294,7 @@ export { CATEGORIES };
  * Парсинг расходов из изображения (банковские уведомления, скриншоты)
  * Использует vision-модель через OpenRouter
  */
-export async function parseImageExpenses(base64, mimeType = 'image/jpeg') {
+export async function parseImageExpenses(base64, mimeType = 'image/jpeg', extraCats = []) {
   if (!config.openRouterKey) {
     return { expenses: [], error: 'Нет API ключа' };
   }
@@ -316,7 +322,7 @@ export async function parseImageExpenses(base64, mimeType = 'image/jpeg') {
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-              { type: 'text', text: `Сегодня: ${todayStr}\n\nЭто банковское уведомление, чек или скриншот с расходами. Извлеки список трат.\n\n${SYSTEM_PROMPT}\n\nОтветь ТОЛЬКО валидным JSON массивом, без markdown.` },
+              { type: 'text', text: `Сегодня: ${todayStr}\n\nЭто банковское уведомление, чек или скриншот с расходами. Извлеки список трат.\n\n${makeSystemPrompt(extraCats)}\n\nОтветь ТОЛЬКО валидным JSON массивом, без markdown.` },
             ],
           }],
           temperature: 0.1,
@@ -334,7 +340,7 @@ export async function parseImageExpenses(base64, mimeType = 'image/jpeg') {
       const content = data.choices?.[0]?.message?.content?.trim();
       if (!content) continue;
 
-      const expenses = parseJson(content);
+      const expenses = parseJson(content, [...CATEGORIES, ...extraCats]);
       console.log(`✅ Vision ${model}: ${expenses.length} записей`);
       return { expenses, model };
     } catch {

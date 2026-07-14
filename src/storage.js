@@ -550,6 +550,38 @@ export async function saveBudgetPlan(plan, familyId) {
   debouncedSave();
 }
 
+// ─── Пользовательские категории семьи ────────────────────────────────────────
+
+export function getCustomCategories(familyId) {
+  return familySettings(familyId).customCategories || [];
+}
+
+export async function addCustomCategory(familyId, { name, emoji }) {
+  const fs = familySettings(familyId);
+  if (!fs.customCategories) fs.customCategories = [];
+  if (fs.customCategories.some(c => c.name === name)) return null;
+  const cat = { name, emoji: emoji || '🏷️' };
+  fs.customCategories.push(cat);
+  debouncedSave();
+  return cat;
+}
+
+// Удаление: все расходы категории переезжают в «Прочее»
+export async function removeCustomCategory(familyId, name) {
+  const fs = familySettings(familyId);
+  const f = fam(familyId);
+  if (!fs.customCategories) return { removed: false, moved: 0 };
+  const idx = fs.customCategories.findIndex(c => c.name === name);
+  if (idx === -1) return { removed: false, moved: 0 };
+  fs.customCategories.splice(idx, 1);
+  let moved = 0;
+  for (const e of data.expenses) {
+    if (fam(e.family) === f && e.category === name) { e.category = 'Прочее'; moved++; }
+  }
+  debouncedSave();
+  return { removed: true, moved };
+}
+
 // ─── Cashflow ─────────────────────────────────────────────────────────────────
 
 export function getCashflow(ym, familyId) {

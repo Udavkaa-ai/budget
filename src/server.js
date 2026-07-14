@@ -58,6 +58,9 @@ import {
   getUserPushEnabled,
   setUserPushEnabled,
   getAllFamilyExpenses,
+  getCustomCategories,
+  addCustomCategory,
+  removeCustomCategory,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -501,11 +504,37 @@ app.post('/api/import', authMiddleware, async (req, res) => {
 
 app.get('/api/settings', authMiddleware, (req, res) => {
   const budget = getFamilyBudgetSettings(req.user.family);
+  const custom = getCustomCategories(req.user.family);
   res.json({
     ...getSettings(req.user.family),
-    categories: CATEGORIES,
+    categories: [...CATEGORIES, ...custom.map(c => c.name)],
+    customCategories: custom,
     plannedMonthly: budget.plannedMonthly,
   });
+});
+
+// ─── Пользовательские категории ──────────────────────────────────────────────
+
+app.post('/api/categories', authMiddleware, async (req, res) => {
+  const { name, emoji } = req.body || {};
+  const n = (name || '').trim();
+  if (!n) return res.status(400).json({ error: 'Укажите название' });
+  if (n.length > 24) return res.status(400).json({ error: 'Слишком длинное название' });
+  if (CATEGORIES.includes(n)) return res.status(400).json({ error: 'Такая категория уже есть' });
+  const cat = await addCustomCategory(req.user.family, { name: n, emoji: (emoji || '').trim() || '🏷️' });
+  if (!cat) return res.status(400).json({ error: 'Такая категория уже есть' });
+  io.to(req.user.family).emit('settings:updated', { key: 'categories' });
+  res.json({ ok: true, category: cat });
+});
+
+app.delete('/api/categories/:name', authMiddleware, async (req, res) => {
+  const name = decodeURIComponent(req.params.name);
+  if (CATEGORIES.includes(name)) return res.status(400).json({ error: 'Базовую категорию нельзя удалить' });
+  const result = await removeCustomCategory(req.user.family, name);
+  if (!result.removed) return res.status(404).json({ error: 'Категория не найдена' });
+  io.to(req.user.family).emit('settings:updated', { key: 'categories' });
+  if (result.moved > 0) io.to(req.user.family).emit('expense:updated', { by: req.user.name });
+  res.json({ ok: true, moved: result.moved });
 });
 
 app.put('/api/settings', authMiddleware, async (req, res) => {
@@ -1030,7 +1059,7 @@ app.post('/api/parse', authMiddleware, async (req, res) => {
   }
 
   try {
-    const result = await parseExpenses(text);
+    const result = await parseExpenses(text, getCustomCategories(req.user.family).map(c => c.name));
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1049,7 +1078,7 @@ app.post('/api/parse-image', authMiddleware, async (req, res) => {
   }
 
   try {
-    const result = await parseImageExpenses(base64, mimeType || 'image/jpeg');
+    const result = await parseImageExpenses(base64, mimeType || 'image/jpeg', getCustomCategories(req.user.family).map(c => c.name));
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
