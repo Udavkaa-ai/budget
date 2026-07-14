@@ -11,6 +11,7 @@ import {
 } from '../api/client';
 import { Card } from '../components/Card';
 import { useAuth } from '../hooks/useAuth';
+import { MonthPickerModal } from '../components/Pickers';
 
 const USER_COLORS = ['#6c5ce7', '#ec4899', '#f59e0b', '#22c55e'];
 
@@ -66,6 +67,7 @@ export default function ChartScreen() {
   const [savingCf, setSavingCf] = useState(false);
   const [selDay, setSelDay] = useState<number | null>(null);   // выбранный столбик расходов
   const [selBal, setSelBal] = useState<number | null>(null);   // выбранный столбик баланса
+  const [monthPicker, setMonthPicker] = useState(false);
 
   const load = useCallback(async (m = month, y = year) => {
     setLoading(true);
@@ -152,11 +154,21 @@ export default function ChartScreen() {
         <TouchableOpacity onPress={() => nav(-1)} style={styles.navBtn}>
           <Text style={{ color: t.primary, fontSize: font.xl }}>‹</Text>
         </TouchableOpacity>
-        <Text style={[styles.navLabel, { color: t.text }]}>{getMonthName(month, year)}</Text>
+        <TouchableOpacity onPress={() => setMonthPicker(true)}>
+          <Text style={[styles.navLabel, { color: t.text }]}>{getMonthName(month, year)} ▾</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => nav(1)} style={styles.navBtn}>
           <Text style={{ color: t.primary, fontSize: font.xl }}>›</Text>
         </TouchableOpacity>
       </View>
+
+      <MonthPickerModal
+        visible={monthPicker}
+        month={month}
+        year={year}
+        onClose={() => setMonthPicker(false)}
+        onPick={(m, y) => { setMonth(m); setYear(y); load(m, y); }}
+      />
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
@@ -262,26 +274,26 @@ export default function ChartScreen() {
           {/* Кэшфлоу редактор */}
           <Card>
             <Text style={[styles.sectionTitle, { color: t.text }]}>Кэшфлоу</Text>
+            <View style={[styles.cfRow, { marginBottom: 2 }]}>
+              <View style={{ flex: 1.1 }} />
+              {['ДЕБЕТ', 'КРЕДИТ', 'СБЕРЕЖ.'].map(h => (
+                <Text key={h} style={{ flex: 1, color: t.textMuted, fontSize: 9, textAlign: 'center' }}>{h}</Text>
+              ))}
+            </View>
             {Object.entries(members).map(([name, m]) => (
-              <View key={name} style={{ marginBottom: spacing.md }}>
-                <Text style={{ color: t.primary, fontWeight: '700', marginBottom: spacing.xs }}>{name}</Text>
-                <View style={styles.cfRow}>
-                  {(['debit', 'credit', 'savings'] as const).map(f => (
-                    <View key={f} style={{ flex: 1 }}>
-                      <Text style={{ color: t.textMuted, fontSize: 9, textAlign: 'center' }}>
-                        {f === 'debit' ? 'ДЕБЕТОВАЯ' : f === 'credit' ? 'КРЕДИТНАЯ' : 'СБЕРЕЖЕНИЯ'}
-                      </Text>
-                      <TextInput
-                        style={[styles.cfInput, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
-                        value={m[f] ? String(m[f]) : ''}
-                        onChangeText={v => setMemberField(name, f, v)}
-                        placeholder="0"
-                        placeholderTextColor={t.textMuted}
-                        keyboardType="numbers-and-punctuation"
-                      />
-                    </View>
-                  ))}
-                </View>
+              <View key={name} style={[styles.cfRow, { marginBottom: spacing.xs }]}>
+                <Text style={{ flex: 1.1, color: t.primary, fontWeight: '600', fontSize: font.sm }} numberOfLines={1}>{name}</Text>
+                {(['debit', 'credit', 'savings'] as const).map(f => (
+                  <TextInput
+                    key={f}
+                    style={[styles.cfInputSm, { flex: 1, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+                    value={m[f] ? String(m[f]) : ''}
+                    onChangeText={v => setMemberField(name, f, v)}
+                    placeholder="0"
+                    placeholderTextColor={t.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                  />
+                ))}
               </View>
             ))}
 
@@ -378,6 +390,7 @@ const styles = StyleSheet.create({
   balBar:       { width: '100%', borderRadius: 2, minHeight: 2 },
   cfRow:        { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   cfInput:      { borderRadius: radius.sm, borderWidth: 1, padding: spacing.sm, fontSize: font.sm, textAlign: 'center' },
+  cfInputSm:    { borderRadius: radius.sm, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 6, fontSize: font.sm, textAlign: 'center' },
   saveBtn:      { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   chart6:       { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, height: 190 },
   barCol:       { flex: 1, alignItems: 'center' },

@@ -5,7 +5,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, spacing, font, radius } from '../theme';
-import { goals as goalsApi, type Goal } from '../api/client';
+import { goals as goalsApi, budgetPlan, type Goal, type BudgetPlan } from '../api/client';
+import { useCategories } from '../categories';
+import { PrimaryButton } from '../components/UI';
 import { Card } from '../components/Card';
 
 function fmt(n: number) {
@@ -14,7 +16,12 @@ function fmt(n: number) {
 
 export default function GoalsScreen() {
   const t = useTheme();
+  const { cats: allCats, icon: catIcon } = useCategories();
   const [list, setList] = useState<Goal[]>([]);
+  // Лимиты по категориям (как в вебе на вкладке Цели)
+  const [plan, setPlan] = useState<BudgetPlan | null>(null);
+  const [limitDraft, setLimitDraft] = useState<Record<string, string>>({});
+  const [savingLimits, setSavingLimits] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addVisible, setAddVisible] = useState(false);
   const [contribGoal, setContribGoal] = useState<Goal | null>(null);
@@ -31,8 +38,34 @@ export default function GoalsScreen() {
     try {
       const g = await goalsApi.list();
       setList(g);
+      const p = await budgetPlan.get().catch(() => null);
+      if (p) {
+        setPlan(p);
+        const ld: Record<string, string> = {};
+        const budgets = p.categoryBudgets ?? {};
+        for (const [c, v] of Object.entries(budgets)) ld[c] = v ? String(v) : '';
+        setLimitDraft(ld);
+      }
     } catch { /* ignore */ } finally {
       setLoading(false);
+    }
+  };
+
+  const saveLimits = async () => {
+    setSavingLimits(true);
+    try {
+      const categoryBudgets: Record<string, number> = {};
+      for (const [cat, v] of Object.entries(limitDraft)) {
+        const n = parseFloat((v || '').replace(',', '.'));
+        if (!isNaN(n) && n > 0) categoryBudgets[cat] = n;
+      }
+      await budgetPlan.save({ ...(plan ?? {}), categoryBudgets } as BudgetPlan);
+      Alert.alert('Лимиты сохранены');
+      load();
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setSavingLimits(false);
     }
   };
 
@@ -83,6 +116,44 @@ export default function GoalsScreen() {
         ? <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
         : (
           <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            {/* Лимиты по категориям — как в вебе */}
+            <Card>
+              <Text style={{ fontSize: font.sm, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textMuted }}>
+                Лимиты по категориям
+              </Text>
+              {allCats.map(cat => (
+                <View key={cat} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs }}>
+                  <Text style={{ color: t.text, flex: 1, fontSize: font.sm }} numberOfLines={1}>{catIcon(cat)} {cat}</Text>
+                  <TextInput
+                    style={{
+                      width: 110, borderRadius: radius.sm, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 10,
+                      fontSize: font.sm, textAlign: 'right',
+                      color: t.text, borderColor: t.border, backgroundColor: t.surface2,
+                    }}
+                    value={limitDraft[cat] ?? ''}
+                    onChangeText={v => setLimitDraft(d => ({ ...d, [cat]: v }))}
+                    placeholder="—"
+                    placeholderTextColor={t.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              ))}
+              {(() => {
+                const totalIncome = Object.values(plan?.incomes ?? {}).reduce((s2, v) => s2 + v, 0);
+                const totalLimits = Object.values(limitDraft).reduce((s2, v) => {
+                  const n = parseFloat((v || '').replace(',', '.'));
+                  return s2 + (isNaN(n) ? 0 : n);
+                }, 0);
+                return totalIncome > 0 ? (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: spacing.sm }}>
+                    <Text style={{ color: t.text }}>🏦 Сбережения</Text>
+                    <Text style={{ color: t.success, fontWeight: '700' }}>{fmt(Math.max(totalIncome - totalLimits, 0))}</Text>
+                  </View>
+                ) : null;
+              })()}
+              <PrimaryButton title="Сохранить" onPress={saveLimits} loading={savingLimits} style={{ marginTop: spacing.sm }} />
+            </Card>
+
             {list.length === 0 && (
               <Text style={[styles.empty, { color: t.textMuted }]}>Нет целей. Добавьте первую!</Text>
             )}

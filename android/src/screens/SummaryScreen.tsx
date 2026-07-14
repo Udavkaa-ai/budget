@@ -9,6 +9,7 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
 import { useCategories } from '../categories';
+import { MonthPickerModal } from '../components/Pickers';
 import { usePremium } from '../premium';
 import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
@@ -103,6 +104,7 @@ export default function SummaryScreen() {
 
   // Фильтр категорий по участнику
   const [selUser, setSelUser] = useState<string | null>(null);
+  const [monthPicker, setMonthPicker] = useState(false);
 
   // Heatmap + drill-down + planned budget
   const [monthExp, setMonthExp] = useState<Expense[]>([]);
@@ -253,7 +255,9 @@ export default function SummaryScreen() {
         <TouchableOpacity onPress={prev} style={styles.navBtn}>
           <Text style={{ color: t.primary, fontSize: font.xl }}>‹</Text>
         </TouchableOpacity>
-        <Text style={[styles.navLabel, { color: t.text }]}>{getMonthName(month, year)}</Text>
+        <TouchableOpacity onPress={() => setMonthPicker(true)}>
+          <Text style={[styles.navLabel, { color: t.text }]}>{getMonthName(month, year)} ▾</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={next} style={styles.navBtn}>
           <Text style={{ color: t.primary, fontSize: font.xl }}>›</Text>
         </TouchableOpacity>
@@ -420,14 +424,16 @@ export default function SummaryScreen() {
               {drillDay !== null && (
                 <View style={{ marginTop: spacing.md, borderTopWidth: 1, borderTopColor: t.border, paddingTop: spacing.md, height: 220 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                    <Text style={{ color: t.text, fontWeight: '700' }} numberOfLines={1}>
+                    <Text style={{ color: t.text, fontWeight: '700', flex: 1 }} numberOfLines={1}>
                       {drillDay} {getMonthName(month, year).toLowerCase()} · {fmt(dayTotals[drillDay] ?? 0)}
+                      {monthExp.filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay).length > 4
+                        ? `  (${monthExp.filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ↓)` : ''}
                     </Text>
                     <TouchableOpacity onPress={() => setDrillDay(null)} style={{ paddingHorizontal: 6 }}>
                       <Text style={{ color: t.textMuted }}>✕</Text>
                     </TouchableOpacity>
                   </View>
-                  <ScrollView nestedScrollEnabled>
+                  <ScrollView nestedScrollEnabled showsVerticalScrollIndicator persistentScrollbar>
                     {monthExp
                       .filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay)
                       .sort((a, b) => b.amount - a.amount)
@@ -566,6 +572,14 @@ export default function SummaryScreen() {
           </Card>
         </ScrollView>
       )}
+
+      <MonthPickerModal
+        visible={monthPicker}
+        month={month}
+        year={year}
+        onClose={() => setMonthPicker(false)}
+        onPick={(m, y) => { setMonth(m); setYear(y); load(m, y); }}
+      />
 
       {/* Budget plan editor */}
       <Modal visible={planVisible} animationType="slide" onRequestClose={() => setPlanVisible(false)}>

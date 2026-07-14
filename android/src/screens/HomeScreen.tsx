@@ -13,6 +13,7 @@ import { useCategories } from '../categories';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
+import { DayPickerModal } from '../components/Pickers';
 
 function todayStr() {
   const d = new Date();
@@ -32,6 +33,7 @@ export default function HomeScreen() {
   const [date, setDate] = useState(todayStr());
   const [list, setList] = useState<Expense[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
   const slide = useRef(new Animated.Value(0)).current;
 
   // Эффект пролистывания: контент вылетает со стороны свайпа с оттяжкой
@@ -162,7 +164,9 @@ export default function HomeScreen() {
           <TouchableOpacity onPress={prevDay} style={styles.navBtn}>
             <Text style={{ color: t.primary, fontSize: font.xl }}>‹</Text>
           </TouchableOpacity>
-          <Text style={[styles.dateText, { color: t.text }]}>{date}</Text>
+          <TouchableOpacity onPress={() => setPickerVisible(true)}>
+            <Text style={[styles.dateText, { color: t.text }]}>{date} ▾</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={nextDay} style={styles.navBtn} disabled={isToday}>
             <Text style={{ color: isToday ? t.textMuted : t.primary, fontSize: font.xl }}>›</Text>
           </TouchableOpacity>
@@ -209,6 +213,13 @@ export default function HomeScreen() {
         />
         </Animated.View>
         </GestureDetector>
+
+        <DayPickerModal
+          visible={pickerVisible}
+          date={date}
+          onClose={() => setPickerVisible(false)}
+          onPick={d => { setDate(d); load(d); }}
+        />
 
         {/* Edit expense modal */}
         <Modal visible={!!editing} animationType="slide" transparent onRequestClose={() => setEditing(null)}>
