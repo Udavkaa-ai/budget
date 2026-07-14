@@ -105,6 +105,9 @@ export default function SummaryScreen() {
   const [compare, setCompare] = useState(false);
   const [prevData, setPrevData] = useState<SummaryData | null>(null);
 
+  // Фильтр категорий по участнику
+  const [selUser, setSelUser] = useState<string | null>(null);
+
   // Heatmap + drill-down + planned budget
   const [monthExp, setMonthExp] = useState<Expense[]>([]);
   const [plannedMonthly, setPlannedMonthly] = useState(0);
@@ -216,13 +219,15 @@ export default function SummaryScreen() {
     }
   };
 
-  const cats = data
-    ? Object.entries(data.byCategory)
-        .filter(([, v]) => v > 0)
-        .sort(([, a], [, b]) => b - a)
-    : [];
+  const catSource = selUser && data?.byUser[selUser]
+    ? data.byUser[selUser].byCategory
+    : data?.byCategory ?? {};
+  const cats = Object.entries(catSource)
+    .filter(([, v]) => v > 0)
+    .sort(([, a], [, b]) => b - a);
 
   const maxCat = cats[0]?.[1] ?? 1;
+  const memberNames = Object.keys(data?.byUser ?? {});
   const budgets = plan?.categoryBudgets ?? {};
   const incomes = plan?.incomes ?? {};
   const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
@@ -304,23 +309,27 @@ export default function SummaryScreen() {
               <View style={{ alignItems: 'center' }}>
                 <Svg width="100%" height={150} viewBox="0 0 260 150">
                   {/* Зоны: зелёная до 70%, жёлтая 70-100%, красная 100-160% */}
-                  <Path d={arcPath(130, 130, 100, 0, 70)} stroke="#22c55e" strokeWidth={16} fill="none" strokeLinecap="round" />
-                  <Path d={arcPath(130, 130, 100, 70, 100)} stroke="#f59e0b" strokeWidth={16} fill="none" />
-                  <Path d={arcPath(130, 130, 100, 100, 160)} stroke="#ef4444" strokeWidth={16} fill="none" strokeLinecap="round" />
-                  {/* Стрелка */}
+                  <Path d={arcPath(130, 128, 92, 0, 70)} stroke="#22c55e" strokeWidth={15} fill="none" strokeLinecap="round" />
+                  <Path d={arcPath(130, 128, 92, 70, 100)} stroke="#f59e0b" strokeWidth={15} fill="none" />
+                  <Path d={arcPath(130, 128, 92, 100, 160)} stroke="#ef4444" strokeWidth={15} fill="none" strokeLinecap="round" />
+                  {/* Короткая стрелка — не задевает цифру и дугу */}
                   {(() => {
-                    const tip = polar(130, 130, 82, gaugePct);
-                    return <SvgLine x1={130} y1={130} x2={tip.x} y2={tip.y} stroke={t.text} strokeWidth={3.5} strokeLinecap="round" />;
+                    const tip = polar(130, 128, 62, gaugePct);
+                    return <SvgLine x1={130} y1={128} x2={tip.x} y2={tip.y} stroke={t.text} strokeWidth={3.5} strokeLinecap="round" />;
                   })()}
-                  <Circle cx={130} cy={130} r={7} fill={t.text} />
-                  {/* Подписи шкалы */}
-                  <SvgText x={20} y={148} fontSize={11} fill={t.textMuted}>0%</SvgText>
-                  <SvgText x={62} y={40} fontSize={11} fill={t.textMuted}>70%</SvgText>
-                  <SvgText x={160} y={35} fontSize={11} fill={t.textMuted}>100%</SvgText>
-                  <SvgText x={218} y={148} fontSize={11} fill={t.textMuted}>160%</SvgText>
+                  <Circle cx={130} cy={128} r={6} fill={t.text} />
+                  {/* Подписи вне шкалы */}
+                  <SvgText x={30} y={147} fontSize={11} fill={t.textMuted} textAnchor="middle">0%</SvgText>
+                  {(() => { const p = polar(130, 128, 112, 70); return (
+                    <SvgText x={p.x} y={p.y} fontSize={11} fill={t.textMuted} textAnchor="middle">70%</SvgText>
+                  ); })()}
+                  {(() => { const p = polar(130, 128, 112, 100); return (
+                    <SvgText x={p.x} y={p.y} fontSize={11} fill={t.textMuted} textAnchor="middle">100%</SvgText>
+                  ); })()}
+                  <SvgText x={230} y={147} fontSize={11} fill={t.textMuted} textAnchor="middle">160%</SvgText>
                 </Svg>
                 <Text style={{
-                  fontSize: 36, fontWeight: '800', marginTop: -58,
+                  fontSize: 34, fontWeight: '800', marginTop: 4,
                   color: gaugePct <= 70 ? '#22c55e' : gaugePct <= 100 ? '#f59e0b' : '#ef4444',
                 }}>
                   {gaugePct}%
@@ -492,26 +501,48 @@ export default function SummaryScreen() {
                 <Text style={{ color: t.primary, fontSize: font.sm, fontWeight: '600' }}>⚙️ Лимиты</Text>
               </TouchableOpacity>
             </View>
+            {/* Фильтр по участнику */}
+            {memberNames.length > 1 && (
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' }}>
+                <TouchableOpacity
+                  style={[styles.userChip, { backgroundColor: selUser === null ? t.primary : t.surface2 }]}
+                  onPress={() => setSelUser(null)}
+                >
+                  <Text style={{ color: selUser === null ? '#fff' : t.text, fontSize: font.sm }}>Все</Text>
+                </TouchableOpacity>
+                {memberNames.map(u => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.userChip, { backgroundColor: selUser === u ? t.primary : t.surface2 }]}
+                    onPress={() => setSelUser(x => x === u ? null : u)}
+                  >
+                    <Text style={{ color: selUser === u ? '#fff' : t.text, fontSize: font.sm }}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {selUser && (
+              <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm }}>
+                {selUser}: {fmt(data?.byUser[selUser]?.total ?? 0)} за месяц
+              </Text>
+            )}
             {cats.length === 0 && (
               <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Нет расходов за месяц</Text>
             )}
             {cats.map(([cat, amt]) => {
-              const limit = budgets[cat] ?? 0;
+              const limit = selUser ? 0 : budgets[cat] ?? 0; // лимиты общесемейные
               const over = limit > 0 && amt > limit;
-              const pct = amt / maxCat;
-              const limitPct = limit > 0 ? Math.min(limit / maxCat, 1) : 0;
+              // С лимитом полоска показывает заполнение лимита, без — долю от максимума
+              const fillPct = limit > 0 ? Math.min(amt / limit, 1) : amt / maxCat;
+              const fillColor = limit > 0
+                ? (over ? '#ef4444' : amt / limit > 0.8 ? '#f59e0b' : '#22c55e')
+                : t.primary;
               return (
                 <TouchableOpacity key={cat} style={styles.catRow} onPress={() => openDrill(cat)}>
                   <Text style={{ width: 28, fontSize: 18 }}>{ICONS[cat]}</Text>
                   <View style={{ flex: 1 }}>
-                    <View style={styles.barBg}>
-                      <View style={[styles.barFill, {
-                        width: `${pct * 100}%`,
-                        backgroundColor: over ? '#ef4444' : t.primary,
-                      }]} />
-                      {limit > 0 && (
-                        <View style={[styles.limitLine, { left: `${limitPct * 100}%` }]} />
-                      )}
+                    <View style={[styles.barBg, limit > 0 && { height: 14, borderRadius: 7 }]}>
+                      <View style={[styles.barFill, { width: `${fillPct * 100}%`, backgroundColor: fillColor }]} />
                     </View>
                     {compare && prevData && (
                       <View style={[styles.barBg, { height: 4, marginTop: 2, opacity: 0.55 }]}>
@@ -521,8 +552,9 @@ export default function SummaryScreen() {
                         }]} />
                       </View>
                     )}
-                    <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
-                      {cat}{limit > 0 ? ` · лимит ${fmt(limit)}` : ''}
+                    <Text style={{ color: limit > 0 ? fillColor : t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                      {cat}
+                      {limit > 0 ? ` · ${Math.round(amt / limit * 100)}% лимита ${fmt(limit)}` : ''}
                       {compare && prevData ? (() => {
                         const pv = prevData.byCategory[cat] ?? 0;
                         if (pv === 0) return ' · новое';

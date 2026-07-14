@@ -174,11 +174,25 @@ export interface Goal {
   emoji: string;
 }
 
+// Сервер хранит цели как { targetAmount, contributions: [{amount}] }
+interface ServerGoal {
+  id: string; name: string; emoji: string;
+  targetAmount: number;
+  contributions?: Array<{ amount: number }>;
+}
+const normGoal = (g: ServerGoal): Goal => ({
+  id: g.id, name: g.name, emoji: g.emoji,
+  target: g.targetAmount,
+  saved: (g.contributions ?? []).reduce((s, c) => s + (c.amount || 0), 0),
+});
+
 export const goals = {
-  list:       () => api.get<Goal[]>('/api/goals'),
-  add:        (goal: Omit<Goal, 'id' | 'saved'>) => api.post<Goal>('/api/goals', goal),
-  contribute: (id: string, amount: number) => api.post<Goal>(`/api/goals/${id}/contribute`, { amount }),
-  delete:     (id: string) => api.delete<{ ok: boolean }>(`/api/goals/${id}`),
+  list: async () => (await api.get<ServerGoal[]>('/api/goals')).map(normGoal),
+  add: (goal: Omit<Goal, 'id' | 'saved'>) =>
+    api.post<{ ok: boolean }>('/api/goals', { name: goal.name, targetAmount: goal.target, emoji: goal.emoji }),
+  contribute: (id: string, amount: number) =>
+    api.post<{ ok: boolean }>(`/api/goals/${id}/contribute`, { amount }),
+  delete: (id: string) => api.delete<{ ok: boolean }>(`/api/goals/${id}`),
 };
 
 // ─── Cashflow ────────────────────────────────────────────────────────────────
