@@ -4,8 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme, ActivityIndicator, View } from 'react-native';
+import { useColorScheme, ActivityIndicator, View, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { flushOutbox } from './src/offline';
 
 import { AppNavigator } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -68,7 +69,18 @@ function Root() {
     if (user) {
       syncCrowdDict();
       registerPushToken();
+      flushOutbox().catch(() => {});
     }
+  }, [user]);
+
+  // Офлайн-очередь: пробуем дослать при возврате в приложение и раз в 30 секунд
+  useEffect(() => {
+    if (!user) return;
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'active') flushOutbox().catch(() => {});
+    });
+    const timer = setInterval(() => { flushOutbox().catch(() => {}); }, 30_000);
+    return () => { sub.remove(); clearInterval(timer); };
   }, [user]);
 
   if (loading) {

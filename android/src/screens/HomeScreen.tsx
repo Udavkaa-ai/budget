@@ -12,6 +12,7 @@ import { AddExpenseSheet } from '../components/AddExpenseSheet';
 import { CATEGORIES } from '../classifier';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
+import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 
 const ICONS: Record<string, string> = {
   Продукты: '🛒', Кафе: '🍽', Транспорт: '🚇', Одежда: '👗', Красота: '💄',
@@ -44,14 +45,32 @@ export default function HomeScreen() {
   };
 
   const load = useCallback(async (d = date) => {
+    // Сначала пробуем дослать офлайн-очередь
+    flushOutbox().catch(() => {});
+    let server: Expense[] = [];
     try {
       const res = await expApi.forDay(d);
-      setList(res.expenses ?? []);
-    } catch { /* ignore */ }
-  }, [date]);
+      server = res.expenses ?? [];
+    } catch { /* офлайн — покажем хотя бы очередь */ }
+    // Офлайн-записи этого дня с меткой pending
+    try {
+      const pending = (await getOutbox())
+        .filter(o => o.date === d)
+        .map(o => ({
+          id: `off_${o.outboxId}`,
+          date: o.date, category: o.category, amount: o.amount,
+          description: o.description, user: user?.name ?? '', createdAt: o.createdAt,
+          pending: true,
+        } as Expense & { pending: boolean }));
+      setList([...pending, ...server]);
+    } catch {
+      setList(server);
+    }
+  }, [date, user?.name]);
 
-  // Real-time sync
+  // Real-time sync + обновление при изменении офлайн-очереди
   useSocket(useCallback(() => { load(); }, [load]));
+  React.useEffect(() => onOutboxChange(() => { load(); }), [load]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -85,7 +104,11 @@ export default function HomeScreen() {
       {
         text: 'Удалить', style: 'destructive',
         onPress: async () => {
-          await expApi.delete(id);
+          if (id.startsWith('off_')) {
+            await removeFromOutbox(parseInt(id.slice(4)));
+          } else {
+            await expApi.delete(id);
+          }
           setEditing(null);
           setList(prev => prev.filter(e => e.id !== id));
         },
@@ -168,20 +191,25 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
           }
-          renderItem={({ item: e }) => (
+          renderItem={({ item: e }) => {
+            const pending = (e as Expense & { pending?: boolean }).pending;
+            return (
             <TouchableOpacity
-              style={[styles.item, { backgroundColor: t.surface, borderColor: t.border }]}
-              onPress={() => e.user === user?.name && openEdit(e)}
-              onLongPress={() => e.user === user?.name && deleteExpense(e.id)}
+              style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
+              onPress={() => !pending && e.user === user?.name && openEdit(e)}
+              onLongPress={() => (pending || e.user === user?.name) && deleteExpense(e.id)}
             >
               <Text style={{ fontSize: 24 }}>{ICONS[e.category] ?? '❓'}</Text>
               <View style={styles.itemMid}>
                 <Text style={[styles.itemDesc, { color: t.text }]}>{e.description}</Text>
-                <Text style={[styles.itemMeta, { color: t.textMuted }]}>{e.category} · {e.user}</Text>
+                <Text style={[styles.itemMeta, { color: t.textMuted }]}>
+                  {pending ? '⏳ ожидает синхронизации · ' : ''}{e.category} · {e.user}
+                </Text>
               </View>
               <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
             </TouchableOpacity>
-          )}
+            );
+          }}
         />
         </Animated.View>
         </GestureDetector>

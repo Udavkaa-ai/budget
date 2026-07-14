@@ -10,6 +10,7 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { CATEGORIES, predict, learn, queueContribution, type PredictResult } from '../classifier';
 import { expenses, ai, type AuthUser } from '../api/client';
 import { usePremium } from '../premium';
+import { queueExpense, isNetworkError } from '../offline';
 
 const ICONS: Record<string, string> = {
   Продукты: '🛒', Кафе: '🍽', Транспорт: '🚇', Одежда: '👗', Красота: '💄',
@@ -80,10 +81,9 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     if (isNaN(amt) || amt <= 0) { Alert.alert('Некорректная сумма'); return; }
 
     setSubmitting(true);
+    const item = { date: todayStr(), category: selectedCat, amount: amt, description: description.trim() };
     try {
-      await expenses.add({
-        expenses: [{ date: todayStr(), category: selectedCat, amount: amt, description: description.trim() }],
-      });
+      await expenses.add({ expenses: [item] });
       await learn(description, selectedCat);
       queueContribution(description, selectedCat);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -91,7 +91,29 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       sheetRef?.current?.close();
       onAdded();
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      if (isNetworkError(e)) {
+        // Сети нет — предлагаем офлайн-режим с последующей синхронизацией
+        Alert.alert(
+          'Нет соединения',
+          'Внести расход в офлайн-режиме? Он появится в ленте с меткой ⏳ и уйдёт на сервер, когда сеть вернётся.',
+          [
+            { text: 'Отмена', style: 'cancel' },
+            {
+              text: '📴 Внести офлайн',
+              onPress: async () => {
+                await queueExpense(item);
+                await learn(description, selectedCat!);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                reset();
+                sheetRef?.current?.close();
+                onAdded();
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert('Ошибка', String(e));
+      }
     } finally {
       setSubmitting(false);
     }
