@@ -150,6 +150,7 @@ html, body {
   letter-spacing: 0.6px;
 }
 
+.custom-cat-add input,
 .form-group input, .form-group textarea, .form-group select {
   padding: 13px 16px;
   border: 1.5px solid rgba(89,71,224,0.18);
@@ -162,6 +163,7 @@ html, body {
   width: 100%;
 }
 
+.custom-cat-add input:focus,
 .form-group input:focus, .form-group textarea:focus {
   outline: none;
   border-color: var(--primary);
@@ -2534,3 +2536,16 @@ html, body {
 .family-ov-name { font-size: 14px; font-weight: 600; }
 .family-ov-total { font-size: 15px; font-weight: 800; color: var(--primary); }
 .family-ov-cats { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* ─── Мои категории (настройки) ─────────────────────────────────────────── */
+.custom-cat-add { display: flex; gap: 8px; margin-top: 10px; align-items: stretch; }
+.custom-cat-add .cat-emoji { width: 64px; flex: none; text-align: center; }
+.custom-cat-add .cat-name { flex: 1; min-width: 0; }
+.custom-cat-add .btn { flex: none; padding: 0 20px; font-size: 20px; line-height: 1; }
+.custom-cat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 2px; font-size: 15px;
+  border-bottom: 1px solid rgba(89,71,224,0.08);
+}
+.custom-cat-row:last-child { border-bottom: none; }
+.custom-cat-row .btn { padding: 6px 14px; font-size: 13px; }

@@ -1951,9 +1951,9 @@ function renderCustomCategoriesList() {
   box.innerHTML = customs.length === 0
     ? '<div style="color:var(--text-muted);font-size:13px">Пока нет своих категорий</div>'
     : customs.map(c => `
-      <div class="custom-cat-row" style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+      <div class="custom-cat-row">
         <span>${esc(c.emoji || '🏷️')} ${esc(c.name)}</span>
-        <button class="btn btn-outline btn-cat-del" data-name="${esc(c.name)}" style="padding:4px 10px;font-size:13px">Удалить</button>
+        <button class="btn btn-outline btn-cat-del" data-name="${esc(c.name)}">Удалить</button>
       </div>`).join('');
   box.querySelectorAll('.btn-cat-del').forEach(btn => {
     btn.addEventListener('click', async () => {
