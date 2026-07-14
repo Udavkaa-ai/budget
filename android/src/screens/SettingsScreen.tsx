@@ -9,16 +9,20 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
-import { invites, csv, pushSettings, settings as settingsApi, setToken } from '../api/client';
+import { invites, csv, pushSettings, settings as settingsApi, categoriesApi, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
+import { useCategories, refreshCategories } from '../categories';
 
 export default function SettingsScreen() {
   const t = useTheme();
   const { user, logout, onLoginSuccess } = useAuth();
   const premium = usePremium();
   const blocks = useBlocks();
+  const { custom } = useCategories();
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatEmoji, setNewCatEmoji] = useState('');
   const [pushEnabled, setPushEnabled] = useState(true);
   const [joinVisible, setJoinVisible] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -49,6 +53,43 @@ export default function SettingsScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const addCategory = async () => {
+    const name = newCatName.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      await categoriesApi.add(name, newCatEmoji.trim() || '🏷️');
+      setNewCatName(''); setNewCatEmoji('');
+      await refreshCategories();
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeCategory = (name: string) => {
+    Alert.alert(
+      `Удалить «${name}»?`,
+      'Все расходы этой категории будут перенесены в «Прочее».',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить', style: 'destructive',
+          onPress: async () => {
+            try {
+              const r = await categoriesApi.remove(name);
+              await refreshCategories();
+              if (r.moved) Alert.alert('Готово', `Перенесено расходов в «Прочее»: ${r.moved}`);
+            } catch (e) {
+              Alert.alert('Ошибка', String(e));
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleLogout = () => {
@@ -273,6 +314,45 @@ export default function SettingsScreen() {
               onValueChange={togglePush}
               trackColor={{ true: t.primary }}
             />
+          </View>
+        </Card>
+
+        {/* Custom categories */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Мои категории</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+            Общие для всей семьи. При удалении расходы переносятся в «Прочее».
+          </Text>
+          {custom.map(c => (
+            <View key={c.name} style={styles.row}>
+              <Text style={{ color: t.text }}>{c.emoji} {c.name}</Text>
+              <TouchableOpacity onPress={() => removeCategory(c.name)} style={{ padding: 4 }}>
+                <Text style={{ color: t.danger }}>Удалить</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+            <TextInput
+              style={[styles.input, { width: 64, marginBottom: 0, textAlign: 'center', color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              value={newCatEmoji}
+              onChangeText={setNewCatEmoji}
+              placeholder="🎣"
+              placeholderTextColor={t.textMuted}
+            />
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              value={newCatName}
+              onChangeText={setNewCatName}
+              placeholder="Название (напр. Рыбалка)"
+              placeholderTextColor={t.textMuted}
+            />
+            <TouchableOpacity
+              style={[styles.upgradeBtn, { backgroundColor: t.primary, paddingHorizontal: spacing.lg }]}
+              onPress={addCategory}
+              disabled={busy}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700' }}>+</Text>
+            </TouchableOpacity>
           </View>
         </Card>
 

@@ -128,10 +128,19 @@ export const expenses = {
     api.get<Expense[]>(`/api/expenses/category/${encodeURIComponent(cat)}?month=${month}&year=${year}`),
 };
 
+// ─── Custom categories ───────────────────────────────────────────────────────
+
+export const categoriesApi = {
+  add: (name: string, emoji: string) =>
+    api.post<{ ok: boolean }>('/api/categories', { name, emoji }),
+  remove: (name: string) =>
+    api.delete<{ ok: boolean; moved?: number }>(`/api/categories/${encodeURIComponent(name)}`),
+};
+
 // ─── Family settings ─────────────────────────────────────────────────────────
 
 export const settings = {
-  get: () => api.get<{ familyName?: string; plannedMonthly?: number }>('/api/settings'),
+  get: () => api.get<{ familyName?: string; plannedMonthly?: number; categories?: string[]; customCategories?: Array<{ name: string; emoji: string }> }>('/api/settings'),
   set: (key: string, value: unknown) => api.put<{ ok: boolean }>('/api/settings', { key, value }),
 };
 

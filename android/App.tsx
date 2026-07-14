@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, ActivityIndicator, View, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
+import { refreshCategories } from './src/categories';
 
 import { AppNavigator } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -69,6 +70,7 @@ function Root() {
     if (user) {
       syncCrowdDict();
       registerPushToken();
+      refreshCategories();
       flushOutbox().catch(() => {});
     }
   }, [user]);

@@ -9,15 +9,10 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme, spacing, font, radius } from '../theme';
 import { expenses as expApi, type Expense } from '../api/client';
 import { AddExpenseSheet } from '../components/AddExpenseSheet';
-import { CATEGORIES } from '../classifier';
+import { useCategories } from '../categories';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
-
-const ICONS: Record<string, string> = {
-  Продукты: '🛒', Кафе: '🍽', Транспорт: '🚇', Одежда: '👗', Красота: '💄',
-  Медицина: '💊', Развлечения: '🎮', Дети: '👶', Дом: '🏠', Связь: '📱', Прочее: '❓',
-};
 
 function todayStr() {
   const d = new Date();
@@ -31,6 +26,7 @@ function fmt(n: number) {
 export default function HomeScreen() {
   const t = useTheme();
   const { user } = useAuth();
+  const { cats, icon: catIcon2 } = useCategories();
   const addSheetRef = useRef<BottomSheet>(null);
 
   const [date, setDate] = useState(todayStr());
@@ -199,7 +195,7 @@ export default function HomeScreen() {
               onPress={() => !pending && e.user === user?.name && openEdit(e)}
               onLongPress={() => (pending || e.user === user?.name) && deleteExpense(e.id)}
             >
-              <Text style={{ fontSize: 24 }}>{ICONS[e.category] ?? '❓'}</Text>
+              <Text style={{ fontSize: 24 }}>{catIcon2(e.category)}</Text>
               <View style={styles.itemMid}>
                 <Text style={[styles.itemDesc, { color: t.text }]}>{e.description}</Text>
                 <Text style={[styles.itemMeta, { color: t.textMuted }]}>
@@ -235,14 +231,14 @@ export default function HomeScreen() {
                 keyboardType="decimal-pad"
               />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
-                {CATEGORIES.map(cat => (
+                {cats.map(cat => (
                   <TouchableOpacity
                     key={cat}
                     style={[styles.catChip, { backgroundColor: editCat === cat ? t.primary : t.surface2 }]}
                     onPress={() => setEditCat(cat)}
                   >
                     <Text style={{ color: editCat === cat ? '#fff' : t.text, fontSize: font.sm }}>
-                      {ICONS[cat]} {cat}
+                      {catIcon2(cat)} {cat}
                     </Text>
                   </TouchableOpacity>
                 ))}

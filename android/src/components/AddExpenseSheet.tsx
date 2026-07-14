@@ -7,15 +7,11 @@ import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, spacing, font, radius } from '../theme';
-import { CATEGORIES, predict, learn, queueContribution, type PredictResult } from '../classifier';
+import { predict, learn, queueContribution, type PredictResult } from '../classifier';
+import { useCategories, getCategories } from '../categories';
 import { expenses, ai, type AuthUser } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
-
-const ICONS: Record<string, string> = {
-  Продукты: '🛒', Кафе: '🍽', Транспорт: '🚇', Одежда: '👗', Красота: '💄',
-  Медицина: '💊', Развлечения: '🎮', Дети: '👶', Дом: '🏠', Связь: '📱', Прочее: '❓',
-};
 
 function todayStr() {
   const d = new Date();
@@ -32,6 +28,7 @@ interface Props {
 export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpenseSheet({ user, onAdded }, ref) {
   const t = useTheme();
   const premium = usePremium();
+  const { cats, icon: catIcon2 } = useCategories();
   const snapPoints = ['70%', '92%'];
 
   const [description, setDescription] = useState('');
@@ -50,7 +47,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     if (description.length < 3) { setPrediction(null); return; }
     const timer = setTimeout(async () => {
       setPredicting(true);
-      const p = await predict(description);
+      const p = await predict(description, getCategories());
       setPrediction(p);
       if (p.mode === 'auto' && !selectedCat) setSelectedCat(p.category);
       setPredicting(false);
@@ -330,7 +327,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
                   onPress={() => handleCategorySelect(cat)}
                 >
                   <Text style={{ color: selectedCat === cat ? '#fff' : t.text, fontSize: font.sm }}>
-                    {ICONS[cat]} {cat}
+                    {catIcon2(cat)} {cat}
                   </Text>
                 </TouchableOpacity>
               ))
@@ -352,7 +349,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         {/* Category grid */}
         <Text style={[styles.label, { color: t.textMuted }]}>Категория</Text>
         <View style={styles.catGrid}>
-          {CATEGORIES.map(cat => {
+          {cats.map(cat => {
             const active = selectedCat === cat;
             return (
               <TouchableOpacity
@@ -360,7 +357,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
                 style={[styles.catBtn, { backgroundColor: active ? t.primary : t.surface2 }]}
                 onPress={() => handleCategorySelect(cat)}
               >
-                <Text style={{ fontSize: 20 }}>{ICONS[cat]}</Text>
+                <Text style={{ fontSize: 20 }}>{catIcon2(cat)}</Text>
                 <Text style={{ fontSize: font.xs, color: active ? '#fff' : t.text, marginTop: 2 }}>{cat}</Text>
               </TouchableOpacity>
             );

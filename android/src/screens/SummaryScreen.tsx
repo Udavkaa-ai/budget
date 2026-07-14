@@ -8,15 +8,10 @@ import Svg, { Path, Line as SvgLine, Polyline, Circle, Text as SvgText } from 'r
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
-import { CATEGORIES } from '../classifier';
+import { useCategories } from '../categories';
 import { usePremium } from '../premium';
 import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
-
-const ICONS: Record<string, string> = {
-  Продукты: '🛒', Кафе: '🍽', Транспорт: '🚇', Одежда: '👗', Красота: '💄',
-  Медицина: '💊', Развлечения: '🎮', Дети: '👶', Дом: '🏠', Связь: '📱', Прочее: '❓',
-};
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -82,6 +77,7 @@ export default function SummaryScreen() {
   const t = useTheme();
   const premium = usePremium();
   const blocks = useBlocks();
+  const { cats: allCats, icon: catIcon2 } = useCategories();
   const { user } = useAuth();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -167,7 +163,7 @@ export default function SummaryScreen() {
     const budgets = plan?.categoryBudgets ?? {};
     const incomes = plan?.incomes ?? {};
     const ld: Record<string, string> = {};
-    for (const c of CATEGORIES) ld[c] = budgets[c] ? String(budgets[c]) : '';
+    for (const c of allCats) ld[c] = budgets[c] ? String(budgets[c]) : '';
     // Income rows: existing keys + family members from summary + current user
     const names = new Set<string>([
       ...Object.keys(incomes),
@@ -437,7 +433,7 @@ export default function SummaryScreen() {
                       .sort((a, b) => b.amount - a.amount)
                       .map(e => (
                         <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
-                          <Text style={{ width: 26, fontSize: 16 }}>{ICONS[e.category] ?? '❓'}</Text>
+                          <Text style={{ width: 26, fontSize: 16 }}>{catIcon2(e.category)}</Text>
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: t.text }} numberOfLines={1}>{e.description}</Text>
                             <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>{e.user} · {e.category}</Text>
@@ -475,7 +471,7 @@ export default function SummaryScreen() {
                 const inc = incomes[name] ?? 0;
                 const topCats = Object.entries(ud.byCategory ?? {})
                   .sort(([, a], [, b]) => b - a).slice(0, 3)
-                  .map(([c, v]) => `${ICONS[c] ?? ''} ${fmt(v)}`).join(' · ');
+                  .map(([c, v]) => `${catIcon2(c)} ${fmt(v)}`).join(' · ');
                 return (
                   <View key={name} style={styles.userRow}>
                     <View style={{ flex: 1 }}>
@@ -539,7 +535,7 @@ export default function SummaryScreen() {
                 : t.primary;
               return (
                 <TouchableOpacity key={cat} style={styles.catRow} onPress={() => openDrill(cat)}>
-                  <Text style={{ width: 28, fontSize: 18 }}>{ICONS[cat]}</Text>
+                  <Text style={{ width: 28, fontSize: 18 }}>{catIcon2(cat)}</Text>
                   <View style={{ flex: 1 }}>
                     <View style={[styles.barBg, limit > 0 && { height: 14, borderRadius: 7 }]}>
                       <View style={[styles.barFill, { width: `${fillPct * 100}%`, backgroundColor: fillColor }]} />
@@ -600,9 +596,9 @@ export default function SummaryScreen() {
             ))}
 
             <Text style={[styles.groupTitle, { color: t.textMuted, marginTop: spacing.lg }]}>ЛИМИТЫ ПО КАТЕГОРИЯМ, ₽/МЕС</Text>
-            {CATEGORIES.map(cat => (
+            {allCats.map(cat => (
               <View key={cat} style={styles.planRow}>
-                <Text style={{ color: t.text, flex: 1 }}>{ICONS[cat]} {cat}</Text>
+                <Text style={{ color: t.text, flex: 1 }}>{catIcon2(cat)} {cat}</Text>
                 <TextInput
                   style={[styles.planInput, { color: t.text, borderColor: t.border, backgroundColor: t.surface }]}
                   value={limitDraft[cat]}
@@ -625,7 +621,7 @@ export default function SummaryScreen() {
               <Text style={{ color: t.primary }}>← Назад</Text>
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: t.text }]}>
-              {drillCat ? `${ICONS[drillCat] ?? ''} ${drillCat}` : ''}
+              {drillCat ? `${catIcon2(drillCat)} ${drillCat}` : ''}
             </Text>
             <View style={{ width: 56 }} />
           </View>

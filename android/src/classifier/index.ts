@@ -57,7 +57,7 @@ function entropy(catCounts: Array<{ category: string; cnt: number }>): number {
 
 // ─── predict ──────────────────────────────────────────────────────────────────
 
-export async function predict(description: string): Promise<PredictResult> {
+export async function predict(description: string, cats: string[] = CATEGORIES): Promise<PredictResult> {
   const norm = normalize(description);
 
   // Step 1: exact match
@@ -73,7 +73,7 @@ export async function predict(description: string): Promise<PredictResult> {
 
   // Step 2: Naive Bayes
   const tokens = tokenize(description);
-  if (tokens.length === 0) return { mode: 'full', top3: CATEGORIES.slice(0, 3) };
+  if (tokens.length === 0) return { mode: 'full', top3: cats.slice(0, 3) };
 
   // Filter to informative tokens (low entropy)
   const wordInfos = await Promise.all(
@@ -83,20 +83,20 @@ export async function predict(description: string): Promise<PredictResult> {
     ({ cats }) => cats.length > 0 && entropy(cats) < ENTROPY_THRESHOLD,
   );
 
-  if (known.length === 0) return { mode: 'full', top3: CATEGORIES.slice(0, 3) };
+  if (known.length === 0) return { mode: 'full', top3: cats.slice(0, 3) };
 
   // Build priors
   const priorRows = await getAllPriors();
   const totalDocs = priorRows.reduce((s, r) => s + r.cnt, 0) || 1;
   const prior: Record<string, number> = {};
   for (const r of priorRows) prior[r.category] = r.cnt;
-  for (const cat of CATEGORIES) if (!prior[cat]) prior[cat] = 0;
+  for (const cat of cats) if (!prior[cat]) prior[cat] = 0;
 
   const vocab = await vocabSize();
   const scores: Record<string, number> = {};
 
-  for (const cat of CATEGORIES) {
-    let s = Math.log((prior[cat] + ALPHA) / (totalDocs + ALPHA * CATEGORIES.length));
+  for (const cat of cats) {
+    let s = Math.log((prior[cat] + ALPHA) / (totalDocs + ALPHA * cats.length));
     const catTotal = await wordTotalInCategory(cat);
     for (const { w, cats } of known) {
       const n = cats.find(r => r.category === cat)?.cnt ?? 0;
@@ -109,11 +109,11 @@ export async function predict(description: string): Promise<PredictResult> {
   const mx = Math.max(...Object.values(scores));
   const exps: Record<string, number> = {};
   let z = 0;
-  for (const cat of CATEGORIES) { exps[cat] = Math.exp(scores[cat] - mx); z += exps[cat]; }
+  for (const cat of cats) { exps[cat] = Math.exp(scores[cat] - mx); z += exps[cat]; }
   const probs: Record<string, number> = {};
-  for (const cat of CATEGORIES) probs[cat] = exps[cat] / z;
+  for (const cat of cats) probs[cat] = exps[cat] / z;
 
-  const ranked = CATEGORIES.slice().sort((a, b) => probs[b] - probs[a]);
+  const ranked = cats.slice().sort((a, b) => probs[b] - probs[a]);
   const [best, ...rest] = ranked;
   const conf = probs[best];
 
@@ -139,6 +139,8 @@ export async function learn(description: string, category: string) {
 const pendingContributions: Array<{ w: string; c: string }> = [];
 
 export function queueContribution(description: string, category: string) {
+  // Пользовательские категории в краудсловарь не отправляем
+  if (!CATEGORIES.includes(category)) return;
   const tokens = tokenize(description);
   for (const w of tokens) {
     pendingContributions.push({ w, c: category });
