@@ -7,19 +7,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { useTheme, spacing, font, radius } from '../theme';
+import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
 import { invites, csv, pushSettings, settings as settingsApi, categoriesApi, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
 import { useCategories, refreshCategories } from '../categories';
+import { Field, PrimaryButton } from '../components/UI';
 
 export default function SettingsScreen() {
   const t = useTheme();
   const { user, logout, onLoginSuccess } = useAuth();
   const premium = usePremium();
   const blocks = useBlocks();
+  const themeMode = useThemeMode();
   const { custom } = useCategories();
   const [newCatName, setNewCatName] = useState('');
   const [newCatEmoji, setNewCatEmoji] = useState('');
@@ -235,29 +237,21 @@ export default function SettingsScreen() {
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Семья</Text>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: 4 }}>Название семьи</Text>
-          <TextInput
-            style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+          <Field
+            style={{ marginBottom: spacing.md }}
             value={familyName}
             onChangeText={setFamilyName}
             placeholder="Например: Ивановы"
-            placeholderTextColor={t.textMuted}
           />
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: 4 }}>Плановые расходы на месяц, ₽</Text>
-          <TextInput
-            style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+          <Field
+            style={{ marginBottom: spacing.md }}
             value={plannedMonthly}
             onChangeText={setPlannedMonthly}
             placeholder="300000"
-            placeholderTextColor={t.textMuted}
             keyboardType="decimal-pad"
           />
-          <TouchableOpacity
-            style={[styles.upgradeBtn, { backgroundColor: t.primary, marginBottom: spacing.sm }]}
-            onPress={saveFamilySettings}
-            disabled={busy}
-          >
-            <Text style={{ color: '#fff', fontWeight: '700' }}>Сохранить</Text>
-          </TouchableOpacity>
+          <PrimaryButton title="Сохранить" onPress={saveFamilySettings} loading={busy} style={{ marginBottom: spacing.sm }} />
           <TouchableOpacity style={styles.row} onPress={inviteFamily} disabled={busy}>
             <Text style={{ color: t.text }}>👨‍👩‍👧 Пригласить в семью</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
@@ -315,6 +309,28 @@ export default function SettingsScreen() {
               trackColor={{ true: t.primary }}
             />
           </View>
+        </Card>
+
+        {/* Theme */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Оформление</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            {([['light', '☀️ Светлая'], ['dark', '🌙 Тёмная'], ['auto', '🔄 Авто']] as const).map(([m, label]) => (
+              <TouchableOpacity
+                key={m}
+                style={{
+                  flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center',
+                  backgroundColor: themeMode === m ? t.primary : t.surface2,
+                }}
+                onPress={() => setThemeMode(m)}
+              >
+                <Text style={{ color: themeMode === m ? '#fff' : t.text, fontSize: font.sm }}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
+            «Авто» следует системной теме телефона
+          </Text>
         </Card>
 
         {/* Custom categories */}

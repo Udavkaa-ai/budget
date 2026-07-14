@@ -8,6 +8,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme, spacing, font, radius } from '../theme';
 import { setServerUrl, setToken, api } from '../api/client';
+import { Field, PrimaryButton } from '../components/UI';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -76,39 +77,20 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
 
           {step === 'url' ? (
             <>
-              <TextInput
-                style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface }]}
+              <Field
+                style={{ marginBottom: spacing.md }}
                 value={serverUrl}
                 onChangeText={setServerUrlState}
                 placeholder="https://your-app.railway.app"
-                placeholderTextColor={t.textMuted}
                 autoCapitalize="none"
                 keyboardType="url"
                 autoCorrect={false}
               />
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: t.primary }]}
-                onPress={handleServerUrl}
-                disabled={loading}
-              >
-                {loading
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.btnText}>Продолжить →</Text>
-                }
-              </TouchableOpacity>
+              <PrimaryButton title="Продолжить →" onPress={handleServerUrl} loading={loading} />
             </>
           ) : (
             <>
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: t.primary }]}
-                onPress={handleGoogleLogin}
-                disabled={loading}
-              >
-                {loading
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.btnText}>🔐 Войти через Google</Text>
-                }
-              </TouchableOpacity>
+              <PrimaryButton title="🔐 Войти через Google" onPress={handleGoogleLogin} loading={loading} />
               <TouchableOpacity onPress={() => setStep('url')} style={{ marginTop: spacing.lg }}>
                 <Text style={{ color: t.textMuted, textAlign: 'center' }}>← Изменить сервер</Text>
               </TouchableOpacity>

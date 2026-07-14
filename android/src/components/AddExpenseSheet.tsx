@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme, spacing, font, radius } from '../theme';
 import { predict, learn, queueContribution, type PredictResult } from '../classifier';
 import { useCategories, getCategories } from '../categories';
+import { PrimaryButton } from '../components/UI';
 import { expenses, ai, type AuthUser } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
@@ -365,16 +366,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         </View>
 
         {/* Submit */}
-        <TouchableOpacity
-          style={[styles.submitBtn, { backgroundColor: t.primary, opacity: submitting ? 0.6 : 1 }]}
-          onPress={submit}
-          disabled={submitting}
-        >
-          {submitting
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.submitText}>Добавить</Text>
-          }
-        </TouchableOpacity>
+        <PrimaryButton title="Добавить" onPress={submit} loading={submitting} style={{ marginTop: spacing.sm }} />
         </>
         )}
       </BottomSheetScrollView>

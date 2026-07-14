@@ -8,6 +8,7 @@ import { useColorScheme, ActivityIndicator, View, AppState } from 'react-native'
 import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
 import { refreshCategories } from './src/categories';
+import { initThemeMode, useEffectiveScheme } from './src/theme';
 
 import { AppNavigator } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -29,6 +30,7 @@ Notifications.setNotificationHandler({
 initClassifier().catch(console.error);
 initPremium().catch(console.error);
 initBlocks().catch(console.error);
+initThemeMode().catch(console.error);
 
 // Download crowd dictionary from server and merge into local DB
 async function syncCrowdDict() {
@@ -105,7 +107,7 @@ function Root() {
 }
 
 export default function App() {
-  const scheme = useColorScheme();
+  const scheme = useEffectiveScheme();
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
