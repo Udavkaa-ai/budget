@@ -285,6 +285,19 @@
         </div>
 
         <div class="settings-section">
+          <div class="settings-title">Мои категории</div>
+          <div style="color:var(--text-muted);font-size:13px;margin-bottom:8px">
+            Общие для всей семьи. При удалении расходы переносятся в «Прочее».
+          </div>
+          <div id="custom-cats-list"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="custom-cat-emoji" type="text" placeholder="🎣" maxlength="4" class="form-control" style="width:64px;text-align:center" />
+            <input id="custom-cat-name" type="text" placeholder="Название (напр. Рыбалка)" maxlength="24" class="form-control" style="flex:1" />
+            <button id="btn-custom-cat-add" class="btn btn-primary" style="padding:0 18px">+</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <div class="settings-title">Данные</div>
           <a id="btn-export" class="btn btn-outline btn-full" href="/api/export" download>📥 Экспорт CSV</a>
           <div style="margin-top:8px">
