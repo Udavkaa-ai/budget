@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, Alert, Modal, TextInput, ScrollView,
+  RefreshControl, Alert, Modal, TextInput, ScrollView, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handler';
@@ -35,6 +35,13 @@ export default function HomeScreen() {
   const [date, setDate] = useState(todayStr());
   const [list, setList] = useState<Expense[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const slide = useRef(new Animated.Value(0)).current;
+
+  // Эффект пролистывания: контент вылетает со стороны свайпа с оттяжкой
+  const animateSwitch = (dir: 1 | -1) => {
+    slide.setValue(dir * 90);
+    Animated.spring(slide, { toValue: 0, useNativeDriver: true, friction: 7, tension: 60 }).start();
+  };
 
   const load = useCallback(async (d = date) => {
     try {
@@ -57,6 +64,7 @@ export default function HomeScreen() {
     const dt = new Date(y, m - 1, d - 1);
     const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
     setDate(nd);
+    animateSwitch(-1);
     load(nd);
   };
 
@@ -67,6 +75,7 @@ export default function HomeScreen() {
     if (dt > today) return;
     const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
     setDate(nd);
+    animateSwitch(1);
     load(nd);
   };
 
@@ -150,6 +159,7 @@ export default function HomeScreen() {
 
         {/* Expense list */}
         <GestureDetector gesture={dayFling}>
+        <Animated.View style={{ flex: 1, transform: [{ translateX: slide }] }}>
         <FlatList
           data={list}
           keyExtractor={e => e.id}
@@ -173,10 +183,11 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         />
+        </Animated.View>
         </GestureDetector>
 
         {/* Edit expense modal */}
-        <Modal visible={!!editing} animationType="slide" transparent>
+        <Modal visible={!!editing} animationType="slide" transparent onRequestClose={() => setEditing(null)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalBox, { backgroundColor: t.surface }]}>
               <Text style={[styles.modalTitle, { color: t.text }]}>Редактировать</Text>

@@ -124,7 +124,7 @@ export default function GoalsScreen() {
         )}
 
       {/* Add goal modal */}
-      <Modal visible={addVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={addVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAddVisible(false)}>
         <SafeAreaView style={[styles.modal, { backgroundColor: t.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
             <TouchableOpacity onPress={() => setAddVisible(false)}>
@@ -147,7 +147,7 @@ export default function GoalsScreen() {
       </Modal>
 
       {/* Contribute modal */}
-      <Modal visible={!!contribGoal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={!!contribGoal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setContribGoal(null)}>
         <SafeAreaView style={[styles.modal, { backgroundColor: t.bg }]}>
           <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
             <TouchableOpacity onPress={() => setContribGoal(null)}>

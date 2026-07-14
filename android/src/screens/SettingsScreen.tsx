@@ -331,7 +331,7 @@ export default function SettingsScreen() {
       </ScrollView>
 
       {/* Join family modal */}
-      <Modal visible={joinVisible} animationType="slide" transparent>
+      <Modal visible={joinVisible} animationType="slide" transparent onRequestClose={() => setJoinVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: t.surface }]}>
             <Text style={[styles.modalTitle, { color: t.text }]}>Код приглашения</Text>
@@ -360,7 +360,7 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* Import CSV modal */}
-      <Modal visible={importVisible} animationType="slide" transparent>
+      <Modal visible={importVisible} animationType="slide" transparent onRequestClose={() => setImportVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: t.surface }]}>
             <Text style={[styles.modalTitle, { color: t.text }]}>Импорт CSV</Text>

@@ -4,6 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Modal, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path, Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
@@ -24,6 +25,57 @@ function fmt(n: number) {
 function getMonthName(m: number, y: number) {
   const names = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   return `${names[m - 1]} ${y}`;
+}
+
+// Точка на дуге спидометра: 0% слева (180°), максимум справа (0°)
+function polar(cx: number, cy: number, r: number, pct: number, maxPct = 160) {
+  const a = Math.PI * (1 - Math.min(pct, maxPct) / maxPct);
+  return { x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) };
+}
+
+function arcPath(cx: number, cy: number, r: number, fromPct: number, toPct: number, maxPct = 160) {
+  const s = polar(cx, cy, r, fromPct, maxPct);
+  const e = polar(cx, cy, r, toPct, maxPct);
+  const large = (toPct - fromPct) / maxPct > 0.5 ? 1 : 0;
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+}
+
+// Простой markdown: ## заголовки, * пункты, **жирный**
+function MdText({ text, color, accent }: { text: string; color: string; accent: string }) {
+  const renderInline = (line: string, base: object) => {
+    const parts = line.split('**');
+    return (
+      <Text style={base}>
+        {parts.map((p, i) => i % 2 === 1
+          ? <Text key={i} style={{ fontWeight: '800' }}>{p}</Text>
+          : p)}
+      </Text>
+    );
+  };
+  return (
+    <>
+      {text.split('\n').map((raw, i) => {
+        const line = raw.trimEnd();
+        if (!line.trim()) return <View key={i} style={{ height: 8 }} />;
+        if (line.startsWith('## ')) {
+          return <Text key={i} style={{ color: accent, fontSize: font.lg, fontWeight: '800', marginTop: 10, marginBottom: 4 }}>{line.slice(3)}</Text>;
+        }
+        if (line.startsWith('# ')) {
+          return <Text key={i} style={{ color: accent, fontSize: font.xl, fontWeight: '800', marginTop: 10, marginBottom: 4 }}>{line.slice(2)}</Text>;
+        }
+        if (/^\s*[*•-]\s+/.test(line)) {
+          const item = line.replace(/^\s*[*•-]\s+/, '');
+          return (
+            <View key={i} style={{ flexDirection: 'row', marginBottom: 2 }}>
+              <Text style={{ color: accent, marginRight: 6 }}>•</Text>
+              <View style={{ flex: 1 }}>{renderInline(item, { color, fontSize: font.md, lineHeight: 22 })}</View>
+            </View>
+          );
+        }
+        return <View key={i}>{renderInline(line, { color, fontSize: font.md, lineHeight: 24 })}</View>;
+      })}
+    </>
+  );
 }
 
 export default function SummaryScreen() {
@@ -58,6 +110,7 @@ export default function SummaryScreen() {
   const [plannedMonthly, setPlannedMonthly] = useState(0);
   const [drillCat, setDrillCat] = useState<string | null>(null);
   const [drillList, setDrillList] = useState<Expense[]>([]);
+  const [drillUser, setDrillUser] = useState<string | null>(null);
   const [drillDay, setDrillDay] = useState<number | null>(null);
 
   const load = useCallback(async (m = month, y = year) => {
@@ -83,6 +136,7 @@ export default function SummaryScreen() {
 
   const openDrill = async (cat: string) => {
     setDrillCat(cat);
+    setDrillUser(null);
     setDrillList([]);
     try {
       const list = await expApi.byCategory(cat, month, year);
@@ -243,29 +297,38 @@ export default function SummaryScreen() {
             )}
           </Card>
 
-          {/* Баблометр */}
+          {/* Баблометр — спидометр как в вебе */}
           {blocks.gauge && gaugePct !== null && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Баблометр</Text>
-              <View style={styles.gaugeRow}>
+              <View style={{ alignItems: 'center' }}>
+                <Svg width="100%" height={150} viewBox="0 0 260 150">
+                  {/* Зоны: зелёная до 70%, жёлтая 70-100%, красная 100-160% */}
+                  <Path d={arcPath(130, 130, 100, 0, 70)} stroke="#22c55e" strokeWidth={16} fill="none" strokeLinecap="round" />
+                  <Path d={arcPath(130, 130, 100, 70, 100)} stroke="#f59e0b" strokeWidth={16} fill="none" />
+                  <Path d={arcPath(130, 130, 100, 100, 160)} stroke="#ef4444" strokeWidth={16} fill="none" strokeLinecap="round" />
+                  {/* Стрелка */}
+                  {(() => {
+                    const tip = polar(130, 130, 82, gaugePct);
+                    return <SvgLine x1={130} y1={130} x2={tip.x} y2={tip.y} stroke={t.text} strokeWidth={3.5} strokeLinecap="round" />;
+                  })()}
+                  <Circle cx={130} cy={130} r={7} fill={t.text} />
+                  {/* Подписи шкалы */}
+                  <SvgText x={20} y={148} fontSize={11} fill={t.textMuted}>0%</SvgText>
+                  <SvgText x={62} y={40} fontSize={11} fill={t.textMuted}>70%</SvgText>
+                  <SvgText x={160} y={35} fontSize={11} fill={t.textMuted}>100%</SvgText>
+                  <SvgText x={218} y={148} fontSize={11} fill={t.textMuted}>160%</SvgText>
+                </Svg>
                 <Text style={{
-                  fontSize: 40, fontWeight: '800',
+                  fontSize: 36, fontWeight: '800', marginTop: -58,
                   color: gaugePct <= 70 ? '#22c55e' : gaugePct <= 100 ? '#f59e0b' : '#ef4444',
                 }}>
                   {gaugePct}%
                 </Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>ФАКТ / ПЛАН</Text>
-                  <Text style={{ color: t.text, fontSize: font.sm, marginTop: 2 }}>
-                    {gaugePct > 100 ? 'Перерасход 🔴' : gaugePct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
-                  </Text>
-                </View>
-              </View>
-              <View style={[styles.gaugeBg, { backgroundColor: t.surface2 }]}>
-                <View style={[styles.gaugeFill, {
-                  width: `${Math.min(gaugePct, 160) / 1.6}%`,
-                  backgroundColor: gaugePct <= 70 ? '#22c55e' : gaugePct <= 100 ? '#f59e0b' : '#ef4444',
-                }]} />
+                <Text style={{ color: t.textMuted, fontSize: font.xs }}>ФАКТ / ПЛАН</Text>
+                <Text style={{ color: t.text, fontSize: font.sm, marginTop: 2 }}>
+                  {gaugePct > 100 ? 'Перерасход 🔴' : gaugePct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
+                </Text>
               </View>
               <View style={styles.gaugeStats}>
                 <Text style={{ color: t.textMuted, fontSize: font.xs }}>Потрачено{'\n'}{fmt(data?.total ?? 0)}</Text>
@@ -275,34 +338,48 @@ export default function SummaryScreen() {
             </Card>
           )}
 
-          {/* Скорость трат: % факт/план нарастающим итогом по дням */}
-          {blocks.speed && plannedMonthly > 0 && monthExp.length > 0 && (
-            <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
-              <View style={styles.speedChart}>
-                {Array.from({ length: daysPassed }).map((_, i) => {
-                  const d = i + 1;
-                  let cum = 0;
-                  for (let k = 1; k <= d; k++) cum += dayTotals[k] ?? 0;
-                  const planCum = plannedMonthly * d / daysInMonth;
-                  const pct = planCum > 0 ? cum / planCum * 100 : 0;
-                  const h = Math.min(pct, 200) / 200 * 90 + 4;
-                  const color = pct > 100 ? '#ef4444' : pct > 80 ? '#f59e0b' : '#22c55e';
-                  return (
-                    <View key={d} style={styles.speedCol}>
-                      <View style={[styles.speedBar, { height: h, backgroundColor: color }]} />
-                      {(d === 1 || d % 5 === 0) && (
-                        <Text style={{ fontSize: 8, color: t.textMuted }}>{d}</Text>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
-                🟢 до 80% плана · 🟡 80–100% · 🔴 перерасход (нарастающим итогом)
-              </Text>
-            </Card>
-          )}
+          {/* Скорость трат: линия % факт/план нарастающим итогом, как в вебе */}
+          {blocks.speed && plannedMonthly > 0 && monthExp.length > 0 && (() => {
+            const pts: Array<{ x: number; y: number; pct: number; d: number }> = [];
+            const W = 300, H = 120, MAX = 250;
+            for (let d = 1; d <= daysPassed; d++) {
+              let cum = 0;
+              for (let k = 1; k <= d; k++) cum += dayTotals[k] ?? 0;
+              const planCum = plannedMonthly * d / daysInMonth;
+              const pct = planCum > 0 ? Math.round(cum / planCum * 100) : 0;
+              const x = daysPassed > 1 ? (d - 1) / (daysPassed - 1) * (W - 30) + 15 : W / 2;
+              const y = H - Math.min(pct, MAX) / MAX * (H - 15);
+              pts.push({ x, y, pct, d });
+            }
+            const y100 = H - 100 / MAX * (H - 15);
+            const dotColor = (p: number) => p > 100 ? '#ef4444' : p > 80 ? '#f59e0b' : '#22c55e';
+            return (
+              <Card>
+                <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
+                <Svg width="100%" height={H + 20} viewBox={`0 0 ${W} ${H + 20}`}>
+                  {/* Пунктир 100% плана */}
+                  <SvgLine x1={15} y1={y100} x2={W - 15} y2={y100} stroke="#f0a5b5" strokeWidth={1.5} strokeDasharray="5 4" />
+                  <SvgText x={W - 14} y={y100 - 3} fontSize={9} fill={t.textMuted} textAnchor="end">100%</SvgText>
+                  <Polyline
+                    points={pts.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="none" stroke="#ef4444" strokeWidth={2.5} strokeLinejoin="round"
+                  />
+                  {pts.map(p => (
+                    <Circle key={p.d} cx={p.x} cy={p.y} r={3.5} fill={dotColor(p.pct)} />
+                  ))}
+                  {/* Значения на каждой 3-й точке и последней */}
+                  {pts.filter((p, i) => i === pts.length - 1 || p.d % 3 === 0 || p.d === 1).map(p => (
+                    <SvgText key={`v${p.d}`} x={p.x} y={p.y - 7} fontSize={8.5} fill={t.text} textAnchor="middle" fontWeight="bold">
+                      {p.pct}%
+                    </SvgText>
+                  ))}
+                  {pts.filter(p => p.d === 1 || p.d % 5 === 0).map(p => (
+                    <SvgText key={`d${p.d}`} x={p.x} y={H + 16} fontSize={9} fill={t.textMuted} textAnchor="middle">{p.d}</SvgText>
+                  ))}
+                </Svg>
+              </Card>
+            );
+          })()}
 
           {/* Heatmap по дням */}
           {blocks.heatmap && monthExp.length > 0 && (
@@ -324,9 +401,9 @@ export default function SummaryScreen() {
                       style={[styles.heatCell, { backgroundColor: heatColor(v) }]}
                       onPress={() => v > 0 && setDrillDay(d)}
                     >
-                      <Text style={{ fontSize: font.xs, fontWeight: '700', color: heatText(v) }}>{d}</Text>
+                      <Text numberOfLines={1} style={{ fontSize: font.xs, fontWeight: '700', color: heatText(v) }}>{d}</Text>
                       {v > 0 && (
-                        <Text style={{ fontSize: 8, color: '#1e293b' }}>
+                        <Text numberOfLines={1} style={{ fontSize: 8, color: '#1e293b' }}>
                           {v >= 1000 ? `${Math.round(v / 1000)}к` : Math.round(v)}
                         </Text>
                       )}
@@ -334,30 +411,32 @@ export default function SummaryScreen() {
                   );
                 })}
               </View>
-              {/* Расходы выбранного дня — как в вебе */}
+              {/* Расходы выбранного дня — фиксированная высота, скролл внутри */}
               {drillDay !== null && (
-                <View style={{ marginTop: spacing.md, borderTopWidth: 1, borderTopColor: t.border, paddingTop: spacing.md }}>
+                <View style={{ marginTop: spacing.md, borderTopWidth: 1, borderTopColor: t.border, paddingTop: spacing.md, height: 220 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                    <Text style={{ color: t.text, fontWeight: '700' }}>
+                    <Text style={{ color: t.text, fontWeight: '700' }} numberOfLines={1}>
                       {drillDay} {getMonthName(month, year).toLowerCase()} · {fmt(dayTotals[drillDay] ?? 0)}
                     </Text>
-                    <TouchableOpacity onPress={() => setDrillDay(null)}>
+                    <TouchableOpacity onPress={() => setDrillDay(null)} style={{ paddingHorizontal: 6 }}>
                       <Text style={{ color: t.textMuted }}>✕</Text>
                     </TouchableOpacity>
                   </View>
-                  {monthExp
-                    .filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay)
-                    .sort((a, b) => b.amount - a.amount)
-                    .map(e => (
-                      <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
-                        <Text style={{ width: 26, fontSize: 16 }}>{ICONS[e.category] ?? '❓'}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: t.text }}>{e.description}</Text>
-                          <Text style={{ color: t.textMuted, fontSize: font.xs }}>{e.user} · {e.category}</Text>
+                  <ScrollView nestedScrollEnabled>
+                    {monthExp
+                      .filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay)
+                      .sort((a, b) => b.amount - a.amount)
+                      .map(e => (
+                        <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
+                          <Text style={{ width: 26, fontSize: 16 }}>{ICONS[e.category] ?? '❓'}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: t.text }} numberOfLines={1}>{e.description}</Text>
+                            <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>{e.user} · {e.category}</Text>
+                          </View>
+                          <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
                         </View>
-                        <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
-                      </View>
-                    ))}
+                      ))}
+                  </ScrollView>
                 </View>
               )}
             </Card>
@@ -434,6 +513,14 @@ export default function SummaryScreen() {
                         <View style={[styles.limitLine, { left: `${limitPct * 100}%` }]} />
                       )}
                     </View>
+                    {compare && prevData && (
+                      <View style={[styles.barBg, { height: 4, marginTop: 2, opacity: 0.55 }]}>
+                        <View style={[styles.barFill, {
+                          width: `${Math.min((prevData.byCategory[cat] ?? 0) / maxCat, 1) * 100}%`,
+                          backgroundColor: '#9ca3af',
+                        }]} />
+                      </View>
+                    )}
                     <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
                       {cat}{limit > 0 ? ` · лимит ${fmt(limit)}` : ''}
                       {compare && prevData ? (() => {
@@ -453,7 +540,7 @@ export default function SummaryScreen() {
       )}
 
       {/* Budget plan editor */}
-      <Modal visible={planVisible} animationType="slide">
+      <Modal visible={planVisible} animationType="slide" onRequestClose={() => setPlanVisible(false)}>
         <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
           <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
             <TouchableOpacity onPress={() => setPlanVisible(false)}>
@@ -499,7 +586,7 @@ export default function SummaryScreen() {
       </Modal>
 
       {/* Category drill-down */}
-      <Modal visible={!!drillCat} animationType="slide">
+      <Modal visible={!!drillCat} animationType="slide" onRequestClose={() => setDrillCat(null)}>
         <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
           <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
             <TouchableOpacity onPress={() => setDrillCat(null)}>
@@ -510,11 +597,34 @@ export default function SummaryScreen() {
             </Text>
             <View style={{ width: 56 }} />
           </View>
+          {/* Фильтр по пользователю */}
+          {(() => {
+            const users = [...new Set(drillList.map(e => e.user))];
+            return users.length > 1 ? (
+              <View style={{ flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+                <TouchableOpacity
+                  style={[styles.userChip, { backgroundColor: drillUser === null ? t.primary : t.surface }]}
+                  onPress={() => setDrillUser(null)}
+                >
+                  <Text style={{ color: drillUser === null ? '#fff' : t.text, fontSize: font.sm }}>Все</Text>
+                </TouchableOpacity>
+                {users.map(u => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.userChip, { backgroundColor: drillUser === u ? t.primary : t.surface }]}
+                    onPress={() => setDrillUser(x => x === u ? null : u)}
+                  >
+                    <Text style={{ color: drillUser === u ? '#fff' : t.text, fontSize: font.sm }}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null;
+          })()}
           <ScrollView contentContainerStyle={{ padding: spacing.md }}>
             {drillList.length === 0 && (
               <ActivityIndicator style={{ marginTop: 40 }} color={t.primary} />
             )}
-            {drillList.map(e => (
+            {drillList.filter(e => !drillUser || e.user === drillUser).map(e => (
               <Card key={e.id}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
@@ -532,7 +642,7 @@ export default function SummaryScreen() {
       </Modal>
 
       {/* AI report modal */}
-      <Modal visible={aiVisible} animationType="slide">
+      <Modal visible={aiVisible} animationType="slide" onRequestClose={() => setAiVisible(false)}>
         <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
           <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
             <TouchableOpacity onPress={() => setAiVisible(false)}>
@@ -548,7 +658,7 @@ export default function SummaryScreen() {
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-              <Text style={{ color: t.text, fontSize: font.md, lineHeight: 24 }}>{aiReport}</Text>
+              <MdText text={aiReport} color={t.text} accent={t.primary} />
             </ScrollView>
           )}
         </SafeAreaView>
@@ -588,5 +698,6 @@ const styles = StyleSheet.create({
   speedChart:   { flexDirection: 'row', alignItems: 'flex-end', height: 110, gap: 2 },
   speedCol:     { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   speedBar:     { width: '100%', borderRadius: 3, minHeight: 4 },
+  userChip:     { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   compareChip:  { alignSelf: 'flex-start', borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.md },
 });

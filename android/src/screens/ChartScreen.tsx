@@ -201,8 +201,9 @@ export default function ChartScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              {selDay !== null && (
-                <Text style={{ color: t.text, fontSize: font.sm, marginTop: spacing.sm }}>
+              <View style={{ height: 44, justifyContent: 'center', marginTop: spacing.sm }}>
+              {selDay !== null ? (
+                <Text numberOfLines={2} style={{ color: t.text, fontSize: font.sm }}>
                   День {selDay + 1}: {userNames
                     .map(u => ({ u, v: unified!.userExpenses[u][selDay] || 0 }))
                     .filter(x => x.v > 0)
@@ -210,7 +211,10 @@ export default function ChartScreen() {
                     .join(' · ') || 'нет расходов'}
                   {' · итого '}{fmt(dayTotals[selDay] ?? 0)}
                 </Text>
+              ) : (
+                <Text style={{ color: t.textMuted, fontSize: font.xs }}>Нажмите на столбик — детали дня</Text>
               )}
+              </View>
             </Card>
           )}
 
