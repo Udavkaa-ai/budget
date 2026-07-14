@@ -70,7 +70,7 @@ export default function GoalsScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <View style={[styles.header, { borderBottomColor: t.border }]}>
-        <Text style={[styles.title, { color: t.text }]}>🎯 Цели</Text>
+        <Text style={[styles.title, { color: t.primary }]}>Цели</Text>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: t.primary }]}
           onPress={() => setAddVisible(true)}
@@ -171,7 +171,7 @@ export default function GoalsScreen() {
 const styles = StyleSheet.create({
   safe:        { flex: 1 },
   header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-  title:       { fontSize: font.xl, fontWeight: '700' },
+  title:       { fontSize: font.xxl, fontWeight: '800' },
   addBtn:      { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   empty:       { textAlign: 'center', marginTop: 60, fontSize: font.md },
   goalHeader:  { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },

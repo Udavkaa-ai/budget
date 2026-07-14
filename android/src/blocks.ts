@@ -6,6 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 export const BLOCKS = [
   { id: 'gauge',    label: '💵 Баблометр',            hint: 'Факт/план на экране «Месяц»' },
   { id: 'heatmap',  label: '📅 Расходы по дням',       hint: 'Календарь-тепловая карта' },
+  { id: 'speed',    label: '📈 Скорость трат',         hint: '% факт/план по дням месяца' },
   { id: 'byUser',   label: '👥 По участникам',         hint: 'Кто сколько потратил, % дохода' },
   { id: 'ai',       label: '🤖 Кнопка ИИ-анализа',     hint: 'На экране «Месяц» (Премиум)' },
   { id: 'chartTab', label: '📈 Вкладка «График»',      hint: 'Расходы за 6 месяцев' },
@@ -17,7 +18,7 @@ export type BlockState = Record<BlockId, boolean>;
 
 const KEY = 'analytics_blocks';
 const DEFAULTS: BlockState = {
-  gauge: true, heatmap: true, byUser: true, ai: true, chartTab: true, goalsTab: true,
+  gauge: true, heatmap: true, speed: true, byUser: true, ai: true, chartTab: true, goalsTab: true,
 };
 
 let _state: BlockState = { ...DEFAULTS };

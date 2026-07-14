@@ -179,7 +179,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <View style={[styles.header, { borderBottomColor: t.border }]}>
-        <Text style={[styles.title, { color: t.text }]}>Настройки</Text>
+        <Text style={[styles.title, { color: t.primary }]}>Настройки</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.md }}>
 
@@ -393,7 +393,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe:         { flex: 1 },
   header:       { padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-  title:        { fontSize: font.xl, fontWeight: '700' },
+  title:        { fontSize: font.xxl, fontWeight: '800' },
   sectionTitle: { fontSize: font.sm, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   profileName:  { fontSize: font.xl, fontWeight: '700', marginBottom: 2 },
   row:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md },

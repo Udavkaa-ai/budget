@@ -1,38 +1,42 @@
 import { useColorScheme } from 'react-native';
 
+// Палитра повторяет веб-версию: лавандовый фон, фиолетовый примари,
+// розовый акцент, мягкие белые карточки
 export const palette = {
-  blue:    '#3b82f6',
-  blueDim: '#1d4ed8',
-  green:   '#22c55e',
-  red:     '#ef4444',
-  yellow:  '#f59e0b',
-  purple:  '#a855f7',
+  purple:   '#6c5ce7',
+  purpleHi: '#8b7cf7',
+  pink:     '#ec4899',
+  green:    '#22c55e',
+  red:      '#ef4444',
+  yellow:   '#f59e0b',
 };
 
 const light = {
-  bg:          '#f8fafc',
+  bg:          '#eef0fb',
   surface:     '#ffffff',
-  surface2:    '#f1f5f9',
-  border:      '#e2e8f0',
-  text:        '#0f172a',
-  textMuted:   '#64748b',
-  primary:     palette.blue,
+  surface2:    '#f1effc',
+  border:      '#e4e1f5',
+  text:        '#1e1b3a',
+  textMuted:   '#8b87a8',
+  primary:     palette.purple,
   primaryText: '#ffffff',
+  accent:      palette.pink,
   tabBar:      '#ffffff',
   danger:      palette.red,
   success:     palette.green,
 };
 
 const dark = {
-  bg:          '#0f172a',
-  surface:     '#1e293b',
-  surface2:    '#334155',
-  border:      '#334155',
-  text:        '#f8fafc',
-  textMuted:   '#94a3b8',
-  primary:     palette.blue,
+  bg:          '#17152b',
+  surface:     '#232043',
+  surface2:    '#2f2b56',
+  border:      '#37325e',
+  text:        '#f3f1ff',
+  textMuted:   '#9d97c4',
+  primary:     palette.purpleHi,
   primaryText: '#ffffff',
-  tabBar:      '#1e293b',
+  accent:      '#f472b6',
+  tabBar:      '#232043',
   danger:      palette.red,
   success:     palette.green,
 };
@@ -49,7 +53,7 @@ export const spacing = {
 };
 
 export const radius = {
-  sm: 8, md: 12, lg: 16, xl: 24,
+  sm: 10, md: 14, lg: 20, xl: 28,
 };
 
 export const font = {

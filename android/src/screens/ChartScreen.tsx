@@ -49,7 +49,7 @@ export default function ChartScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <View style={[styles.header, { borderBottomColor: t.border }]}>
-        <Text style={[styles.title, { color: t.text }]}>График расходов</Text>
+        <Text style={[styles.title, { color: t.primary }]}>График расходов</Text>
       </View>
 
       {loading ? (
@@ -112,7 +112,7 @@ export default function ChartScreen() {
 const styles = StyleSheet.create({
   safe:         { flex: 1 },
   header:       { padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-  title:        { fontSize: font.xl, fontWeight: '700' },
+  title:        { fontSize: font.xxl, fontWeight: '800' },
   sectionTitle: { fontSize: font.md, fontWeight: '700', marginBottom: spacing.lg },
   chart:        { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, height: 200 },
   barCol:       { flex: 1, alignItems: 'center' },

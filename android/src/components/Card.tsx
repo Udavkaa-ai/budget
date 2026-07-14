@@ -10,17 +10,21 @@ interface Props {
 export function Card({ children, style }: Props) {
   const t = useTheme();
   return (
-    <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }, style]}>
+    <View style={[styles.card, { backgroundColor: t.surface, shadowColor: t.primary }, style]}>
       {children}
     </View>
   );
 }
 
+// Мягкие карточки без рамок с лёгкой фиолетовой тенью — как в веб-версии
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.md,
+    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
 });

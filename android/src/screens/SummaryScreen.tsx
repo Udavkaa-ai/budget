@@ -251,6 +251,35 @@ export default function SummaryScreen() {
             </Card>
           )}
 
+          {/* Скорость трат: % факт/план нарастающим итогом по дням */}
+          {blocks.speed && plannedMonthly > 0 && monthExp.length > 0 && (
+            <Card>
+              <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
+              <View style={styles.speedChart}>
+                {Array.from({ length: daysPassed }).map((_, i) => {
+                  const d = i + 1;
+                  let cum = 0;
+                  for (let k = 1; k <= d; k++) cum += dayTotals[k] ?? 0;
+                  const planCum = plannedMonthly * d / daysInMonth;
+                  const pct = planCum > 0 ? cum / planCum * 100 : 0;
+                  const h = Math.min(pct, 200) / 200 * 90 + 4;
+                  const color = pct > 100 ? '#ef4444' : pct > 80 ? '#f59e0b' : '#22c55e';
+                  return (
+                    <View key={d} style={styles.speedCol}>
+                      <View style={[styles.speedBar, { height: h, backgroundColor: color }]} />
+                      {(d === 1 || d % 5 === 0) && (
+                        <Text style={{ fontSize: 8, color: t.textMuted }}>{d}</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
+                🟢 до 80% плана · 🟡 80–100% · 🔴 перерасход (нарастающим итогом)
+              </Text>
+            </Card>
+          )}
+
           {/* Heatmap по дням */}
           {blocks.heatmap && monthExp.length > 0 && (
             <Card>
@@ -496,4 +525,7 @@ const styles = StyleSheet.create({
   heatGrid:     { flexDirection: 'row', flexWrap: 'wrap' },
   heatHead:     { width: `${100 / 7}%`, textAlign: 'center', fontSize: font.xs, marginBottom: 4 },
   heatCell:     { width: `${100 / 7 - 1}%`, aspectRatio: 1, margin: '0.5%', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  speedChart:   { flexDirection: 'row', alignItems: 'flex-end', height: 110, gap: 2 },
+  speedCol:     { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
+  speedBar:     { width: '100%', borderRadius: 3, minHeight: 4 },
 });
