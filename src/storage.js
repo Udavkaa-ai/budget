@@ -550,6 +550,101 @@ export async function saveBudgetPlan(plan, familyId) {
   debouncedSave();
 }
 
+// ─── E2E-синхронизация: сервер хранит только шифроблобы ─────────────────────
+
+// Записи: { id, family, blob, ver, seq, deleted }
+// seq — серверный монотонный курсор для инкрементального pull
+function syncState() {
+  if (!data.sync) data.sync = { records: [], docs: {}, seq: {} };
+  return data.sync;
+}
+
+function nextSeq(familyId) {
+  const st = syncState();
+  st.seq[familyId] = (st.seq[familyId] || 0) + 1;
+  return st.seq[familyId];
+}
+
+export function upsertSyncRecords(familyId, records) {
+  const f = fam(familyId);
+  const st = syncState();
+  const results = [];
+  for (const r of records) {
+    if (!r?.id || typeof r.blob !== 'string' && !r.deleted) continue;
+    const existing = st.records.find(x => x.id === r.id && x.family === f);
+    const ver = Number(r.ver) || 1;
+    if (existing) {
+      if (ver <= (existing.ver || 0)) { results.push({ id: r.id, skipped: true }); continue; }
+      existing.blob = r.deleted ? '' : r.blob;
+      existing.ver = ver;
+      existing.deleted = !!r.deleted;
+      existing.seq = nextSeq(f);
+    } else {
+      st.records.push({
+        id: r.id, family: f, blob: r.deleted ? '' : r.blob,
+        ver, deleted: !!r.deleted, seq: nextSeq(f),
+      });
+    }
+    results.push({ id: r.id, ok: true });
+  }
+  debouncedSave();
+  return { results, cursor: syncState().seq[f] || 0 };
+}
+
+export function getSyncRecordsSince(familyId, since = 0) {
+  const f = fam(familyId);
+  const st = syncState();
+  const records = st.records
+    .filter(r => r.family === f && r.seq > since)
+    .sort((a, b) => a.seq - b.seq)
+    .map(({ id, blob, ver, seq, deleted }) => ({ id, blob, ver, seq, deleted: !!deleted }));
+  return { records, cursor: st.seq[f] || 0 };
+}
+
+// Документы (план, цели, кэшфлоу и т.п.): один шифроблоб на ключ
+export function putSyncDoc(familyId, key, blob, ver) {
+  const f = fam(familyId);
+  const st = syncState();
+  if (!st.docs[f]) st.docs[f] = {};
+  const existing = st.docs[f][key];
+  const v = Number(ver) || 1;
+  if (existing && v <= (existing.ver || 0)) return { ok: false, conflict: true, ver: existing.ver };
+  st.docs[f][key] = { blob, ver: v, updatedAt: new Date().toISOString() };
+  debouncedSave();
+  return { ok: true, ver: v };
+}
+
+export function getSyncDoc(familyId, key) {
+  const f = fam(familyId);
+  return syncState().docs[f]?.[key] || null;
+}
+
+export function listSyncDocs(familyId) {
+  const f = fam(familyId);
+  return syncState().docs[f] || {};
+}
+
+// Включение E2E: сохраняем отпечаток ключа и вычищаем плейнтекст семьи
+export function getFamilyE2E(familyId) {
+  const fs = familySettings(familyId);
+  return { enabled: !!fs.e2e, keyFingerprint: fs.e2eKeyFingerprint || null };
+}
+
+export async function enableFamilyE2E(familyId, keyFingerprint) {
+  const f = fam(familyId);
+  const fs = familySettings(familyId);
+  fs.e2e = true;
+  fs.e2eKeyFingerprint = keyFingerprint || null;
+  const before = data.expenses.length;
+  data.expenses = data.expenses.filter(e => fam(e.family) !== f);
+  const wiped = before - data.expenses.length;
+  if (data.goals) data.goals = data.goals.filter(g => fam(g.family) !== f);
+  delete fs.budgetPlan;
+  delete fs.cashflow;
+  debouncedSave();
+  return { wiped };
+}
+
 // ─── Пользовательские категории семьи ────────────────────────────────────────
 
 export function getCustomCategories(familyId) {

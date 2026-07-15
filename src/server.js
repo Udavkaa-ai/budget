@@ -61,6 +61,13 @@ import {
   getCustomCategories,
   addCustomCategory,
   removeCustomCategory,
+  upsertSyncRecords,
+  getSyncRecordsSince,
+  putSyncDoc,
+  getSyncDoc,
+  listSyncDocs,
+  getFamilyE2E,
+  enableFamilyE2E,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -511,6 +518,96 @@ app.get('/api/settings', authMiddleware, (req, res) => {
     customCategories: custom,
     plannedMonthly: budget.plannedMonthly,
   });
+});
+
+// ─── E2E-синхронизация (zero-knowledge) ──────────────────────────────────────
+// Сервер хранит и раздаёт только шифроблобы; содержимое видят только клиенты
+// с ключом семьи.
+
+app.get('/api/family/e2e', authMiddleware, (req, res) => {
+  res.json(getFamilyE2E(req.user.family));
+});
+
+// Включается ПОСЛЕ того как клиент залил зашифрованные данные:
+// сохраняем отпечаток ключа и вычищаем плейнтекст семьи
+app.post('/api/family/enable-e2e', authMiddleware, async (req, res) => {
+  const { keyFingerprint } = req.body || {};
+  if (!keyFingerprint) return res.status(400).json({ error: 'Нет отпечатка ключа' });
+  const cur = getFamilyE2E(req.user.family);
+  if (cur.enabled) return res.status(400).json({ error: 'E2E уже включён' });
+  const { wiped } = await enableFamilyE2E(req.user.family, keyFingerprint);
+  io.to(req.user.family).emit('e2e:enabled');
+  res.json({ ok: true, wiped });
+});
+
+app.post('/api/sync/records', authMiddleware, (req, res) => {
+  const { records } = req.body || {};
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ error: 'Нет записей' });
+  }
+  if (records.length > 500) return res.status(413).json({ error: 'Слишком много записей за раз' });
+  for (const r of records) {
+    if (r.blob && r.blob.length > 4096) return res.status(413).json({ error: 'Слишком большой блоб' });
+  }
+  const out = upsertSyncRecords(req.user.family, records);
+  io.to(req.user.family).emit('sync:changed', { by: req.user.name });
+
+  // Пуш без деталей — сервер не знает сумм
+  const subs = getFamilyPushSubscriptions(req.user.family, req.user.name)
+    .filter(sub => getUserPushEnabled(sub.userId, req.user.family));
+  if (subs.length) {
+    sendPushToSubscriptions(subs, {
+      title: '💸 Обновление бюджета',
+      body: `${req.user.name} внёс изменения`,
+      url: '/',
+    }).catch(() => {});
+  }
+  res.json(out);
+});
+
+app.get('/api/sync/records', authMiddleware, (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  res.json(getSyncRecordsSince(req.user.family, since));
+});
+
+app.put('/api/sync/doc/:key', authMiddleware, (req, res) => {
+  const { blob, ver } = req.body || {};
+  if (typeof blob !== 'string' || blob.length > 65536) {
+    return res.status(400).json({ error: 'Некорректный блоб' });
+  }
+  const out = putSyncDoc(req.user.family, req.params.key, blob, ver);
+  if (!out.ok) return res.status(409).json(out);
+  io.to(req.user.family).emit('sync:changed', { by: req.user.name, doc: req.params.key });
+  res.json(out);
+});
+
+app.get('/api/sync/doc/:key', authMiddleware, (req, res) => {
+  const doc = getSyncDoc(req.user.family, req.params.key);
+  if (!doc) return res.status(404).json({ error: 'Нет документа' });
+  res.json(doc);
+});
+
+app.get('/api/sync/docs', authMiddleware, (req, res) => {
+  res.json(listSyncDocs(req.user.family));
+});
+
+// ИИ-анализ для E2E-семей: клиент сам считает агрегаты и присылает
+// только обезличенный текст сводки — сырые данные не покидают устройство
+app.post('/api/analyze-raw', authMiddleware, async (req, res) => {
+  if (!config.openRouterKey) {
+    return res.status(503).json({ error: 'AI-анализ недоступен (нет API ключа)' });
+  }
+  const { reportText } = req.body || {};
+  if (!reportText?.trim() || reportText.length > 20000) {
+    return res.status(400).json({ error: 'Некорректная сводка' });
+  }
+  try {
+    const result = await analyzeFinances(reportText);
+    if (result.error) return res.status(502).json({ error: result.error });
+    res.json({ report: result.report, model: result.model });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Пользовательские категории ──────────────────────────────────────────────
