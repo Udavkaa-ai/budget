@@ -58,6 +58,23 @@ import {
   getUserPushEnabled,
   setUserPushEnabled,
   getAllFamilyExpenses,
+  getCustomCategories,
+  addCustomCategory,
+  removeCustomCategory,
+  upsertSyncRecords,
+  getSyncRecordsSince,
+  putSyncDoc,
+  getSyncDoc,
+  listSyncDocs,
+  getFamilyE2E,
+  enableFamilyE2E,
+  linkGoogleToUser,
+  getFamilySnapshot,
+  restoreFamilySnapshot,
+  addBackup,
+  listBackups,
+  getBackup,
+  deleteBackup,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -65,6 +82,9 @@ import { generateChartImage } from './chart.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+// За Railway-прокси req.protocol иначе будет 'http', а Google OAuth требует
+// точного совпадения https-адреса в redirect_uri
+app.set('trust proxy', true);
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' },
@@ -163,6 +183,32 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (err) {
     console.error('Google auth error:', err);
     res.status(500).json({ error: 'Ошибка авторизации' });
+  }
+});
+
+// Привязка Google к текущему (легаси) аккаунту: войти по паролю,
+// затем передать сюда Google credential — история остаётся на старом имени
+app.post('/api/auth/link-google', authMiddleware, async (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) return res.status(400).json({ error: 'Нет токена Google' });
+  if (!config.googleClientId) return res.status(503).json({ error: 'Google OAuth не настроен' });
+  try {
+    const verifyRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+    );
+    const payload = await verifyRes.json();
+    if (!verifyRes.ok || payload.error) return res.status(401).json({ error: 'Неверный токен Google' });
+    if (payload.aud !== config.googleClientId) return res.status(401).json({ error: 'Неверный client_id' });
+
+    const result = await linkGoogleToUser(req.user.login, {
+      googleId: payload.sub, email: payload.email,
+    });
+    if (!result.ok) return res.status(404).json(result);
+    io.to(req.user.family).emit('expense:updated', { by: req.user.name });
+    res.json(result);
+  } catch (err) {
+    console.error('link-google error:', err);
+    res.status(500).json({ error: 'Ошибка привязки' });
   }
 });
 
@@ -267,7 +313,11 @@ app.post('/api/invite/join', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ name: req.user.name, login: req.user.login, isAdmin: req.user.isAdmin || false });
+  const u = getUserByLogin(req.user.login);
+  res.json({
+    name: req.user.name, login: req.user.login, isAdmin: req.user.isAdmin || false,
+    googleLinked: !!u?.googleId,
+  });
 });
 
 // Список пользователей в той же семье (для фильтров и партнёрских меток)
@@ -498,11 +548,169 @@ app.post('/api/import', authMiddleware, async (req, res) => {
 
 app.get('/api/settings', authMiddleware, (req, res) => {
   const budget = getFamilyBudgetSettings(req.user.family);
+  const custom = getCustomCategories(req.user.family);
   res.json({
     ...getSettings(req.user.family),
-    categories: CATEGORIES,
+    categories: [...CATEGORIES, ...custom.map(c => c.name)],
+    customCategories: custom,
     plannedMonthly: budget.plannedMonthly,
   });
+});
+
+// ─── Шифрованные бэкапы (по желанию пользователя) ────────────────────────────
+// Клиент скачивает снапшот, шифрует своим ключом и кладёт блоб обратно;
+// сервер содержимое бэкапа прочитать не может.
+
+app.get('/api/snapshot', authMiddleware, (req, res) => {
+  res.json(getFamilySnapshot(req.user.family));
+});
+
+app.post('/api/restore', authMiddleware, async (req, res) => {
+  const snap = req.body || {};
+  if (!Array.isArray(snap.expenses)) return res.status(400).json({ error: 'Некорректный снапшот' });
+  const result = await restoreFamilySnapshot(req.user.family, snap);
+  io.to(req.user.family).emit('expense:added', { expenses: [], by: req.user.name });
+  res.json({ ok: true, ...result });
+});
+
+app.post('/api/backup', authMiddleware, (req, res) => {
+  const { blob } = req.body || {};
+  if (typeof blob !== 'string' || blob.length < 16) {
+    return res.status(400).json({ error: 'Нет данных бэкапа' });
+  }
+  if (blob.length > 4_000_000) return res.status(413).json({ error: 'Бэкап слишком большой' });
+  res.json({ ok: true, backup: addBackup(req.user.family, blob) });
+});
+
+app.get('/api/backup', authMiddleware, (req, res) => {
+  res.json(listBackups(req.user.family));
+});
+
+app.get('/api/backup/:id', authMiddleware, (req, res) => {
+  const b = getBackup(req.user.family, req.params.id);
+  if (!b) return res.status(404).json({ error: 'Бэкап не найден' });
+  res.json({ id: b.id, createdAt: b.createdAt, blob: b.blob });
+});
+
+app.delete('/api/backup/:id', authMiddleware, (req, res) => {
+  if (!deleteBackup(req.user.family, req.params.id)) {
+    return res.status(404).json({ error: 'Бэкап не найден' });
+  }
+  res.json({ ok: true });
+});
+
+// ─── E2E-синхронизация (zero-knowledge) ──────────────────────────────────────
+// Сервер хранит и раздаёт только шифроблобы; содержимое видят только клиенты
+// с ключом семьи.
+
+app.get('/api/family/e2e', authMiddleware, (req, res) => {
+  res.json(getFamilyE2E(req.user.family));
+});
+
+// Включается ПОСЛЕ того как клиент залил зашифрованные данные:
+// сохраняем отпечаток ключа и вычищаем плейнтекст семьи
+app.post('/api/family/enable-e2e', authMiddleware, async (req, res) => {
+  const { keyFingerprint } = req.body || {};
+  if (!keyFingerprint) return res.status(400).json({ error: 'Нет отпечатка ключа' });
+  const cur = getFamilyE2E(req.user.family);
+  if (cur.enabled) return res.status(400).json({ error: 'E2E уже включён' });
+  const { wiped } = await enableFamilyE2E(req.user.family, keyFingerprint);
+  io.to(req.user.family).emit('e2e:enabled');
+  res.json({ ok: true, wiped });
+});
+
+app.post('/api/sync/records', authMiddleware, (req, res) => {
+  const { records } = req.body || {};
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ error: 'Нет записей' });
+  }
+  if (records.length > 500) return res.status(413).json({ error: 'Слишком много записей за раз' });
+  for (const r of records) {
+    if (r.blob && r.blob.length > 4096) return res.status(413).json({ error: 'Слишком большой блоб' });
+  }
+  const out = upsertSyncRecords(req.user.family, records);
+  io.to(req.user.family).emit('sync:changed', { by: req.user.name });
+
+  // Пуш без деталей — сервер не знает сумм
+  const subs = getFamilyPushSubscriptions(req.user.family, req.user.name)
+    .filter(sub => getUserPushEnabled(sub.userId, req.user.family));
+  if (subs.length) {
+    sendPushToSubscriptions(subs, {
+      title: '💸 Обновление бюджета',
+      body: `${req.user.name} внёс изменения`,
+      url: '/',
+    }).catch(() => {});
+  }
+  res.json(out);
+});
+
+app.get('/api/sync/records', authMiddleware, (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  res.json(getSyncRecordsSince(req.user.family, since));
+});
+
+app.put('/api/sync/doc/:key', authMiddleware, (req, res) => {
+  const { blob, ver } = req.body || {};
+  if (typeof blob !== 'string' || blob.length > 65536) {
+    return res.status(400).json({ error: 'Некорректный блоб' });
+  }
+  const out = putSyncDoc(req.user.family, req.params.key, blob, ver);
+  if (!out.ok) return res.status(409).json(out);
+  io.to(req.user.family).emit('sync:changed', { by: req.user.name, doc: req.params.key });
+  res.json(out);
+});
+
+app.get('/api/sync/doc/:key', authMiddleware, (req, res) => {
+  const doc = getSyncDoc(req.user.family, req.params.key);
+  if (!doc) return res.status(404).json({ error: 'Нет документа' });
+  res.json(doc);
+});
+
+app.get('/api/sync/docs', authMiddleware, (req, res) => {
+  res.json(listSyncDocs(req.user.family));
+});
+
+// ИИ-анализ для E2E-семей: клиент сам считает агрегаты и присылает
+// только обезличенный текст сводки — сырые данные не покидают устройство
+app.post('/api/analyze-raw', authMiddleware, async (req, res) => {
+  if (!config.openRouterKey) {
+    return res.status(503).json({ error: 'AI-анализ недоступен (нет API ключа)' });
+  }
+  const { reportText } = req.body || {};
+  if (!reportText?.trim() || reportText.length > 20000) {
+    return res.status(400).json({ error: 'Некорректная сводка' });
+  }
+  try {
+    const result = await analyzeFinances(reportText);
+    if (result.error) return res.status(502).json({ error: result.error });
+    res.json({ report: result.report, model: result.model });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Пользовательские категории ──────────────────────────────────────────────
+
+app.post('/api/categories', authMiddleware, async (req, res) => {
+  const { name, emoji } = req.body || {};
+  const n = (name || '').trim();
+  if (!n) return res.status(400).json({ error: 'Укажите название' });
+  if (n.length > 24) return res.status(400).json({ error: 'Слишком длинное название' });
+  if (CATEGORIES.includes(n)) return res.status(400).json({ error: 'Такая категория уже есть' });
+  const cat = await addCustomCategory(req.user.family, { name: n, emoji: (emoji || '').trim() || '🏷️' });
+  if (!cat) return res.status(400).json({ error: 'Такая категория уже есть' });
+  io.to(req.user.family).emit('settings:updated', { key: 'categories' });
+  res.json({ ok: true, category: cat });
+});
+
+app.delete('/api/categories/:name', authMiddleware, async (req, res) => {
+  const name = decodeURIComponent(req.params.name);
+  if (CATEGORIES.includes(name)) return res.status(400).json({ error: 'Базовую категорию нельзя удалить' });
+  const result = await removeCustomCategory(req.user.family, name);
+  if (!result.removed) return res.status(404).json({ error: 'Категория не найдена' });
+  io.to(req.user.family).emit('settings:updated', { key: 'categories' });
+  if (result.moved > 0) io.to(req.user.family).emit('expense:updated', { by: req.user.name });
+  res.json({ ok: true, moved: result.moved });
 });
 
 app.put('/api/settings', authMiddleware, async (req, res) => {
@@ -1027,7 +1235,7 @@ app.post('/api/parse', authMiddleware, async (req, res) => {
   }
 
   try {
-    const result = await parseExpenses(text);
+    const result = await parseExpenses(text, getCustomCategories(req.user.family).map(c => c.name));
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1046,7 +1254,7 @@ app.post('/api/parse-image', authMiddleware, async (req, res) => {
   }
 
   try {
-    const result = await parseImageExpenses(base64, mimeType || 'image/jpeg');
+    const result = await parseImageExpenses(base64, mimeType || 'image/jpeg', getCustomCategories(req.user.family).map(c => c.name));
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

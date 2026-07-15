@@ -550,6 +550,247 @@ export async function saveBudgetPlan(plan, familyId) {
   debouncedSave();
 }
 
+// ─── Снапшот семьи и шифрованные бэкапы ──────────────────────────────────────
+
+// Полный снимок данных семьи — клиент шифрует его своим ключом
+export function getFamilySnapshot(familyId) {
+  const f = fam(familyId);
+  const fs = familySettings(familyId);
+  return {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    expenses: data.expenses.filter(e => fam(e.family) === f),
+    goals: (data.goals || []).filter(g => fam(g.family) === f),
+    budgetPlan: fs.budgetPlan || {},
+    cashflow: fs.cashflow || {},
+    customCategories: fs.customCategories || [],
+  };
+}
+
+// Полное восстановление семьи из снапшота (заменяет текущие данные)
+export async function restoreFamilySnapshot(familyId, snap) {
+  const f = fam(familyId);
+  const fs = familySettings(familyId);
+  data.expenses = data.expenses.filter(e => fam(e.family) !== f);
+  for (const e of snap.expenses || []) {
+    data.expenses.push({ ...e, id: e.id || generateId(), family: f });
+  }
+  if (!data.goals) data.goals = [];
+  data.goals = data.goals.filter(g => fam(g.family) !== f);
+  for (const g of snap.goals || []) {
+    data.goals.push({ ...g, id: g.id || generateId(), family: f });
+  }
+  if (snap.budgetPlan) fs.budgetPlan = snap.budgetPlan;
+  if (snap.cashflow) fs.cashflow = snap.cashflow;
+  if (snap.customCategories) fs.customCategories = snap.customCategories;
+  debouncedSave();
+  return { expenses: (snap.expenses || []).length, goals: (snap.goals || []).length };
+}
+
+// Шифрованные бэкапы: сервер хранит непрозрачные блобы, максимум 10 на семью
+export function addBackup(familyId, blob) {
+  const f = fam(familyId);
+  if (!data.backups) data.backups = [];
+  const backup = {
+    id: generateId(),
+    family: f,
+    blob,
+    size: blob.length,
+    createdAt: new Date().toISOString(),
+  };
+  data.backups.push(backup);
+  const mine = data.backups.filter(b => b.family === f)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  while (mine.length > 10) {
+    const oldest = mine.shift();
+    data.backups = data.backups.filter(b => b.id !== oldest.id);
+  }
+  debouncedSave();
+  return { id: backup.id, createdAt: backup.createdAt, size: backup.size };
+}
+
+export function listBackups(familyId) {
+  const f = fam(familyId);
+  return (data.backups || [])
+    .filter(b => b.family === f)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(({ id, createdAt, size }) => ({ id, createdAt, size }));
+}
+
+export function getBackup(familyId, id) {
+  const f = fam(familyId);
+  return (data.backups || []).find(b => b.family === f && b.id === id) || null;
+}
+
+export function deleteBackup(familyId, id) {
+  const f = fam(familyId);
+  const before = (data.backups || []).length;
+  data.backups = (data.backups || []).filter(b => !(b.family === f && b.id === id));
+  debouncedSave();
+  return data.backups.length < before;
+}
+
+// ─── Привязка Google к существующему аккаунту ────────────────────────────────
+
+// Вешает googleId на пользователя login; если googleId уже занят
+// автосозданным дубликатом — переносит его расходы на целевого юзера
+// (имя и семья) и удаляет дубликат.
+export async function linkGoogleToUser(login, { googleId, email }) {
+  const me = (data.users || []).find(u => u.login === login);
+  if (!me) return { ok: false, error: 'Пользователь не найден' };
+
+  const dup = getUserByGoogleId(googleId);
+  let moved = 0;
+  if (dup && dup.login !== me.login) {
+    for (const e of data.expenses) {
+      if (fam(e.family) === fam(dup.family) && e.user === dup.name) {
+        e.user = me.name;
+        e.family = fam(me.family);
+        moved++;
+      }
+    }
+    // взносы в цели дубликата — переименовываем
+    for (const g of data.goals || []) {
+      for (const c of g.contributions || []) {
+        if (c.user === dup.name) c.user = me.name;
+      }
+    }
+    data.users = data.users.filter(u => u.login !== dup.login);
+  }
+
+  me.googleId = googleId;
+  if (email) me.email = email;
+  debouncedSave();
+  return { ok: true, moved, mergedDuplicate: !!(dup && dup.login !== me.login) };
+}
+
+// ─── E2E-синхронизация: сервер хранит только шифроблобы ─────────────────────
+
+// Записи: { id, family, blob, ver, seq, deleted }
+// seq — серверный монотонный курсор для инкрементального pull
+function syncState() {
+  if (!data.sync) data.sync = { records: [], docs: {}, seq: {} };
+  return data.sync;
+}
+
+function nextSeq(familyId) {
+  const st = syncState();
+  st.seq[familyId] = (st.seq[familyId] || 0) + 1;
+  return st.seq[familyId];
+}
+
+export function upsertSyncRecords(familyId, records) {
+  const f = fam(familyId);
+  const st = syncState();
+  const results = [];
+  for (const r of records) {
+    if (!r?.id || typeof r.blob !== 'string' && !r.deleted) continue;
+    const existing = st.records.find(x => x.id === r.id && x.family === f);
+    const ver = Number(r.ver) || 1;
+    if (existing) {
+      if (ver <= (existing.ver || 0)) { results.push({ id: r.id, skipped: true }); continue; }
+      existing.blob = r.deleted ? '' : r.blob;
+      existing.ver = ver;
+      existing.deleted = !!r.deleted;
+      existing.seq = nextSeq(f);
+    } else {
+      st.records.push({
+        id: r.id, family: f, blob: r.deleted ? '' : r.blob,
+        ver, deleted: !!r.deleted, seq: nextSeq(f),
+      });
+    }
+    results.push({ id: r.id, ok: true });
+  }
+  debouncedSave();
+  return { results, cursor: syncState().seq[f] || 0 };
+}
+
+export function getSyncRecordsSince(familyId, since = 0) {
+  const f = fam(familyId);
+  const st = syncState();
+  const records = st.records
+    .filter(r => r.family === f && r.seq > since)
+    .sort((a, b) => a.seq - b.seq)
+    .map(({ id, blob, ver, seq, deleted }) => ({ id, blob, ver, seq, deleted: !!deleted }));
+  return { records, cursor: st.seq[f] || 0 };
+}
+
+// Документы (план, цели, кэшфлоу и т.п.): один шифроблоб на ключ
+export function putSyncDoc(familyId, key, blob, ver) {
+  const f = fam(familyId);
+  const st = syncState();
+  if (!st.docs[f]) st.docs[f] = {};
+  const existing = st.docs[f][key];
+  const v = Number(ver) || 1;
+  if (existing && v <= (existing.ver || 0)) return { ok: false, conflict: true, ver: existing.ver };
+  st.docs[f][key] = { blob, ver: v, updatedAt: new Date().toISOString() };
+  debouncedSave();
+  return { ok: true, ver: v };
+}
+
+export function getSyncDoc(familyId, key) {
+  const f = fam(familyId);
+  return syncState().docs[f]?.[key] || null;
+}
+
+export function listSyncDocs(familyId) {
+  const f = fam(familyId);
+  return syncState().docs[f] || {};
+}
+
+// Включение E2E: сохраняем отпечаток ключа и вычищаем плейнтекст семьи
+export function getFamilyE2E(familyId) {
+  const fs = familySettings(familyId);
+  return { enabled: !!fs.e2e, keyFingerprint: fs.e2eKeyFingerprint || null };
+}
+
+export async function enableFamilyE2E(familyId, keyFingerprint) {
+  const f = fam(familyId);
+  const fs = familySettings(familyId);
+  fs.e2e = true;
+  fs.e2eKeyFingerprint = keyFingerprint || null;
+  const before = data.expenses.length;
+  data.expenses = data.expenses.filter(e => fam(e.family) !== f);
+  const wiped = before - data.expenses.length;
+  if (data.goals) data.goals = data.goals.filter(g => fam(g.family) !== f);
+  delete fs.budgetPlan;
+  delete fs.cashflow;
+  debouncedSave();
+  return { wiped };
+}
+
+// ─── Пользовательские категории семьи ────────────────────────────────────────
+
+export function getCustomCategories(familyId) {
+  return familySettings(familyId).customCategories || [];
+}
+
+export async function addCustomCategory(familyId, { name, emoji }) {
+  const fs = familySettings(familyId);
+  if (!fs.customCategories) fs.customCategories = [];
+  if (fs.customCategories.some(c => c.name === name)) return null;
+  const cat = { name, emoji: emoji || '🏷️' };
+  fs.customCategories.push(cat);
+  debouncedSave();
+  return cat;
+}
+
+// Удаление: все расходы категории переезжают в «Прочее»
+export async function removeCustomCategory(familyId, name) {
+  const fs = familySettings(familyId);
+  const f = fam(familyId);
+  if (!fs.customCategories) return { removed: false, moved: 0 };
+  const idx = fs.customCategories.findIndex(c => c.name === name);
+  if (idx === -1) return { removed: false, moved: 0 };
+  fs.customCategories.splice(idx, 1);
+  let moved = 0;
+  for (const e of data.expenses) {
+    if (fam(e.family) === f && e.category === name) { e.category = 'Прочее'; moved++; }
+  }
+  debouncedSave();
+  return { removed: true, moved };
+}
+
 // ─── Cashflow ─────────────────────────────────────────────────────────────────
 
 export function getCashflow(ym, familyId) {

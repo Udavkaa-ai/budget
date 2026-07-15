@@ -255,6 +255,12 @@
     <div id="screen-settings" class="screen">
       <div class="settings-list">
         <div class="settings-section">
+          <div class="settings-title">Аккаунт</div>
+          <div id="account-link-status" class="settings-hint"></div>
+          <div id="google-link-btn"></div>
+        </div>
+
+        <div class="settings-section">
           <div class="settings-title">Семья</div>
           <div class="form-group">
             <label>Название семьи</label>
@@ -282,6 +288,19 @@
             </span>
           </label>
           <div class="settings-hint">Получайте уведомления когда партнёр добавляет расходы, даже если приложение закрыто.</div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">Мои категории</div>
+          <div style="color:var(--text-muted);font-size:13px;margin-bottom:8px">
+            Общие для всей семьи. При удалении расходы переносятся в «Прочее».
+          </div>
+          <div id="custom-cats-list"></div>
+          <div class="custom-cat-add">
+            <input id="custom-cat-emoji" type="text" placeholder="🎣" maxlength="4" class="cat-emoji" />
+            <input id="custom-cat-name" type="text" placeholder="Название (напр. Рыбалка)" maxlength="24" class="cat-name" />
+            <button id="btn-custom-cat-add" class="btn btn-primary">+</button>
+          </div>
         </div>
 
         <div class="settings-section">
