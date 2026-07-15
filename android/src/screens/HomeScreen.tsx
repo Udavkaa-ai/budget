@@ -24,6 +24,16 @@ function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
 }
 
+function dayTitle(date: string): string {
+  const [d, m, y] = date.split('.').map(Number);
+  const dt = new Date(y, m - 1, d); dt.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - dt.getTime()) / 86400000);
+  if (diff === 0) return `Сегодня, ${date}`;
+  if (diff === 1) return `Вчера, ${date}`;
+  return date;
+}
+
 export default function HomeScreen() {
   const t = useTheme();
   const { user } = useAuth();
@@ -34,6 +44,7 @@ export default function HomeScreen() {
   const [list, setList] = useState<Expense[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [userFilter, setUserFilter] = useState<'all' | 'me' | 'partner'>('all');
   const slide = useRef(new Animated.Value(0)).current;
 
   // Эффект пролистывания: контент вылетает со стороны свайпа с оттяжкой
@@ -150,6 +161,28 @@ export default function HomeScreen() {
   };
 
   const total = list.reduce((s, e) => s + e.amount, 0);
+  const myTotal = list.filter(e => e.user === user?.name).reduce((s, e) => s + e.amount, 0);
+  const partnerTotal = total - myTotal;
+  const filtered = userFilter === 'all' ? list
+    : userFilter === 'me' ? list.filter(e => e.user === user?.name)
+    : list.filter(e => e.user !== user?.name);
+  // Группировка по участнику с подытогами — как в вебе
+  type Row = (Expense & { pending?: boolean }) | { hdr: true; id: string; user: string; sum: number };
+  const rows: Row[] = [];
+  if (userFilter === 'all') {
+    const byUser = new Map<string, (Expense & { pending?: boolean })[]>();
+    for (const e of filtered) {
+      const k = e.user || '—';
+      if (!byUser.has(k)) byUser.set(k, []);
+      byUser.get(k)!.push(e as Expense & { pending?: boolean });
+    }
+    for (const [u, items] of byUser) {
+      if (byUser.size > 1) rows.push({ hdr: true, id: `hdr_${u}`, user: u, sum: items.reduce((s2, e) => s2 + e.amount, 0) });
+      rows.push(...items);
+    }
+  } else {
+    rows.push(...(filtered as (Expense & { pending?: boolean })[]));
+  }
   const isToday = date === todayStr();
 
   // Свайп влево/вправо листает дни
@@ -159,39 +192,74 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
-        {/* Header */}
+        {/* Header — как в вебе: титул, дата, фильтр участников, итого */}
+        <View style={styles.titleRow}>
+          <Text style={[styles.screenTitle, { color: t.titleColor }]}>Бюджет</Text>
+          <View style={[styles.userChipTop, { backgroundColor: t.surface }]}>
+            <Text style={{ color: t.primary, fontWeight: '600', fontSize: font.sm }}>{user?.name ?? ''}</Text>
+          </View>
+        </View>
         <View style={[styles.header, { borderBottomColor: t.border }]}>
           <TouchableOpacity onPress={prevDay} style={styles.navBtn}>
             <Text style={{ color: t.primary, fontSize: font.xl }}>‹</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setPickerVisible(true)}>
-            <Text style={[styles.dateText, { color: t.text }]}>{date} ▾</Text>
+            <Text style={[styles.dateText, { color: t.text }]}>{dayTitle(date)} ▾</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={nextDay} style={styles.navBtn} disabled={isToday}>
             <Text style={{ color: isToday ? t.textMuted : t.primary, fontSize: font.xl }}>›</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Total */}
-        {total > 0 && (
-          <View style={[styles.totalRow, { backgroundColor: t.surface, borderBottomColor: t.border }]}>
-            <Text style={[styles.totalLabel, { color: t.textMuted }]}>Итого</Text>
-            <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(total)}</Text>
-          </View>
-        )}
+        {/* Фильтр Все / Я / Партнёр с суммами */}
+        <View style={styles.filterRow}>
+          {([['all', 'Все', total], ['me', 'Я', myTotal], ['partner', 'Партнёр', partnerTotal]] as const).map(([k, lbl, sum]) => (
+            <TouchableOpacity
+              key={k}
+              style={[styles.filterChip, {
+                backgroundColor: userFilter === k ? t.surface : 'transparent',
+                borderColor: userFilter === k ? t.primary : t.border,
+              }]}
+              onPress={() => setUserFilter(k)}
+            >
+              <Text style={{ color: userFilter === k ? t.primary : t.textMuted, fontSize: font.sm, fontWeight: userFilter === k ? '700' : '400' }}>
+                {lbl}{sum > 0 ? ` ${fmt(sum)}` : ''}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Итого за день */}
+        <View style={[styles.totalCard, { backgroundColor: t.surface }]}>
+          <Text style={[styles.totalLabel, { color: t.textMuted }]}>Итого за день</Text>
+          <Text style={[styles.totalAmt, { color: t.primary }]}>
+            {fmt(userFilter === 'all' ? total : userFilter === 'me' ? myTotal : partnerTotal)}
+          </Text>
+        </View>
 
         {/* Expense list */}
         <GestureDetector gesture={dayFling}>
         <Animated.View style={{ flex: 1, transform: [{ translateX: slide }] }}>
         <FlatList
-          data={list}
+          data={rows}
           keyExtractor={e => e.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
           ListEmptyComponent={
             <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
           }
-          renderItem={({ item: e }) => {
+          renderItem={({ item }) => {
+            if ('hdr' in item) {
+              return (
+                <View style={styles.groupHdr}>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 1, fontWeight: '700' }}>
+                    {item.user.toUpperCase()}
+                  </Text>
+                  <Text style={{ color: t.primary, fontWeight: '700', fontSize: font.sm }}>{fmt(item.sum)}</Text>
+                </View>
+              );
+            }
+            const e = item;
             const pending = (e as Expense & { pending?: boolean }).pending;
             return (
             <TouchableOpacity
@@ -293,6 +361,13 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safe:       { flex: 1 },
+  titleRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
+  screenTitle:{ fontSize: font.xxl, fontWeight: '800' },
+  userChipTop:{ borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  filterRow:  { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  filterChip: { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1.5 },
+  totalCard:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', margin: spacing.md, marginBottom: 0, padding: spacing.lg, borderRadius: radius.lg },
+  groupHdr:   { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.md, paddingBottom: spacing.xs },
   header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
   navBtn:     { padding: spacing.md },
   dateText:   { fontSize: font.lg, fontWeight: '600' },

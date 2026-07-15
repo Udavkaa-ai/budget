@@ -37,7 +37,7 @@ export function AppNavigator() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: 'Расходы', tabBarIcon: ({ focused }) => icon('💰', focused) }}
+        options={{ tabBarLabel: 'Бюджет', tabBarIcon: ({ focused }) => icon('💰', focused) }}
       />
       <Tab.Screen
         name="Summary"
@@ -51,6 +51,11 @@ export function AppNavigator() {
           options={{ tabBarLabel: 'График', tabBarIcon: ({ focused }) => icon('📈', focused) }}
         />
       )}
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ tabBarLabel: 'Настройки', tabBarIcon: ({ focused }) => icon('⚙️', focused) }}
+      />
       {blocks.goalsTab && (
         <Tab.Screen
           name="Goals"
@@ -58,11 +63,6 @@ export function AppNavigator() {
           options={{ tabBarLabel: 'Цели', tabBarIcon: ({ focused }) => icon('🎯', focused) }}
         />
       )}
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{ tabBarLabel: 'Настройки', tabBarIcon: ({ focused }) => icon('⚙️', focused) }}
-      />
-    </Tab.Navigator>
+          </Tab.Navigator>
   );
 }
