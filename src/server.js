@@ -69,6 +69,12 @@ import {
   getFamilyE2E,
   enableFamilyE2E,
   linkGoogleToUser,
+  getFamilySnapshot,
+  restoreFamilySnapshot,
+  addBackup,
+  listBackups,
+  getBackup,
+  deleteBackup,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -549,6 +555,48 @@ app.get('/api/settings', authMiddleware, (req, res) => {
     customCategories: custom,
     plannedMonthly: budget.plannedMonthly,
   });
+});
+
+// ─── Шифрованные бэкапы (по желанию пользователя) ────────────────────────────
+// Клиент скачивает снапшот, шифрует своим ключом и кладёт блоб обратно;
+// сервер содержимое бэкапа прочитать не может.
+
+app.get('/api/snapshot', authMiddleware, (req, res) => {
+  res.json(getFamilySnapshot(req.user.family));
+});
+
+app.post('/api/restore', authMiddleware, async (req, res) => {
+  const snap = req.body || {};
+  if (!Array.isArray(snap.expenses)) return res.status(400).json({ error: 'Некорректный снапшот' });
+  const result = await restoreFamilySnapshot(req.user.family, snap);
+  io.to(req.user.family).emit('expense:added', { expenses: [], by: req.user.name });
+  res.json({ ok: true, ...result });
+});
+
+app.post('/api/backup', authMiddleware, (req, res) => {
+  const { blob } = req.body || {};
+  if (typeof blob !== 'string' || blob.length < 16) {
+    return res.status(400).json({ error: 'Нет данных бэкапа' });
+  }
+  if (blob.length > 4_000_000) return res.status(413).json({ error: 'Бэкап слишком большой' });
+  res.json({ ok: true, backup: addBackup(req.user.family, blob) });
+});
+
+app.get('/api/backup', authMiddleware, (req, res) => {
+  res.json(listBackups(req.user.family));
+});
+
+app.get('/api/backup/:id', authMiddleware, (req, res) => {
+  const b = getBackup(req.user.family, req.params.id);
+  if (!b) return res.status(404).json({ error: 'Бэкап не найден' });
+  res.json({ id: b.id, createdAt: b.createdAt, blob: b.blob });
+});
+
+app.delete('/api/backup/:id', authMiddleware, (req, res) => {
+  if (!deleteBackup(req.user.family, req.params.id)) {
+    return res.status(404).json({ error: 'Бэкап не найден' });
+  }
+  res.json({ ok: true });
 });
 
 // ─── E2E-синхронизация (zero-knowledge) ──────────────────────────────────────
