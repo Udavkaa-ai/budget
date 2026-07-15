@@ -550,6 +550,86 @@ export async function saveBudgetPlan(plan, familyId) {
   debouncedSave();
 }
 
+// ─── Снапшот семьи и шифрованные бэкапы ──────────────────────────────────────
+
+// Полный снимок данных семьи — клиент шифрует его своим ключом
+export function getFamilySnapshot(familyId) {
+  const f = fam(familyId);
+  const fs = familySettings(familyId);
+  return {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    expenses: data.expenses.filter(e => fam(e.family) === f),
+    goals: (data.goals || []).filter(g => fam(g.family) === f),
+    budgetPlan: fs.budgetPlan || {},
+    cashflow: fs.cashflow || {},
+    customCategories: fs.customCategories || [],
+  };
+}
+
+// Полное восстановление семьи из снапшота (заменяет текущие данные)
+export async function restoreFamilySnapshot(familyId, snap) {
+  const f = fam(familyId);
+  const fs = familySettings(familyId);
+  data.expenses = data.expenses.filter(e => fam(e.family) !== f);
+  for (const e of snap.expenses || []) {
+    data.expenses.push({ ...e, id: e.id || generateId(), family: f });
+  }
+  if (!data.goals) data.goals = [];
+  data.goals = data.goals.filter(g => fam(g.family) !== f);
+  for (const g of snap.goals || []) {
+    data.goals.push({ ...g, id: g.id || generateId(), family: f });
+  }
+  if (snap.budgetPlan) fs.budgetPlan = snap.budgetPlan;
+  if (snap.cashflow) fs.cashflow = snap.cashflow;
+  if (snap.customCategories) fs.customCategories = snap.customCategories;
+  debouncedSave();
+  return { expenses: (snap.expenses || []).length, goals: (snap.goals || []).length };
+}
+
+// Шифрованные бэкапы: сервер хранит непрозрачные блобы, максимум 10 на семью
+export function addBackup(familyId, blob) {
+  const f = fam(familyId);
+  if (!data.backups) data.backups = [];
+  const backup = {
+    id: generateId(),
+    family: f,
+    blob,
+    size: blob.length,
+    createdAt: new Date().toISOString(),
+  };
+  data.backups.push(backup);
+  const mine = data.backups.filter(b => b.family === f)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  while (mine.length > 10) {
+    const oldest = mine.shift();
+    data.backups = data.backups.filter(b => b.id !== oldest.id);
+  }
+  debouncedSave();
+  return { id: backup.id, createdAt: backup.createdAt, size: backup.size };
+}
+
+export function listBackups(familyId) {
+  const f = fam(familyId);
+  return (data.backups || [])
+    .filter(b => b.family === f)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(({ id, createdAt, size }) => ({ id, createdAt, size }));
+}
+
+export function getBackup(familyId, id) {
+  const f = fam(familyId);
+  return (data.backups || []).find(b => b.family === f && b.id === id) || null;
+}
+
+export function deleteBackup(familyId, id) {
+  const f = fam(familyId);
+  const before = (data.backups || []).length;
+  data.backups = (data.backups || []).filter(b => !(b.family === f && b.id === id));
+  debouncedSave();
+  return data.backups.length < before;
+}
+
 // ─── Привязка Google к существующему аккаунту ────────────────────────────────
 
 // Вешает googleId на пользователя login; если googleId уже занят
