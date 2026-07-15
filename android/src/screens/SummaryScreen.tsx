@@ -4,6 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Modal, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
@@ -356,7 +357,7 @@ export default function SummaryScreen() {
               for (let k = 1; k <= d; k++) cum += dayTotals[k] ?? 0;
               const planCum = plannedMonthly * d / daysInMonth;
               const pct = planCum > 0 ? Math.round(cum / planCum * 100) : 0;
-              const x = daysPassed > 1 ? (d - 1) / (daysPassed - 1) * (W - 30) + 15 : W / 2;
+              const x = daysPassed > 1 ? (d - 1) / (daysPassed - 1) * (W - 44) + 34 : W / 2;
               const y = H - Math.min(pct, MAX) / MAX * (H - 15);
               pts.push({ x, y, pct, d });
             }
@@ -366,9 +367,18 @@ export default function SummaryScreen() {
               <Card>
                 <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
                 <Svg width="100%" height={H + 20} viewBox={`0 0 ${W} ${H + 20}`}>
-                  {/* Пунктир 100% плана */}
-                  <SvgLine x1={15} y1={y100} x2={W - 15} y2={y100} stroke="#f0a5b5" strokeWidth={1.5} strokeDasharray="5 4" />
-                  <SvgText x={W - 14} y={y100 - 3} fontSize={9} fill={t.textMuted} textAnchor="end">100%</SvgText>
+                  {/* Сетка и ось Y в процентах — как в вебе */}
+                  {[0, 50, 100, 150, 200, 250].map(pv => {
+                    const gy = H - Math.min(pv, MAX) / MAX * (H - 15);
+                    return (
+                      <React.Fragment key={pv}>
+                        <SvgLine x1={30} y1={gy} x2={W - 6} y2={gy}
+                          stroke={pv === 100 ? '#f0a5b5' : t.border} strokeWidth={pv === 100 ? 1.5 : 0.6}
+                          strokeDasharray={pv === 100 ? '5 4' : undefined} />
+                        <SvgText x={26} y={gy + 3} fontSize={8.5} fill={t.textMuted} textAnchor="end">{pv}%</SvgText>
+                      </React.Fragment>
+                    );
+                  })}
                   <Polyline
                     points={pts.map(p => `${p.x},${p.y}`).join(' ')}
                     fill="none" stroke="#ef4444" strokeWidth={2.5} strokeLinejoin="round"
@@ -495,7 +505,7 @@ export default function SummaryScreen() {
             </Card>
           )}
 
-          {/* Categories */}
+          {/* Categories — карточки как в вебе */}
           <Card>
             <View style={styles.catHeader}>
               <Text style={[styles.sectionTitle, { color: t.text, marginBottom: 0 }]}>Категории</Text>
@@ -503,9 +513,8 @@ export default function SummaryScreen() {
                 <Text style={{ color: t.primary, fontSize: font.sm, fontWeight: '600' }}>⚙️ Лимиты</Text>
               </TouchableOpacity>
             </View>
-            {/* Фильтр по участнику */}
             {memberNames.length > 1 && (
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' }}>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap' }}>
                 <TouchableOpacity
                   style={[styles.userChip, { backgroundColor: selUser === null ? t.primary : t.surface2 }]}
                   onPress={() => setSelUser(null)}
@@ -524,52 +533,57 @@ export default function SummaryScreen() {
               </View>
             )}
             {selUser && (
-              <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm }}>
+              <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: spacing.sm }}>
                 {selUser}: {fmt(data?.byUser[selUser]?.total ?? 0)} за месяц
               </Text>
             )}
             {cats.length === 0 && (
               <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Нет расходов за месяц</Text>
             )}
-            {cats.map(([cat, amt]) => {
-              const limit = selUser ? 0 : budgets[cat] ?? 0; // лимиты общесемейные
-              const over = limit > 0 && amt > limit;
-              // С лимитом полоска показывает заполнение лимита, без — долю от максимума
-              const fillPct = limit > 0 ? Math.min(amt / limit, 1) : amt / maxCat;
-              const fillColor = limit > 0
-                ? (over ? '#ef4444' : amt / limit > 0.8 ? '#f59e0b' : '#22c55e')
-                : t.primary;
-              return (
-                <TouchableOpacity key={cat} style={styles.catRow} onPress={() => openDrill(cat)}>
-                  <Text style={{ width: 28, fontSize: 18 }}>{catIcon2(cat)}</Text>
-                  <View style={{ flex: 1 }}>
-                    <View style={[styles.barBg, limit > 0 && { height: 14, borderRadius: 7 }]}>
-                      <View style={[styles.barFill, { width: `${fillPct * 100}%`, backgroundColor: fillColor }]} />
-                    </View>
-                    {compare && prevData && (
-                      <View style={[styles.barBg, { height: 4, marginTop: 2, opacity: 0.55 }]}>
-                        <View style={[styles.barFill, {
-                          width: `${Math.min((prevData.byCategory[cat] ?? 0) / maxCat, 1) * 100}%`,
-                          backgroundColor: '#9ca3af',
-                        }]} />
-                      </View>
-                    )}
-                    <Text style={{ color: limit > 0 ? fillColor : t.textMuted, fontSize: font.xs, marginTop: 2 }}>
-                      {cat}
-                      {limit > 0 ? ` · ${Math.round(amt / limit * 100)}% лимита ${fmt(limit)}` : ''}
-                      {compare && prevData ? (() => {
-                        const pv = prevData.byCategory[cat] ?? 0;
-                        if (pv === 0) return ' · новое';
-                        const dpct = Math.round((amt - pv) / pv * 100);
-                        return ` · было ${fmt(pv)} (${dpct > 0 ? '▲' : '▼'}${Math.abs(dpct)}%)`;
-                      })() : ''}
-                    </Text>
-                  </View>
-                  <Text style={[styles.catAmt, { color: over ? '#ef4444' : t.text }]}>{fmt(amt)}</Text>
-                </TouchableOpacity>
-              );
-            })}
           </Card>
+
+          {cats.map(([cat, amt]) => {
+            const limit = selUser ? 0 : budgets[cat] ?? 0;
+            const over = limit > 0 && amt > limit;
+            const fillPct = limit > 0 ? Math.min(amt / limit, 1) : amt / maxCat;
+            const prevAmt = compare && prevData ? prevData.byCategory[cat] ?? 0 : null;
+            return (
+              <TouchableOpacity key={cat} onPress={() => openDrill(cat)} activeOpacity={0.7}>
+                <Card>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                    <Text style={{ fontSize: 32 }}>{catIcon2(cat)}</Text>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '700' }} numberOfLines={1}>{cat}</Text>
+                        <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '800' }}>{fmt(amt)}</Text>
+                      </View>
+                      {/* Градиентный прогрессбар как в вебе */}
+                      <View style={[styles.gradBarBg, { backgroundColor: t.surface2 }]}>
+                        <LinearGradient
+                          colors={over ? ['#FF5C87', '#FF7AB3'] : ['#8A6BFF', '#FF7AB3']}
+                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                          style={[styles.gradBarFill, { width: `${fillPct * 100}%` }]}
+                        />
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                        {limit > 0 ? (
+                          <Text style={{ color: over ? '#FF5C87' : t.success, fontSize: font.sm, fontWeight: '600' }}>
+                            {over ? `перерасход ${fmt(amt - limit)}` : `осталось ${fmt(limit - amt)}`}
+                          </Text>
+                        ) : <Text style={{ color: t.textMuted, fontSize: font.sm }}>без лимита</Text>}
+                        <Text style={{ color: t.textMuted, fontSize: font.sm }}>
+                          {limit > 0 ? `лимит ${fmt(limit)}` : ''}
+                          {prevAmt !== null && prevAmt > 0
+                            ? `${limit > 0 ? ' · ' : ''}было ${fmt(prevAmt)} (${amt >= prevAmt ? '▲' : '▼'}${Math.abs(Math.round((amt - prevAmt) / prevAmt * 100))}%)`
+                            : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </Card>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -741,5 +755,7 @@ const styles = StyleSheet.create({
   speedCol:     { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   speedBar:     { width: '100%', borderRadius: 3, minHeight: 4 },
   userChip:     { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  gradBarBg:    { height: 9, borderRadius: 5, overflow: 'hidden', marginTop: 6 },
+  gradBarFill:  { height: '100%', borderRadius: 5 },
   compareChip:  { alignSelf: 'flex-start', borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.md },
 });

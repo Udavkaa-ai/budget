@@ -14,6 +14,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
 import { useCategories, refreshCategories } from '../categories';
+import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate } from '../applock';
 import { Field, PrimaryButton } from '../components/UI';
 import { loadKey, generateKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
 
@@ -23,6 +24,7 @@ export default function SettingsScreen() {
   const premium = usePremium();
   const blocks = useBlocks();
   const themeMode = useThemeMode();
+  const lockEnabled = useLockEnabled();
   const { custom } = useCategories();
   const [newCatName, setNewCatName] = useState('');
   const [newCatEmoji, setNewCatEmoji] = useState('');
@@ -168,6 +170,19 @@ export default function SettingsScreen() {
       { text: '📋 Поделиться', onPress: () => Share.share({ message: phrase }) },
       { text: 'Закрыть' },
     ]);
+  };
+
+  const toggleLock = async (v: boolean) => {
+    if (v) {
+      if (!(await canUseBiometrics())) {
+        Alert.alert('Недоступно', 'На устройстве не настроен отпечаток/пароль. Настройте блокировку экрана в системе.');
+        return;
+      }
+      if (await authenticate()) await setLockEnabled(true);
+    } else {
+      // подтверждаем личность перед отключением
+      if (await authenticate()) await setLockEnabled(false);
+    }
   };
 
   const handleLogout = () => {
@@ -384,6 +399,20 @@ export default function SettingsScreen() {
               onValueChange={togglePush}
               trackColor={{ true: t.primary }}
             />
+          </View>
+        </Card>
+
+        {/* App lock */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Безопасность</Text>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: t.text }}>🔒 Вход по отпечатку / паролю</Text>
+              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                Запрашивать разблокировку при открытии приложения
+              </Text>
+            </View>
+            <Switch value={lockEnabled} onValueChange={toggleLock} trackColor={{ true: t.primary }} />
           </View>
         </Card>
 

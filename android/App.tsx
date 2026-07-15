@@ -8,7 +8,9 @@ import { useColorScheme, ActivityIndicator, View, AppState } from 'react-native'
 import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
 import { refreshCategories } from './src/categories';
-import { initThemeMode, useEffectiveScheme } from './src/theme';
+import { initThemeMode, useEffectiveScheme, useTheme } from './src/theme';
+import { initAppLock, useLockEnabled, authenticate } from './src/applock';
+import { Text, TouchableOpacity } from 'react-native';
 
 import { AppNavigator } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -31,6 +33,7 @@ initClassifier().catch(console.error);
 initPremium().catch(console.error);
 initBlocks().catch(console.error);
 initThemeMode().catch(console.error);
+initAppLock().catch(console.error);
 
 // Download crowd dictionary from server and merge into local DB
 async function syncCrowdDict() {
@@ -67,6 +70,28 @@ async function registerPushToken() {
 function Root() {
   const { user, loading, onLoginSuccess } = useAuth();
   const scheme = useColorScheme();
+  const t = useTheme();
+  const lockEnabled = useLockEnabled();
+  const [unlocked, setUnlocked] = React.useState(false);
+  const [tried, setTried] = React.useState(false);
+
+  const tryUnlock = React.useCallback(async () => {
+    setTried(true);
+    if (await authenticate()) setUnlocked(true);
+  }, []);
+
+  useEffect(() => {
+    if (lockEnabled && !unlocked && !tried && !loading) tryUnlock();
+  }, [lockEnabled, unlocked, tried, loading, tryUnlock]);
+
+  // Блокируем заново при уходе в фон
+  useEffect(() => {
+    if (!lockEnabled) return;
+    const sub = AppState.addEventListener('change', st => {
+      if (st === 'background') { setUnlocked(false); setTried(false); }
+    });
+    return () => sub.remove();
+  }, [lockEnabled]);
 
   useEffect(() => {
     if (user) {
@@ -91,6 +116,24 @@ function Root() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
+
+  if (lockEnabled && !unlocked && !loading && user) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: t.bg, padding: 32 }}>
+        <Text style={{ fontSize: 56, marginBottom: 12 }}>🔒</Text>
+        <Text style={{ color: t.text, fontSize: 20, fontWeight: '800', marginBottom: 6 }}>Семейный бюджет</Text>
+        <Text style={{ color: t.textMuted, textAlign: 'center', marginBottom: 24 }}>
+          Приложение заблокировано
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: t.primary, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28 }}
+          onPress={tryUnlock}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Разблокировать</Text>
+        </TouchableOpacity>
       </View>
     );
   }
