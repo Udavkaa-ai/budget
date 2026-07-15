@@ -105,6 +105,8 @@ export default function SummaryScreen() {
 
   // Фильтр категорий по участнику
   const [selUser, setSelUser] = useState<string | null>(null);
+  // Фильтр тепловой карты по участнику
+  const [heatUser, setHeatUser] = useState<string | null>(null);
   const [monthPicker, setMonthPicker] = useState(false);
 
   // Heatmap + drill-down + planned budget
@@ -238,16 +240,26 @@ export default function SummaryScreen() {
   const planToDate = plannedMonthly > 0 ? plannedMonthly * daysPassed / daysInMonth : 0;
   const gaugePct = planToDate > 0 ? Math.round((data?.total ?? 0) / planToDate * 100) : null;
 
-  // Heatmap: суммы по дням месяца
+  // Heatmap: суммы по дням месяца (с учётом фильтра по участнику)
   const dayTotals: Record<number, number> = {};
   for (const e of monthExp) {
+    if (heatUser && e.user !== heatUser) continue;
     const d = parseInt(e.date?.split('.')[0] ?? '');
     if (!isNaN(d)) dayTotals[d] = (dayTotals[d] ?? 0) + e.amount;
   }
   const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Пн=0
+  // При фильтре по участнику пороги цветов — его доля: 1/число участников семьи
+  const memberCount = Math.max(memberNames.length, Object.keys(incomes).length, 1);
+  const heatScale = heatUser ? 1 / memberCount : 1;
   const heatColor = (v: number) =>
-    v === 0 ? t.surface2 : v < 2000 ? '#bbf7d0' : v < 5000 ? '#22c55e' : v < 10000 ? '#f59e0b' : v < 20000 ? '#f97316' : '#ef4444';
+    v === 0 ? t.surface2
+    : v < 2000 * heatScale ? '#bbf7d0'
+    : v < 5000 * heatScale ? '#22c55e'
+    : v < 10000 * heatScale ? '#f59e0b'
+    : v < 20000 * heatScale ? '#f97316'
+    : '#ef4444';
   const heatText = (v: number) => (v === 0 ? t.textMuted : '#1e293b');
+  const dailyPlanShare = plannedMonthly > 0 ? Math.round(plannedMonthly / daysInMonth * heatScale) : 0;
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
@@ -404,6 +416,31 @@ export default function SummaryScreen() {
           {blocks.heatmap && monthExp.length > 0 && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>📅 Расходы по дням</Text>
+              {memberNames.length > 1 && (
+                <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' }}>
+                  <TouchableOpacity
+                    style={[styles.userChip, { backgroundColor: heatUser === null ? t.primary : t.surface2 }]}
+                    onPress={() => { setHeatUser(null); setDrillDay(null); }}
+                  >
+                    <Text style={{ color: heatUser === null ? '#fff' : t.text, fontSize: font.sm }}>Все</Text>
+                  </TouchableOpacity>
+                  {memberNames.map(u => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.userChip, { backgroundColor: heatUser === u ? t.primary : t.surface2 }]}
+                      onPress={() => { setHeatUser(x => x === u ? null : u); setDrillDay(null); }}
+                    >
+                      <Text style={{ color: heatUser === u ? '#fff' : t.text, fontSize: font.sm }}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {heatUser && (
+                <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+                  Доля {heatUser}: {Math.round(100 / memberCount)}% семейного плана
+                  {dailyPlanShare > 0 ? ` — ${fmt(dailyPlanShare)} в день` : ''}, пороги цветов снижены соответственно.
+                </Text>
+              )}
               <View style={styles.heatGrid}>
                 {['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС'].map(d => (
                   <Text key={d} style={[styles.heatHead, { color: t.textMuted }]}>{d}</Text>
@@ -435,9 +472,9 @@ export default function SummaryScreen() {
                 <View style={{ marginTop: spacing.md, borderTopWidth: 1, borderTopColor: t.border, paddingTop: spacing.md, height: 220 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
                     <Text style={{ color: t.text, fontWeight: '700', flex: 1 }} numberOfLines={1}>
-                      {drillDay} {getMonthName(month, year).toLowerCase()} · {fmt(dayTotals[drillDay] ?? 0)}
-                      {monthExp.filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay).length > 4
-                        ? `  (${monthExp.filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ↓)` : ''}
+                      {drillDay} {getMonthName(month, year).toLowerCase()}{heatUser ? ` · ${heatUser}` : ''} · {fmt(dayTotals[drillDay] ?? 0)}
+                      {monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length > 4
+                        ? `  (${monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ↓)` : ''}
                     </Text>
                     <TouchableOpacity onPress={() => setDrillDay(null)} style={{ paddingHorizontal: 6 }}>
                       <Text style={{ color: t.textMuted }}>✕</Text>
@@ -445,7 +482,7 @@ export default function SummaryScreen() {
                   </View>
                   <ScrollView nestedScrollEnabled showsVerticalScrollIndicator persistentScrollbar>
                     {monthExp
-                      .filter(e => parseInt(e.date?.split('.')[0] ?? '') === drillDay)
+                      .filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay)
                       .sort((a, b) => b.amount - a.amount)
                       .map(e => (
                         <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
@@ -565,16 +602,19 @@ export default function SummaryScreen() {
                           style={[styles.gradBarFill, { width: `${fillPct * 100}%` }]}
                         />
                       </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: spacing.sm }}>
-                        {limit > 0 ? (
-                          <Text numberOfLines={1} style={{ flexShrink: 1, color: over ? '#FF5C87' : t.success, fontSize: font.sm, fontWeight: '600' }}>
-                            {over ? `перерасход ${fmt(amt - limit)}` : `осталось ${fmt(limit - amt)}`}
-                          </Text>
-                        ) : <Text style={{ color: t.textMuted, fontSize: font.sm }}>без лимита</Text>}
-                        {limit > 0 && (
-                          <Text numberOfLines={1} style={{ color: t.textMuted, fontSize: font.sm }}>лимит {fmt(limit)}</Text>
-                        )}
-                      </View>
+                      {/* При фильтре по участнику строку лимита не показываем — лимиты общие на семью */}
+                      {(limit > 0 || !selUser) && (
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: spacing.sm }}>
+                          {limit > 0 ? (
+                            <Text numberOfLines={1} style={{ flexShrink: 1, color: over ? '#FF5C87' : t.success, fontSize: font.sm, fontWeight: '600' }}>
+                              {over ? `перерасход ${fmt(amt - limit)}` : `осталось ${fmt(limit - amt)}`}
+                            </Text>
+                          ) : <Text style={{ color: t.textMuted, fontSize: font.sm }}>без лимита</Text>}
+                          {limit > 0 && (
+                            <Text numberOfLines={1} style={{ color: t.textMuted, fontSize: font.sm }}>лимит {fmt(limit)}</Text>
+                          )}
+                        </View>
+                      )}
                       {prevAmt !== null && prevAmt > 0 && (
                         <Text numberOfLines={1} style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
                           прошлый месяц: {fmt(prevAmt)} ({amt >= prevAmt ? '▲' : '▼'}{Math.abs(Math.round((amt - prevAmt) / prevAmt * 100))}%)
