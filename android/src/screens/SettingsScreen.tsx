@@ -9,12 +9,13 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
-import { invites, csv, pushSettings, settings as settingsApi, categoriesApi, setToken } from '../api/client';
+import { invites, csv, pushSettings, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
 import { useCategories, refreshCategories } from '../categories';
 import { Field, PrimaryButton } from '../components/UI';
+import { loadKey, generateKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -34,8 +35,14 @@ export default function SettingsScreen() {
 
   const [familyName, setFamilyName] = useState('');
   const [plannedMonthly, setPlannedMonthly] = useState('');
+  const [backupList, setBackupList] = useState<BackupMeta[]>([]);
+
+  const refreshBackups = () => {
+    backupsApi.list().then(setBackupList).catch(() => {});
+  };
 
   useEffect(() => {
+    refreshBackups();
     pushSettings.get().then(r => setPushEnabled(r.enabled)).catch(() => {});
     settingsApi.get().then(s => {
       if (s.familyName) setFamilyName(s.familyName);
@@ -92,6 +99,75 @@ export default function SettingsScreen() {
         },
       ],
     );
+  };
+
+  // Ключ шифрования: создаём при первом бэкапе и просим сохранить фразу
+  const ensureKey = async (): Promise<boolean> => {
+    if (await loadKey()) return true;
+    await generateKey();
+    const phrase = await exportKeyHex();
+    await new Promise<void>(resolve => {
+      Alert.alert(
+        '🔑 Создан ключ шифрования',
+        `Бэкапы шифруются этим ключом ПРЯМО НА ТЕЛЕФОНЕ — сервер их прочитать не может.\n\nСохраните фразу в надёжном месте (без неё бэкап не восстановить!) и передайте жене/мужу:\n\n${phrase}`,
+        [
+          { text: '📋 Поделиться фразой', onPress: async () => { await Share.share({ message: phrase ?? '' }); resolve(); } },
+          { text: 'Я сохранил(а)', onPress: () => resolve() },
+        ],
+      );
+    });
+    return true;
+  };
+
+  const createBackup = async () => {
+    setBusy(true);
+    try {
+      await ensureKey();
+      const snap = await backupsApi.snapshot();
+      const blob = await encryptJson(snap);
+      await backupsApi.create(blob);
+      refreshBackups();
+      Alert.alert('Готово', 'Шифрованная копия сохранена на сервере');
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreBackup = (b: BackupMeta) => {
+    Alert.alert(
+      'Восстановить из копии?',
+      `Данные семьи будут ЗАМЕНЕНЫ состоянием на ${new Date(b.createdAt).toLocaleString('ru')}.`,
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Восстановить', style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const { blob } = await backupsApi.get(b.id);
+              const snap = await decryptJson<Record<string, unknown>>(blob);
+              const r = await backupsApi.restore(snap);
+              Alert.alert('Готово', `Восстановлено расходов: ${r.expenses}`);
+            } catch (e) {
+              Alert.alert('Ошибка', 'Не удалось расшифровать или восстановить: ' + String(e));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const showKey = async () => {
+    const phrase = await exportKeyHex();
+    if (!phrase) { Alert.alert('Ключа ещё нет', 'Он создастся при первом бэкапе'); return; }
+    Alert.alert('🔑 Ключ шифрования', phrase, [
+      { text: '📋 Поделиться', onPress: () => Share.share({ message: phrase }) },
+      { text: 'Закрыть' },
+    ]);
   };
 
   const handleLogout = () => {
@@ -403,6 +479,40 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.row} onPress={chooseImport} disabled={busy}>
             <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+        </Card>
+
+        {/* Encrypted backups */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Резервные копии</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+            Шифруются на телефоне вашим ключом — сервер содержимое не видит. Без ключа копию не восстановить.
+          </Text>
+          <PrimaryButton title="🔐 Создать шифрованную копию" onPress={createBackup} loading={busy} />
+          {backupList.map(b => (
+            <View key={b.id} style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.text, fontSize: font.sm }}>
+                  {new Date(b.createdAt).toLocaleString('ru')}
+                </Text>
+                <Text style={{ color: t.textMuted, fontSize: font.xs }}>{Math.round(b.size / 1024)} КБ</Text>
+              </View>
+              <TouchableOpacity onPress={() => restoreBackup(b)} style={{ padding: 6 }}>
+                <Text style={{ color: t.primary, fontSize: font.sm }}>Восстановить</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => Alert.alert('Удалить копию?', undefined, [
+                  { text: 'Отмена', style: 'cancel' },
+                  { text: 'Удалить', style: 'destructive', onPress: async () => { await backupsApi.remove(b.id); refreshBackups(); } },
+                ])}
+                style={{ padding: 6 }}
+              >
+                <Text style={{ color: t.danger, fontSize: font.sm }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity onPress={showKey} style={{ marginTop: spacing.sm }}>
+            <Text style={{ color: t.textMuted, fontSize: font.sm }}>🔑 Показать ключ шифрования</Text>
           </TouchableOpacity>
         </Card>
 

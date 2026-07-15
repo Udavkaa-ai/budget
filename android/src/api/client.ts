@@ -128,6 +128,19 @@ export const expenses = {
     api.get<Expense[]>(`/api/expenses/category/${encodeURIComponent(cat)}?month=${month}&year=${year}`),
 };
 
+// ─── Шифрованные бэкапы ──────────────────────────────────────────────────────
+
+export interface BackupMeta { id: string; createdAt: string; size: number }
+
+export const backups = {
+  snapshot: () => api.get<Record<string, unknown>>('/api/snapshot'),
+  create:   (blob: string) => api.post<{ ok: boolean; backup: BackupMeta }>('/api/backup', { blob }),
+  list:     () => api.get<BackupMeta[]>('/api/backup'),
+  get:      (id: string) => api.get<{ id: string; createdAt: string; blob: string }>(`/api/backup/${id}`),
+  remove:   (id: string) => api.delete<{ ok: boolean }>(`/api/backup/${id}`),
+  restore:  (snap: Record<string, unknown>) => api.post<{ ok: boolean; expenses: number }>('/api/restore', snap),
+};
+
 // ─── Custom categories ───────────────────────────────────────────────────────
 
 export const categoriesApi = {
