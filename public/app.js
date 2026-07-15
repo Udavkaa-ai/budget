@@ -996,6 +996,7 @@ async function loadHeatMap() {
   heatmapSelectedDay = null;
 
   let dailyTotals = Array(daysInMonth).fill(0);
+  let memberCount = 1;
   try {
     const abort = new AbortController();
     setTimeout(() => abort.abort(), 8000);
@@ -1006,6 +1007,7 @@ async function loadHeatMap() {
     if (res.ok) {
       const data = await res.json();
       const allExpenses = data.userExpenses || {};
+      memberCount = Math.max(Object.keys(allExpenses).length, 1);
       const filteredExpenses = summaryUserFilter
         ? (allExpenses[summaryUserFilter] ? { [summaryUserFilter]: allExpenses[summaryUserFilter] } : {})
         : allExpenses;
@@ -1017,9 +1019,10 @@ async function loadHeatMap() {
     }
   } catch { /* show zeros */ }
 
-  const scale = summaryUserFilter ? 0.5 : 1;
+  // Доля участника: 1/N от порогов семьи (двое — 50%, трое — 33%)
+  const scale = summaryUserFilter ? 1 / memberCount : 1;
   const thresholds = [2000, 5000, 10000, 20000].map(v => v * scale);
-  const tLabel = v => v >= 1000 ? (v % 1000 === 0 ? `${v/1000}к` : `${v/1000}к`) : String(v);
+  const tLabel = v => v >= 1000 ? `${Math.round(v / 100) / 10}к` : String(Math.round(v));
   const legend = document.querySelector('.heatmap-legend');
   if (legend) legend.innerHTML = [
     `<span class="hm-dot hm-c0"></span>0`,
