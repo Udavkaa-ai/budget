@@ -211,23 +211,23 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Фильтр Все / Я / Партнёр с суммами */}
-        <View style={styles.filterRow}>
+        {/* Фильтр Все / Я / Партнёр с суммами — стиль веб-чипов, скролл вместо обрезки */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
           {([['all', 'Все', total], ['me', 'Я', myTotal], ['partner', 'Партнёр', partnerTotal]] as const).map(([k, lbl, sum]) => (
             <TouchableOpacity
               key={k}
               style={[styles.filterChip, {
-                backgroundColor: userFilter === k ? t.surface : 'transparent',
+                backgroundColor: userFilter === k ? t.surface2 : t.surface,
                 borderColor: userFilter === k ? t.primary : t.border,
               }]}
               onPress={() => setUserFilter(k)}
             >
-              <Text style={{ color: userFilter === k ? t.primary : t.textMuted, fontSize: font.sm, fontWeight: userFilter === k ? '700' : '400' }}>
-                {lbl}{sum > 0 ? ` ${fmt(sum)}` : ''}
+              <Text numberOfLines={1} style={{ color: userFilter === k ? t.primary : t.textMuted, fontSize: font.sm, fontWeight: '600' }}>
+                {lbl}{sum > 0 ? ` · ${fmt(sum)}` : ''}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
         {/* Итого за день */}
         <View style={[styles.totalCard, { backgroundColor: t.surface }]}>

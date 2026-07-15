@@ -16,7 +16,7 @@ import { BLOCKS, useBlocks, setBlock } from '../blocks';
 import { useCategories, refreshCategories } from '../categories';
 import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate } from '../applock';
 import { Field, PrimaryButton } from '../components/UI';
-import { loadKey, generateKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
+import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -38,6 +38,8 @@ export default function SettingsScreen() {
   const [familyName, setFamilyName] = useState('');
   const [plannedMonthly, setPlannedMonthly] = useState('');
   const [backupList, setBackupList] = useState<BackupMeta[]>([]);
+  const [keyVisible, setKeyVisible] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
 
   const refreshBackups = () => {
     backupsApi.list().then(setBackupList).catch(() => {});
@@ -161,6 +163,34 @@ export default function SettingsScreen() {
         },
       ],
     );
+  };
+
+  // Ввод фразы-ключа с другого устройства (для восстановления чужих копий)
+  const applyImportedKey = async () => {
+    const clean = keyInput.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
+    if (clean.length !== 64) {
+      Alert.alert('Не похоже на ключ', 'Фраза должна содержать 64 символа (цифры и буквы a–f). Скопируйте её целиком с устройства, где создавалась копия: 🔑 «Показать ключ шифрования».');
+      return;
+    }
+    const finish = async () => {
+      await importKey(clean);
+      setKeyVisible(false);
+      setKeyInput('');
+      Alert.alert('Готово', 'Ключ сохранён — теперь копии семьи можно восстанавливать на этом устройстве.');
+    };
+    const existing = await exportKeyHex();
+    if (existing && existing !== clean) {
+      Alert.alert(
+        'Заменить ключ?',
+        'На этом устройстве уже есть свой ключ. После замены копии, созданные со старым ключом, откроются только по старой фразе.',
+        [
+          { text: 'Отмена', style: 'cancel' },
+          { text: 'Заменить', style: 'destructive', onPress: finish },
+        ],
+      );
+      return;
+    }
+    await finish();
   };
 
   const showKey = async () => {
@@ -517,7 +547,12 @@ export default function SettingsScreen() {
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
             Шифруются на телефоне вашим ключом — сервер содержимое не видит. Без ключа копию не восстановить.
           </Text>
-          <PrimaryButton title="🔐 Создать шифрованную копию" onPress={createBackup} loading={busy} />
+          <PrimaryButton title="🔐 Создать копию" onPress={createBackup} loading={busy} />
+          {backupList.length === 0 && (
+            <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
+              Копий пока нет. Созданные копии появятся здесь списком — рядом с каждой будет кнопка «Восстановить».
+            </Text>
+          )}
           {backupList.map(b => (
             <View key={b.id} style={styles.row}>
               <View style={{ flex: 1 }}>
@@ -542,6 +577,9 @@ export default function SettingsScreen() {
           ))}
           <TouchableOpacity onPress={showKey} style={{ marginTop: spacing.sm }}>
             <Text style={{ color: t.textMuted, fontSize: font.sm }}>🔑 Показать ключ шифрования</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setKeyInput(''); setKeyVisible(true); }} style={{ marginTop: spacing.sm }}>
+            <Text style={{ color: t.textMuted, fontSize: font.sm }}>📥 Ввести ключ с другого устройства</Text>
           </TouchableOpacity>
         </Card>
 
@@ -616,6 +654,36 @@ export default function SettingsScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.primary }]} onPress={importCsv} disabled={busy}>
                 <Text style={{ color: '#fff', fontWeight: '700' }}>Импортировать</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Import encryption key modal */}
+      <Modal visible={keyVisible} animationType="slide" transparent onRequestClose={() => setKeyVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: t.surface }]}>
+            <Text style={[styles.modalTitle, { color: t.text }]}>Ключ шифрования</Text>
+            <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+              Вставьте фразу из 64 символов с устройства, где создавалась копия (там: 🔑 «Показать ключ шифрования»).
+            </Text>
+            <TextInput
+              style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              value={keyInput}
+              onChangeText={setKeyInput}
+              placeholder="a1b2c3…"
+              placeholderTextColor={t.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.md }}>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.surface2 }]} onPress={() => setKeyVisible(false)}>
+                <Text style={{ color: t.text }}>Отмена</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: t.primary }]} onPress={applyImportedKey}>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Сохранить</Text>
               </TouchableOpacity>
             </View>
           </View>
