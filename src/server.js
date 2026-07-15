@@ -68,6 +68,7 @@ import {
   listSyncDocs,
   getFamilyE2E,
   enableFamilyE2E,
+  linkGoogleToUser,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -179,6 +180,32 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
+// Привязка Google к текущему (легаси) аккаунту: войти по паролю,
+// затем передать сюда Google credential — история остаётся на старом имени
+app.post('/api/auth/link-google', authMiddleware, async (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) return res.status(400).json({ error: 'Нет токена Google' });
+  if (!config.googleClientId) return res.status(503).json({ error: 'Google OAuth не настроен' });
+  try {
+    const verifyRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`
+    );
+    const payload = await verifyRes.json();
+    if (!verifyRes.ok || payload.error) return res.status(401).json({ error: 'Неверный токен Google' });
+    if (payload.aud !== config.googleClientId) return res.status(401).json({ error: 'Неверный client_id' });
+
+    const result = await linkGoogleToUser(req.user.login, {
+      googleId: payload.sub, email: payload.email,
+    });
+    if (!result.ok) return res.status(404).json(result);
+    io.to(req.user.family).emit('expense:updated', { by: req.user.name });
+    res.json(result);
+  } catch (err) {
+    console.error('link-google error:', err);
+    res.status(500).json({ error: 'Ошибка привязки' });
+  }
+});
+
 // Mobile OAuth: open in WebView, redirect back with JWT in query string
 app.get('/auth/google/mobile', async (req, res) => {
   const { redirect } = req.query;
@@ -280,7 +307,11 @@ app.post('/api/invite/join', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ name: req.user.name, login: req.user.login, isAdmin: req.user.isAdmin || false });
+  const u = getUserByLogin(req.user.login);
+  res.json({
+    name: req.user.name, login: req.user.login, isAdmin: req.user.isAdmin || false,
+    googleLinked: !!u?.googleId,
+  });
 });
 
 // Список пользователей в той же семье (для фильтров и партнёрских меток)

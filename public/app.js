@@ -266,6 +266,8 @@ async function showLogin() {
 }
 
 async function handleGoogleCredential(response) {
+  // Если уже вошли — это привязка Google к текущему аккаунту, а не вход
+  if (token && currentUser) return handleGoogleLink(response);
   const errEl = document.getElementById('login-error-google');
   errEl.classList.add('hidden');
   try {
@@ -1718,6 +1720,7 @@ async function loadSettingsScreen() {
     appSettings = data;
     applyCustomCategories();
     renderCustomCategoriesList();
+    renderGoogleLinkSection();
 
     const plannedInput = document.getElementById('setting-planned-monthly');
     if (plannedInput) plannedInput.value = data.plannedMonthly || '';
@@ -1941,6 +1944,41 @@ async function loadSettings() {
   applyCustomCategories();
 }
 
+
+
+// Привязка Google к легаси-аккаунту (вход по паролю → кнопка в настройках)
+async function handleGoogleLink(response) {
+  try {
+    const res = await apiJson('POST', '/api/auth/link-google', { credential: response.credential });
+    let msg = 'Google-аккаунт привязан!';
+    if (res.mergedDuplicate) msg += ` Дубликат объединён, перенесено расходов: ${res.moved}`;
+    showToastSuccess(msg);
+    await loadSettingsScreen();
+  } catch (e) {
+    showToastError('Не удалось привязать Google');
+  }
+}
+
+async function renderGoogleLinkSection() {
+  const status = document.getElementById('account-link-status');
+  const btnBox = document.getElementById('google-link-btn');
+  if (!status || !btnBox) return;
+  try {
+    const me = await apiJson('GET', '/api/me');
+    if (me.googleLinked) {
+      status.textContent = '✅ Вход через Google привязан к этому аккаунту.';
+      btnBox.innerHTML = '';
+      return;
+    }
+    status.textContent = 'Привяжите Google, чтобы входить без пароля в вебе и приложении — вся история останется на этом аккаунте.';
+    if (typeof google !== 'undefined' && google.accounts?.id) {
+      btnBox.innerHTML = '';
+      google.accounts.id.renderButton(btnBox, {
+        theme: 'outline', size: 'large', text: 'continue_with', locale: 'ru', width: 280,
+      });
+    }
+  } catch { /* не критично */ }
+}
 
 // ─── Пользовательские категории (Настройки) ──────────────────────────────────
 

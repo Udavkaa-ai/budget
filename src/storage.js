@@ -550,6 +550,40 @@ export async function saveBudgetPlan(plan, familyId) {
   debouncedSave();
 }
 
+// ─── Привязка Google к существующему аккаунту ────────────────────────────────
+
+// Вешает googleId на пользователя login; если googleId уже занят
+// автосозданным дубликатом — переносит его расходы на целевого юзера
+// (имя и семья) и удаляет дубликат.
+export async function linkGoogleToUser(login, { googleId, email }) {
+  const me = (data.users || []).find(u => u.login === login);
+  if (!me) return { ok: false, error: 'Пользователь не найден' };
+
+  const dup = getUserByGoogleId(googleId);
+  let moved = 0;
+  if (dup && dup.login !== me.login) {
+    for (const e of data.expenses) {
+      if (fam(e.family) === fam(dup.family) && e.user === dup.name) {
+        e.user = me.name;
+        e.family = fam(me.family);
+        moved++;
+      }
+    }
+    // взносы в цели дубликата — переименовываем
+    for (const g of data.goals || []) {
+      for (const c of g.contributions || []) {
+        if (c.user === dup.name) c.user = me.name;
+      }
+    }
+    data.users = data.users.filter(u => u.login !== dup.login);
+  }
+
+  me.googleId = googleId;
+  if (email) me.email = email;
+  debouncedSave();
+  return { ok: true, moved, mergedDuplicate: !!(dup && dup.login !== me.login) };
+}
+
 // ─── E2E-синхронизация: сервер хранит только шифроблобы ─────────────────────
 
 // Записи: { id, family, blob, ver, seq, deleted }
