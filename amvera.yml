@@ -1,0 +1,19 @@
+meta:
+  environment: nodejs
+  toolchain:
+    name: npm
+    version: "20"
+build:
+  skip: false
+  additionalCommands: null
+  artifacts:
+    "*": /
+run:
+  # ВАЖНО: src/server.js — веб-сервер; src/index.js — отключённый телеграм-бот
+  scriptName: src/server.js
+  scriptArguments: null
+  nodeArguments: null
+  command: null
+  # Постоянное хранилище Amvera: сюда указывает DATA_FILE=/data/expenses.json
+  persistenceMount: /data
+  containerPort: "3000"
