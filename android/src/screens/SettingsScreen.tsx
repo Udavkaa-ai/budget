@@ -586,7 +586,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 1.0.0</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.6.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

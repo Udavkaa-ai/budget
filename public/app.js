@@ -47,9 +47,12 @@ function applyCustomCategories() {
     if (!BASE_CATEGORY_KEYS.includes(k) && !customNames.has(k)) PLAN_CATEGORIES.splice(i, 1);
   }
   for (const c of customs) {
-    CATEGORY_ICONS[c.name] = c.emoji || '🏷️';
+    // Иконка — свободный текст с сервера, экранируем один раз здесь:
+    // дальше она вставляется в innerHTML во множестве мест без повторного esc()
+    const safeIcon = esc(c.emoji || '🏷️');
+    CATEGORY_ICONS[c.name] = safeIcon;
     if (!PLAN_CATEGORIES.some(pc => pc.key === c.name)) {
-      PLAN_CATEGORIES.push({ key: c.name, icon: c.emoji || '🏷️' });
+      PLAN_CATEGORIES.push({ key: c.name, icon: safeIcon });
     }
   }
   if (typeof initCategoryGrid === 'function' && document.getElementById('category-grid')) {
@@ -621,7 +624,7 @@ async function loadBudget() {
         section.className = 'user-section';
         section.innerHTML = `
           <div class="user-section-header">
-            <span class="user-section-name">${user}</span>
+            <span class="user-section-name">${esc(user)}</span>
             <span class="user-section-total">${fmt(udata.total)}</span>
           </div>
         `;
@@ -847,7 +850,7 @@ function buildReportHTML({ data, planData, prev, prev2, m, y }) {
       : '';
     return `
       <tr>
-        <td style="width:120px;white-space:nowrap">${c.icon} ${c.cat}</td>
+        <td style="width:120px;white-space:nowrap">${c.icon} ${esc(c.cat)}</td>
         <td style="width:100%;padding:0 8px">
           <div style="position:relative;height:18px;background:#f1f5f9;border-radius:4px;overflow:hidden">
             <div style="position:absolute;left:0;top:0;bottom:0;width:${spentPct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
@@ -865,7 +868,7 @@ function buildReportHTML({ data, planData, prev, prev2, m, y }) {
     const inc = incomes[name] || 0;
     const pct = inc > 0 ? Math.round(ud.total / inc * 100) : '—';
     return `<tr>
-      <td>${name}</td>
+      <td>${esc(name)}</td>
       <td style="text-align:right;font-weight:600">${fmtNum(ud.total)}</td>
       <td style="text-align:right;color:#6b7280">${inc ? fmtNum(inc) : '—'}</td>
       <td style="text-align:right">${inc ? pct + '%' : '—'}</td>
@@ -1669,8 +1672,8 @@ function renderPlanBreakdown(categoryBudgets) {
     row.className = 'plan-row plan-row--compact';
     row.innerHTML = `
       <span class="plan-cat-icon">${cat.icon}</span>
-      <span class="plan-cat-name">${cat.key}</span>
-      <input class="plan-budget-input" type="number" data-cat="${cat.key}"
+      <span class="plan-cat-name">${esc(cat.key)}</span>
+      <input class="plan-budget-input" type="number" data-cat="${esc(cat.key)}"
              value="${budgeted || ''}" placeholder="—" inputmode="numeric" />
     `;
     row.querySelector('input').addEventListener('input', updatePlanTotals);
@@ -2099,7 +2102,7 @@ function initCategoryGrid() {
     const btn = document.createElement('button');
     btn.className = 'cat-btn';
     btn.dataset.cat = cat;
-    btn.innerHTML = `<span class="cat-icon">${CATEGORY_ICONS[cat]}</span><span class="cat-name">${cat}</span>`;
+    btn.innerHTML = `<span class="cat-icon">${CATEGORY_ICONS[cat]}</span><span class="cat-name">${esc(cat)}</span>`;
     btn.addEventListener('click', () => selectCategory(cat));
     grid.appendChild(btn);
   }
@@ -2267,7 +2270,7 @@ function renderParseResult(expenses) {
     const [dd, mm, yyyy] = exp.date.split('.');
     const dateVal = `${yyyy}-${mm}-${dd}`;
     const catOptHtml = PLAN_CATEGORIES.map(c =>
-      `<button class="parse-cat-opt${c.key === exp.category ? ' active' : ''}" data-key="${c.key}" title="${c.key}">${c.icon}</button>`
+      `<button class="parse-cat-opt${c.key === exp.category ? ' active' : ''}" data-key="${esc(c.key)}" title="${esc(c.key)}">${c.icon}</button>`
     ).join('');
 
     const card = document.createElement('div');
@@ -2276,11 +2279,11 @@ function renderParseResult(expenses) {
       <button class="parse-cat-icon-btn" title="Изменить категорию">${CATEGORY_ICONS[exp.category] || '❓'}</button>
       <div class="parse-expense-info">
         <div class="parse-desc-row">
-          <span class="parse-expense-desc">${exp.description}</span>
+          <span class="parse-expense-desc">${esc(exp.description)}</span>
           <button class="parse-del-btn" title="Удалить">🗑</button>
         </div>
         <div class="parse-edit-row">
-          <span class="parse-cat-name">${exp.category}</span>
+          <span class="parse-cat-name">${esc(exp.category)}</span>
           <input class="parse-edit-date" type="date" value="${dateVal}" max="${todayStr}">
           <input class="parse-edit-amount" type="number" value="${exp.amount}" min="1">
           <span class="parse-edit-ruble">₽</span>
@@ -2379,10 +2382,10 @@ function buildExpenseItem(exp, canEdit, { showDate = false, showCategory = true,
   item.innerHTML = `
     <span class="expense-cat-icon">${CATEGORY_ICONS[exp.category] || '❓'}</span>
     <div class="expense-info">
-      <div class="expense-desc">${exp.description || exp.category}</div>
+      <div class="expense-desc">${esc(exp.description || exp.category)}</div>
       <div class="expense-meta">
-        ${showUser ? `<span class="expense-user-tag">${exp.user}</span>` : ''}
-        ${showCategory ? `<span>${exp.category}</span>` : ''}
+        ${showUser ? `<span class="expense-user-tag">${esc(exp.user)}</span>` : ''}
+        ${showCategory ? `<span>${esc(exp.category)}</span>` : ''}
         ${showDate && exp.date ? `<span class="expense-date-tag">${formatDayMonth(exp.date)}</span>` : ''}
       </div>
     </div>
