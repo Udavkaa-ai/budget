@@ -4,6 +4,7 @@ import {
   ActivityIndicator, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Rect, Polyline, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { useTheme, spacing, font, radius } from '../theme';
 import {
   summary as summaryApi, cashflow as cfApi,
@@ -175,101 +176,109 @@ export default function ChartScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}>
 
-          {/* Дневные расходы по участникам */}
-          {dayCount > 0 && (
-            <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>Расходы по дням</Text>
-              <View style={styles.legend}>
-                {userNames.map((u, i) => (
-                  <View key={u} style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: USER_COLORS[i % USER_COLORS.length] }]} />
-                    <Text style={{ color: t.textMuted, fontSize: font.xs }}>{u}</Text>
-                  </View>
-                ))}
-              </View>
-              <View style={styles.dayChart}>
-                {unified!.labels.map((d, i) => (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.dayCol, selDay === i && { backgroundColor: t.surface2, borderRadius: 4 }]}
-                    onPress={() => setSelDay(s => s === i ? null : i)}
-                  >
-                    <View style={styles.dayBarWrap}>
-                      {userNames.map((u, ui) => {
-                        const v = unified!.userExpenses[u][i] || 0;
-                        if (v === 0) return null;
-                        return (
-                          <View key={u} style={{
-                            width: '100%',
-                            height: Math.max(v / maxDay * 120, 2),
-                            backgroundColor: USER_COLORS[ui % USER_COLORS.length],
-                          }} />
-                        );
-                      })}
+          {/* Единый график как в вебе: бары расходов по участникам,
+              зелёные бары доходов, фиолетовая линия баланса */}
+          {dayCount > 0 && (() => {
+            const W = 340, H = 170, PB = 16, PL = 6, PR = 34;
+            const plotW = W - PL - PR;
+            const n = unified!.labels.length;
+            const colW = plotW / n;
+            const incomeVals = unified!.labels.map((d, i) => unified!.incomeDays[String(i + 1)] || 0);
+            const maxLeft = Math.max(...dayTotals, ...incomeVals, 1);
+            const balMinAll = bal ? Math.min(...bal, 0) : 0;
+            const balRange = bal ? Math.max(balMax - balMinAll, 1) : 1;
+            const balY = (v: number) => (H - PB) - (v - balMinAll) / balRange * (H - PB - 12);
+            return (
+              <Card>
+                <Text style={[styles.sectionTitle, { color: t.text }]}>Расходы, доход и баланс</Text>
+                <View style={styles.legend}>
+                  {userNames.map((u, i) => (
+                    <View key={u} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: USER_COLORS[i % USER_COLORS.length] }]} />
+                      <Text style={{ color: t.textMuted, fontSize: font.xs }}>{u}</Text>
                     </View>
-                    {(i === 0 || (i + 1) % 5 === 0) && (
-                      <Text style={{ fontSize: 8, color: t.textMuted }}>{d}</Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={{ height: 44, justifyContent: 'center', marginTop: spacing.sm }}>
-              {selDay !== null ? (
-                <Text numberOfLines={2} style={{ color: t.text, fontSize: font.sm }}>
-                  День {selDay + 1}: {userNames
-                    .map(u => ({ u, v: unified!.userExpenses[u][selDay] || 0 }))
-                    .filter(x => x.v > 0)
-                    .map(x => `${x.u} ${fmt(x.v)}`)
-                    .join(' · ') || 'нет расходов'}
-                  {' · итого '}{fmt(dayTotals[selDay] ?? 0)}
-                </Text>
-              ) : (
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>Нажмите на столбик — детали дня</Text>
-              )}
-              </View>
-            </Card>
-          )}
-
-          {/* Баланс */}
-          {bal && bal.length > 0 && (
-            <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>Баланс семьи</Text>
-              <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
-                Старт {fmt(unified!.startBalance)} · доход за месяц {fmt(totalIncome)}
-              </Text>
-              <View style={styles.dayChart}>
-                {bal.map((v, i) => {
-                  const range = Math.max(balMax - Math.min(balMin, 0), 1);
-                  const h = Math.max((v - Math.min(balMin, 0)) / range * 100, 2);
-                  return (
-                    <TouchableOpacity
-                      key={i}
-                      style={[styles.dayCol, selBal === i && { backgroundColor: t.surface2, borderRadius: 4 }]}
-                      onPress={() => setSelBal(s => s === i ? null : i)}
-                    >
-                      <View style={[styles.balBar, {
-                        height: h,
-                        backgroundColor: v >= 0 ? '#22c55e' : '#ef4444',
-                      }]} />
-                      {(i === 0 || (i + 1) % 5 === 0) && (
-                        <Text style={{ fontSize: 8, color: t.textMuted }}>{i + 1}</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {selBal !== null && (
-                <Text style={{ color: t.text, fontSize: font.sm, marginTop: spacing.sm }}>
-                  День {selBal + 1}: баланс {fmt(bal[selBal])}
-                </Text>
-              )}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>мин {fmtShort(balMin)}</Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>сейчас {fmtShort(bal[bal.length - 1])}</Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>макс {fmtShort(balMax)}</Text>
-              </View>
-            </Card>
-          )}
+                  ))}
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#7AE0C3' }]} />
+                    <Text style={{ color: t.textMuted, fontSize: font.xs }}>Доход</Text>
+                  </View>
+                  {bal && (
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: t.primary }]} />
+                      <Text style={{ color: t.textMuted, fontSize: font.xs }}>Баланс</Text>
+                    </View>
+                  )}
+                </View>
+                <Svg width="100%" height={H + 18} viewBox={`0 0 ${W} ${H + 18}`}>
+                  {/* Сетка */}
+                  {[0.25, 0.5, 0.75, 1].map(f => (
+                    <SvgLine key={f} x1={PL} y1={(H - PB) * (1 - f) + 12 * f} x2={W - PR}
+                      y2={(H - PB) * (1 - f) + 12 * f} stroke={t.border} strokeWidth={0.5} />
+                  ))}
+                  {/* Бары доходов (зелёные, за спиной) */}
+                  {incomeVals.map((v, i) => v > 0 && (
+                    <Rect key={`inc${i}`} x={PL + i * colW + 0.5} width={Math.max(colW - 1, 1.5)}
+                      y={(H - PB) - v / maxLeft * (H - PB - 12)} height={v / maxLeft * (H - PB - 12)}
+                      fill="#7AE0C3" opacity={0.75} rx={1.5} />
+                  ))}
+                  {/* Стек-бары расходов по участникам */}
+                  {unified!.labels.map((d, i) => {
+                    let yCursor = H - PB;
+                    return userNames.map((u, ui) => {
+                      const v = unified!.userExpenses[u][i] || 0;
+                      if (v === 0) return null;
+                      const h = v / maxLeft * (H - PB - 12);
+                      yCursor -= h;
+                      return (
+                        <Rect key={`e${i}_${ui}`} x={PL + i * colW + colW * 0.22} width={Math.max(colW * 0.56, 1.5)}
+                          y={yCursor} height={h} fill={USER_COLORS[ui % USER_COLORS.length]} rx={1.5}
+                          onPress={() => setSelDay(sd => sd === i ? null : i)} />
+                      );
+                    });
+                  })}
+                  {/* Линия баланса */}
+                  {bal && (
+                    <>
+                      <Polyline
+                        points={bal.map((v, i) => `${PL + i * colW + colW / 2},${balY(v)}`).join(' ')}
+                        fill="none" stroke={t.primary} strokeWidth={2.2} strokeLinejoin="round" />
+                      {bal.map((v, i) => (i === 0 || (i + 1) % 5 === 0 || i === bal.length - 1) && (
+                        <Circle key={`b${i}`} cx={PL + i * colW + colW / 2} cy={balY(v)} r={3} fill={t.primary} />
+                      ))}
+                      <SvgText x={W - 2} y={balY(balMax) + 3} fontSize={8.5} fill={t.primary} textAnchor="end">{fmtShort(balMax)}</SvgText>
+                      <SvgText x={W - 2} y={balY(balMinAll) + 3} fontSize={8.5} fill={t.primary} textAnchor="end">{fmtShort(balMinAll)}</SvgText>
+                    </>
+                  )}
+                  {/* Ось X */}
+                  {unified!.labels.map((d, i) => (i === 0 || (i + 1) % 5 === 0) && (
+                    <SvgText key={`x${i}`} x={PL + i * colW + colW / 2} y={H + 12} fontSize={9}
+                      fill={t.textMuted} textAnchor="middle">{d}</SvgText>
+                  ))}
+                  <SvgText x={PL} y={10} fontSize={8.5} fill={t.textMuted}>{fmtShort(maxLeft)}</SvgText>
+                </Svg>
+                <View style={{ height: 44, justifyContent: 'center', marginTop: spacing.xs }}>
+                {selDay !== null ? (
+                  <Text numberOfLines={2} style={{ color: t.text, fontSize: font.sm }}>
+                    День {selDay + 1}: {userNames
+                      .map(u => ({ u, v: unified!.userExpenses[u][selDay] || 0 }))
+                      .filter(x => x.v > 0)
+                      .map(x => `${x.u} ${fmt(x.v)}`)
+                      .join(' · ') || 'нет расходов'}
+                    {' · итого '}{fmt(dayTotals[selDay] ?? 0)}
+                    {bal ? ` · баланс ${fmt(bal[selDay] ?? 0)}` : ''}
+                  </Text>
+                ) : (
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Нажмите на столбик — детали дня</Text>
+                )}
+                </View>
+                {unified!.hasBalance && (
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>
+                    Старт {fmt(unified!.startBalance)} · доход за месяц {fmt(totalIncome)}
+                  </Text>
+                )}
+              </Card>
+            );
+          })()}
 
           {/* Кэшфлоу редактор */}
           <Card>
