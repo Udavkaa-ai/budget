@@ -23,7 +23,8 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
   const [step, setStep] = useState<'url' | 'auth'>('url');
 
   const handleServerUrl = async () => {
-    const url = serverUrl.trim().replace(/\/$/, '');
+    const url = serverUrl.trim().replace(/\/+$/, '');
+    setServerUrlState(url);
     if (!url.startsWith('http')) { Alert.alert('Введите корректный URL'); return; }
     setLoading(true);
     try {
@@ -45,7 +46,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
       // The server redirects back with a token in the URL fragment or query
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'familybudget' });
       const result = await WebBrowser.openAuthSessionAsync(
-        `${serverUrl.trim()}/auth/google/mobile?redirect=${encodeURIComponent(redirectUri)}`,
+        `${serverUrl.trim().replace(/\/+$/, '')}/auth/google/mobile?redirect=${encodeURIComponent(redirectUri)}`,
         redirectUri,
       );
       if (result.type === 'success' && result.url) {
