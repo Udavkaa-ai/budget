@@ -1,4 +1,18 @@
 import 'dotenv/config';
+import { randomBytes } from 'crypto';
+
+// JWT_SECRET обязателен в проде. Если не задан — генерируем случайный
+// на время процесса (никакого предсказуемого дефолта), но все выданные
+// токены станут недействительны при перезапуске сервера.
+function resolveJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  const ephemeral = randomBytes(32).toString('hex');
+  console.warn(
+    '⚠️  JWT_SECRET не задан в окружении — используется случайный ключ на время процесса.\n' +
+    '   Все текущие сессии слетят при перезапуске. Задайте JWT_SECRET в .env/переменных окружения хостинга.'
+  );
+  return ephemeral;
+}
 
 export const config = {
   // Telegram (только для Telegram-бота)
@@ -37,7 +51,7 @@ export const config = {
 
   // === Веб-приложение ===
   port: parseInt(process.env.PORT) || 3000,
-  jwtSecret: process.env.JWT_SECRET || 'change-me-in-production-please',
+  jwtSecret: resolveJwtSecret(),
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   // Пользователи веб-приложения. Поле family определяет, чьи данные видит пользователь.
   // Пользователи с одинаковым family видят общий бюджет; с разными — полностью изолированы.

@@ -3,7 +3,10 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import webpush from 'web-push';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -95,6 +98,51 @@ const io = new Server(httpServer, {
   pingInterval: 25000,
 });
 
+// ─── Security headers ──────────────────────────────────────────────────────────
+// Список внешних хостов ограничен ровно тем, что реально подключено в index.html
+// (GSI-кнопка Google, Google Fonts, CDN графиков) — держим CSP настолько узкой,
+// насколько возможно, чтобы её reflected/stored-XSS не смог обойти.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://accounts.google.com', 'https://cdn.jsdelivr.net'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'https://accounts.google.com'],
+      frameSrc: ['https://accounts.google.com'],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+  // Иначе COEP блокирует Google Fonts / GSI-виджет / jsDelivr, не давая
+  // прироста безопасности для этого приложения
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// Жёсткий лимит на роуты входа/привязки/инвайтов — защита от брутфорса
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много попыток, попробуйте позже' },
+});
+
+// Мягкий общий лимит на весь /api — защита от грубого злоупотребления,
+// не мешающая обычной работе (сокеты идут отдельным каналом, не через /api)
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Слишком много запросов, попробуйте позже' },
+});
+app.use('/api/', apiLimiter);
+
 app.use(express.json({ limit: '12mb' }));
 
 // Health check для Railway (должен отвечать до загрузки статики)
@@ -119,14 +167,14 @@ function authMiddleware(req, res, next) {
 
 // ─── Auth Routes ──────────────────────────────────────────────────────────────
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { login, password } = req.body || {};
   if (!login || !password) {
     return res.status(400).json({ error: 'Введите логин и пароль' });
   }
 
   const user = getUserByLogin(login);
-  if (!user || user.password !== password) {
+  if (!user || !(await bcrypt.compare(password, user.password))) {
     return res.status(401).json({ error: 'Неверный логин или пароль' });
   }
 
@@ -148,7 +196,7 @@ app.get('/api/auth/providers', (_req, res) => {
 });
 
 // Google OAuth — verifies Google ID token, creates/finds user, returns JWT
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', authLimiter, async (req, res) => {
   const { credential } = req.body || {};
   if (!credential) return res.status(400).json({ error: 'Нет токена' });
   if (!config.googleClientId) return res.status(503).json({ error: 'Google OAuth не настроен' });
@@ -188,7 +236,7 @@ app.post('/api/auth/google', async (req, res) => {
 
 // Привязка Google к текущему (легаси) аккаунту: войти по паролю,
 // затем передать сюда Google credential — история остаётся на старом имени
-app.post('/api/auth/link-google', authMiddleware, async (req, res) => {
+app.post('/api/auth/link-google', authMiddleware, authLimiter, async (req, res) => {
   const { credential } = req.body || {};
   if (!credential) return res.status(400).json({ error: 'Нет токена Google' });
   if (!config.googleClientId) return res.status(503).json({ error: 'Google OAuth не настроен' });
@@ -288,7 +336,7 @@ app.post('/api/invite', authMiddleware, (req, res) => {
 });
 
 // Join family via invite code (auth required)
-app.post('/api/invite/join', authMiddleware, async (req, res) => {
+app.post('/api/invite/join', authMiddleware, authLimiter, async (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'Нет кода' });
 
@@ -540,7 +588,7 @@ app.post('/api/import', authMiddleware, async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     console.error('Import error:', err);
-    res.status(500).json({ error: 'Ошибка импорта: ' + err.message });
+    res.status(500).json({ error: 'Ошибка импорта' });
   }
 });
 
@@ -685,7 +733,8 @@ app.post('/api/analyze-raw', authMiddleware, async (req, res) => {
     if (result.error) return res.status(502).json({ error: result.error });
     res.json({ report: result.report, model: result.model });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('analyze-raw error:', err);
+    res.status(500).json({ error: 'Ошибка ИИ-анализа' });
   }
 });
 
@@ -694,10 +743,12 @@ app.post('/api/analyze-raw', authMiddleware, async (req, res) => {
 app.post('/api/categories', authMiddleware, async (req, res) => {
   const { name, emoji } = req.body || {};
   const n = (name || '').trim();
+  const em = (emoji || '').trim();
   if (!n) return res.status(400).json({ error: 'Укажите название' });
   if (n.length > 24) return res.status(400).json({ error: 'Слишком длинное название' });
+  if (em.length > 8) return res.status(400).json({ error: 'Иконка слишком длинная' });
   if (CATEGORIES.includes(n)) return res.status(400).json({ error: 'Такая категория уже есть' });
-  const cat = await addCustomCategory(req.user.family, { name: n, emoji: (emoji || '').trim() || '🏷️' });
+  const cat = await addCustomCategory(req.user.family, { name: n, emoji: em || '🏷️' });
   if (!cat) return res.status(400).json({ error: 'Такая категория уже есть' });
   io.to(req.user.family).emit('settings:updated', { key: 'categories' });
   res.json({ ok: true, category: cat });
@@ -1220,7 +1271,8 @@ ${(() => {
     if (result.error) return res.status(502).json({ error: result.error });
     res.json({ report: result.report, model: result.model });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('analyze error:', err);
+    res.status(500).json({ error: 'Ошибка ИИ-анализа' });
   }
 });
 
@@ -1238,7 +1290,8 @@ app.post('/api/parse', authMiddleware, async (req, res) => {
     const result = await parseExpenses(text, getCustomCategories(req.user.family).map(c => c.name));
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('parse error:', err);
+    res.status(500).json({ error: 'Ошибка ИИ-разбора текста' });
   }
 });
 
@@ -1257,7 +1310,8 @@ app.post('/api/parse-image', authMiddleware, async (req, res) => {
     const result = await parseImageExpenses(base64, mimeType || 'image/jpeg', getCustomCategories(req.user.family).map(c => c.name));
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('parse-image error:', err);
+    res.status(500).json({ error: 'Ошибка ИИ-разбора изображения' });
   }
 });
 

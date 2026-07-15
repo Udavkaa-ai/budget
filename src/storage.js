@@ -1,8 +1,25 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { dirname } from 'path';
+import { randomInt } from 'crypto';
+import bcrypt from 'bcryptjs';
 import webpush from 'web-push';
 import { config } from './config.js';
+
+const BCRYPT_RE = /^\$2[aby]\$/;
+const MAX_DESCRIPTION_LEN = 300;
+
+// Ограничивает длину свободного текста (описание расхода) — защита от
+// злоупотребления полем как контейнером произвольных данных
+function clampDescription(v) {
+  return typeof v === 'string' ? v.slice(0, MAX_DESCRIPTION_LEN) : v;
+}
+
+/** Хеширует пароль, если он ещё не хеширован (идемпотентно — старые хеши не трогает) */
+function ensureHashed(plainOrHashed) {
+  if (!plainOrHashed || BCRYPT_RE.test(plainOrHashed)) return plainOrHashed;
+  return bcrypt.hashSync(plainOrHashed, 10);
+}
 
 let data = {
   expenses: [],
@@ -72,6 +89,12 @@ export async function loadData() {
           isAdmin: i === 0, // первый пользователь становится администратором
         }));
         migrated = true;
+      }
+
+      // ── Миграция: захешировать пароли, которые ещё хранятся в открытом виде ──
+      for (const u of data.users) {
+        const hashed = ensureHashed(u.password);
+        if (hashed !== u.password) { u.password = hashed; migrated = true; }
       }
 
       // ── Миграция: добавить поле family к расходам без него ──
@@ -146,7 +169,7 @@ export async function appendExpenses(expenses, familyId) {
       id: generateId(),
       date: exp.date,
       category: exp.category,
-      description: exp.description,
+      description: clampDescription(exp.description),
       amount: exp.amount,
       user: exp.user || '',
       family: f,
@@ -345,6 +368,42 @@ export function getChartData(targetMonth = null, targetYear = null, startDayOver
   };
 }
 
+// Экранирует одно CSV-поле: кавычки по RFC4180 при необходимости,
+// плюс защита от формул (=,+,-,@) — Excel/Sheets не должны их исполнять
+function csvField(v) {
+  let s = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (/[";\n]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+// Разбирает одну CSV-строку на поля с учётом кавычек (RFC4180-подобно)
+function parseCsvLine(line) {
+  const fields = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ';') {
+      fields.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  fields.push(cur);
+  return fields;
+}
+
 /**
  * Экспорт в CSV
  */
@@ -353,8 +412,8 @@ export function exportCSV(familyId) {
   const header = 'Дата;Категория;Описание;Сумма;Кто;Постоянный;Создано\n';
   const rows = data.expenses
     .filter(e => fam(e.family) === f)
-    .map(e =>
-      `${e.date};${e.category};${e.description};${e.amount};${e.user};${e.isFixed ? 'да' : 'нет'};${e.createdAt}`
+    .map(e => [e.date, e.category, e.description, e.amount, e.user, e.isFixed ? 'да' : 'нет', e.createdAt]
+      .map(csvField).join(';')
     ).join('\n');
   return header + rows;
 }
@@ -377,7 +436,7 @@ export async function importFromCSV(csvText, familyId) {
   let skipped = 0;
 
   for (const line of dataLines) {
-    const parts = line.split(';');
+    const parts = parseCsvLine(line);
     if (parts.length < 4) { skipped++; continue; }
 
     const [date, category, description, amountStr, user = '', fixedStr = 'нет', createdAt = ''] = parts;
@@ -393,7 +452,7 @@ export async function importFromCSV(csvText, familyId) {
       id: generateId(),
       date: date.trim(),
       category: category.trim(),
-      description: description.trim(),
+      description: clampDescription(description.trim()),
       amount,
       user: user.trim(),
       family: f,
@@ -458,7 +517,7 @@ export async function updateExpense(id, { date, category, amount, description },
   if (date !== undefined) exp.date = date;
   if (category !== undefined) exp.category = category;
   if (amount !== undefined) exp.amount = amount;
-  if (description !== undefined) exp.description = description;
+  if (description !== undefined) exp.description = clampDescription(description);
   debouncedSave();
   return exp;
 }
@@ -886,7 +945,7 @@ export async function addUser({ login, password, name, family, isAdmin = false }
   }
   const user = {
     login: login.trim(),
-    password,
+    password: ensureHashed(password),
     name: name.trim(),
     family: (family || 'family1').trim(),
     isAdmin,
@@ -901,7 +960,7 @@ export async function addUser({ login, password, name, family, isAdmin = false }
 export async function updateUser(login, { password, name, family }) {
   const user = (data.users || []).find(u => u.login === login);
   if (!user) return null;
-  if (password) user.password = password;
+  if (password) user.password = ensureHashed(password);
   if (name)     user.name = name.trim();
   if (family)   user.family = family.trim();
   debouncedSave();
@@ -954,7 +1013,7 @@ export function createInvite(familyId, createdBy) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code;
   do {
-    code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    code = Array.from({ length: 6 }, () => chars[randomInt(chars.length)]).join('');
   } while (data.invites[code]);
   data.invites[code] = { family: familyId, createdBy, expiresAt: Date.now() + 48 * 60 * 60 * 1000 };
   debouncedSave();
