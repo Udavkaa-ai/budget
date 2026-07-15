@@ -1721,6 +1721,8 @@ async function loadSettingsScreen() {
     applyCustomCategories();
     renderCustomCategoriesList();
     renderGoogleLinkSection();
+    renderBlocksConstructor();
+    applyBlockVisibility();
 
     const plannedInput = document.getElementById('setting-planned-monthly');
     if (plannedInput) plannedInput.value = data.plannedMonthly || '';
@@ -1942,6 +1944,7 @@ function esc(str) {
 async function loadSettings() {
   appSettings = await apiJson('GET', '/api/settings');
   applyCustomCategories();
+  applyBlockVisibility();
 }
 
 
@@ -1978,6 +1981,66 @@ async function renderGoogleLinkSection() {
       });
     }
   } catch { /* не критично */ }
+}
+
+// ─── Конструктор аналитики: блоки вкл/выкл, хранится на устройстве ───────────
+
+const ANALYTICS_BLOCKS = [
+  { id: 'gauge',   label: '💸 Баблометр',              sel: '.bablometr-card' },
+  { id: 'heatmap', label: '🗓 Расходы по дням',         sel: '#summary-heatmap' },
+  { id: 'speed',   label: '📈 Скорость трат',           sel: '.speed-chart-card' },
+  { id: 'byUser',  label: '👥 По участникам',           sel: '#summary-by-user' },
+  { id: 'family',  label: '👨‍👩‍👧 Семейные расходы',       sel: '.family-overview-card' },
+  { id: 'ai',      label: '🤖 Кнопки ИИ-анализа и PDF', sel: null },
+  { id: 'chartTab', label: '📉 Вкладка «График»',       sel: null },
+  { id: 'goalsTab', label: '🎯 Вкладка «Цели»',         sel: null },
+];
+
+function getBlocks() {
+  try {
+    return { gauge: true, heatmap: true, speed: true, byUser: true, family: true, ai: true, chartTab: true, goalsTab: true,
+      ...JSON.parse(localStorage.getItem('analytics_blocks') || '{}') };
+  } catch { return {}; }
+}
+
+function setBlockEnabled(id, v) {
+  const b = getBlocks();
+  b[id] = v;
+  localStorage.setItem('analytics_blocks', JSON.stringify(b));
+  applyBlockVisibility();
+}
+
+function applyBlockVisibility() {
+  const b = getBlocks();
+  for (const blk of ANALYTICS_BLOCKS) {
+    if (!blk.sel) continue;
+    document.querySelectorAll(blk.sel).forEach(el => el.style.display = b[blk.id] === false ? 'none' : '');
+  }
+  const ai1 = document.getElementById('btn-get-analysis');
+  const ai2 = document.getElementById('btn-pdf-report');
+  if (ai1) ai1.style.display = b.ai === false ? 'none' : '';
+  if (ai2) ai2.style.display = b.ai === false ? 'none' : '';
+  const chartNav = document.querySelector('.nav-btn[data-screen="chart"]');
+  const goalsNav = document.querySelector('.nav-btn[data-screen="goals"]');
+  if (chartNav) chartNav.style.display = b.chartTab === false ? 'none' : '';
+  if (goalsNav) goalsNav.style.display = b.goalsTab === false ? 'none' : '';
+}
+
+function renderBlocksConstructor() {
+  const box = document.getElementById('blocks-constructor');
+  if (!box) return;
+  const b = getBlocks();
+  box.innerHTML = ANALYTICS_BLOCKS.map(blk => `
+    <label class="push-toggle-row" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;cursor:pointer">
+      <span class="toggle-label">${blk.label}</span>
+      <span class="toggle-wrap">
+        <input type="checkbox" class="block-toggle" data-block="${blk.id}" ${b[blk.id] === false ? '' : 'checked'} />
+        <span class="toggle-slider"></span>
+      </span>
+    </label>`).join('');
+  box.querySelectorAll('.block-toggle').forEach(inp => {
+    inp.addEventListener('change', () => setBlockEnabled(inp.dataset.block, inp.checked));
+  });
 }
 
 // ─── Пользовательские категории (Настройки) ──────────────────────────────────
