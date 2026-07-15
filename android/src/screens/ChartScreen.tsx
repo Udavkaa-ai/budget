@@ -71,6 +71,12 @@ export default function ChartScreen() {
   const [selDay, setSelDay] = useState<number | null>(null);   // выбранный столбик расходов
   const [selBal, setSelBal] = useState<number | null>(null);   // выбранный столбик баланса
   const [monthPicker, setMonthPicker] = useState(false);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const toggleSeries = (k: string) => setHidden(h => {
+    const n = new Set(h);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    return n;
+  });
 
   const load = useCallback(async (m = month, y = year) => {
     setLoading(true);
@@ -185,8 +191,13 @@ export default function ChartScreen() {
             const plotW = W - PL - PR;
             const n = unified!.labels.length;
             const colW = plotW / n;
+            const visUsers = userNames.filter(u => !hidden.has(u));
+            const showIncome = !hidden.has('__income');
+            const showBal = !hidden.has('__balance') && !!bal;
+            const visTotals = unified!.labels.map((_, i) =>
+              visUsers.reduce((s2, u) => s2 + (unified!.userExpenses[u][i] || 0), 0));
             const incomeVals = unified!.labels.map((d, i) => unified!.incomeDays[String(i + 1)] || 0);
-            const maxLeft = Math.max(...dayTotals, ...incomeVals, 1);
+            const maxLeft = Math.max(...visTotals, ...(showIncome ? incomeVals : [0]), 1);
             const balMinAll = bal ? Math.min(...bal, 0) : 0;
             const balRange = bal ? Math.max(balMax - balMinAll, 1) : 1;
             const balY = (v: number) => (H - PB) - (v - balMinAll) / balRange * (H - PB - 12);
@@ -195,20 +206,20 @@ export default function ChartScreen() {
                 <Text style={[styles.sectionTitle, { color: t.text }]}>Расходы, доход и баланс</Text>
                 <View style={styles.legend}>
                   {userNames.map((u, i) => (
-                    <View key={u} style={styles.legendItem}>
+                    <TouchableOpacity key={u} style={[styles.legendItem, { opacity: hidden.has(u) ? 0.35 : 1 }]} onPress={() => toggleSeries(u)}>
                       <View style={[styles.legendDot, { backgroundColor: USER_COLORS[i % USER_COLORS.length] }]} />
-                      <Text style={{ color: t.textMuted, fontSize: font.xs }}>{u}</Text>
-                    </View>
+                      <Text style={{ color: t.textMuted, fontSize: font.xs, textDecorationLine: hidden.has(u) ? 'line-through' : 'none' }}>{u}</Text>
+                    </TouchableOpacity>
                   ))}
-                  <View style={styles.legendItem}>
+                  <TouchableOpacity style={[styles.legendItem, { opacity: hidden.has('__income') ? 0.35 : 1 }]} onPress={() => toggleSeries('__income')}>
                     <View style={[styles.legendDot, { backgroundColor: '#7AE0C3' }]} />
-                    <Text style={{ color: t.textMuted, fontSize: font.xs }}>Доход</Text>
-                  </View>
+                    <Text style={{ color: t.textMuted, fontSize: font.xs, textDecorationLine: hidden.has('__income') ? 'line-through' : 'none' }}>Доход</Text>
+                  </TouchableOpacity>
                   {bal && (
-                    <View style={styles.legendItem}>
+                    <TouchableOpacity style={[styles.legendItem, { opacity: hidden.has('__balance') ? 0.35 : 1 }]} onPress={() => toggleSeries('__balance')}>
                       <View style={[styles.legendDot, { backgroundColor: t.primary }]} />
-                      <Text style={{ color: t.textMuted, fontSize: font.xs }}>Баланс</Text>
-                    </View>
+                      <Text style={{ color: t.textMuted, fontSize: font.xs, textDecorationLine: hidden.has('__balance') ? 'line-through' : 'none' }}>Баланс</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
                 <Svg width="100%" height={H + 18} viewBox={`0 0 ${W} ${H + 18}`}>
@@ -218,7 +229,7 @@ export default function ChartScreen() {
                       y2={(H - PB) * (1 - f) + 12 * f} stroke={t.border} strokeWidth={0.5} />
                   ))}
                   {/* Бары доходов (зелёные, за спиной) */}
-                  {incomeVals.map((v, i) => v > 0 && (
+                  {showIncome && incomeVals.map((v, i) => v > 0 && (
                     <Rect key={`inc${i}`} x={PL + i * colW + 0.5} width={Math.max(colW - 1, 1.5)}
                       y={(H - PB) - v / maxLeft * (H - PB - 12)} height={v / maxLeft * (H - PB - 12)}
                       fill="#7AE0C3" opacity={0.75} rx={1.5} />
@@ -226,7 +237,8 @@ export default function ChartScreen() {
                   {/* Стек-бары расходов по участникам */}
                   {unified!.labels.map((d, i) => {
                     let yCursor = H - PB;
-                    return userNames.map((u, ui) => {
+                    return visUsers.map(u => {
+                      const ui = userNames.indexOf(u);
                       const v = unified!.userExpenses[u][i] || 0;
                       if (v === 0) return null;
                       const h = v / maxLeft * (H - PB - 12);
@@ -239,7 +251,7 @@ export default function ChartScreen() {
                     });
                   })}
                   {/* Линия баланса */}
-                  {bal && (
+                  {showBal && bal && (
                     <>
                       <Polyline
                         points={bal.map((v, i) => `${PL + i * colW + colW / 2},${balY(v)}`).join(' ')}

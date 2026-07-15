@@ -554,7 +554,7 @@ export default function SummaryScreen() {
                     <Text style={{ fontSize: 32 }}>{catIcon2(cat)}</Text>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '700' }} numberOfLines={1}>{cat}</Text>
+                        <Text style={{ flex: 1, color: t.text, fontSize: font.lg, fontWeight: '700', marginRight: spacing.sm }} numberOfLines={1}>{cat}</Text>
                         <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '800' }}>{fmt(amt)}</Text>
                       </View>
                       {/* Градиентный прогрессбар как в вебе */}
@@ -565,19 +565,21 @@ export default function SummaryScreen() {
                           style={[styles.gradBarFill, { width: `${fillPct * 100}%` }]}
                         />
                       </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: spacing.sm }}>
                         {limit > 0 ? (
-                          <Text style={{ color: over ? '#FF5C87' : t.success, fontSize: font.sm, fontWeight: '600' }}>
+                          <Text numberOfLines={1} style={{ flexShrink: 1, color: over ? '#FF5C87' : t.success, fontSize: font.sm, fontWeight: '600' }}>
                             {over ? `перерасход ${fmt(amt - limit)}` : `осталось ${fmt(limit - amt)}`}
                           </Text>
                         ) : <Text style={{ color: t.textMuted, fontSize: font.sm }}>без лимита</Text>}
-                        <Text style={{ color: t.textMuted, fontSize: font.sm }}>
-                          {limit > 0 ? `лимит ${fmt(limit)}` : ''}
-                          {prevAmt !== null && prevAmt > 0
-                            ? `${limit > 0 ? ' · ' : ''}было ${fmt(prevAmt)} (${amt >= prevAmt ? '▲' : '▼'}${Math.abs(Math.round((amt - prevAmt) / prevAmt * 100))}%)`
-                            : ''}
-                        </Text>
+                        {limit > 0 && (
+                          <Text numberOfLines={1} style={{ color: t.textMuted, fontSize: font.sm }}>лимит {fmt(limit)}</Text>
+                        )}
                       </View>
+                      {prevAmt !== null && prevAmt > 0 && (
+                        <Text numberOfLines={1} style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                          прошлый месяц: {fmt(prevAmt)} ({amt >= prevAmt ? '▲' : '▼'}{Math.abs(Math.round((amt - prevAmt) / prevAmt * 100))}%)
+                        </Text>
+                      )}
                     </View>
                   </View>
                 </Card>
