@@ -12,6 +12,7 @@ import {
 } from '../api/client';
 import { Card } from '../components/Card';
 import { useAuth } from '../hooks/useAuth';
+import { useBlocks } from '../blocks';
 import { MonthPickerModal } from '../components/Pickers';
 
 const USER_COLORS = ['#6c5ce7', '#ec4899', '#f59e0b', '#22c55e'];
@@ -53,6 +54,7 @@ async function fetchLast6Months() {
 export default function ChartScreen() {
   const t = useTheme();
   const { user } = useAuth();
+  const blocks = useBlocks();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -306,8 +308,11 @@ export default function ChartScreen() {
               </View>
             ))}
 
-            <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.xs }}>
-              ПОСТУПЛЕНИЯ ПО ДНЯМ (день месяца → сумма)
+            <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700', marginTop: spacing.sm }}>
+              💵 Поступления по дням
+            </Text>
+            <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+              Укажите день месяца и сумму зачисления
             </Text>
             {incomeDays.map((e, i) => (
               <View key={i} style={[styles.cfRow, { marginBottom: spacing.xs }]}>
@@ -346,7 +351,7 @@ export default function ChartScreen() {
           </Card>
 
           {/* 6 месяцев */}
-          {months6.length > 0 && (
+          {blocks.months6 !== false && months6.length > 0 && (
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>Расходы за 6 месяцев</Text>
               <View style={styles.chart6}>
@@ -361,7 +366,7 @@ export default function ChartScreen() {
                       <View style={styles.barWrap}>
                         <View style={{
                           width: '100%',
-                          height: Math.max(pct * 140, 4),
+                          height: Math.max(pct * 70, 3),
                           borderRadius: 4,
                           backgroundColor: t.primary,
                           opacity: pct > 0 ? 1 : 0.2,
@@ -401,7 +406,7 @@ const styles = StyleSheet.create({
   cfInput:      { borderRadius: radius.sm, borderWidth: 1, padding: spacing.sm, fontSize: font.sm, textAlign: 'center' },
   cfInputSm:    { borderRadius: radius.sm, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 6, fontSize: font.sm, textAlign: 'center' },
   saveBtn:      { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  chart6:       { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, height: 190 },
+  chart6:       { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, height: 110 },
   barCol:       { flex: 1, alignItems: 'center' },
   barWrap:      { flex: 1, justifyContent: 'flex-end', width: '100%' },
 });

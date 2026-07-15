@@ -9,7 +9,8 @@ export const BLOCKS = [
   { id: 'speed',    label: '📈 Скорость трат',         hint: '% факт/план по дням месяца' },
   { id: 'byUser',   label: '👥 По участникам',         hint: 'Кто сколько потратил, % дохода' },
   { id: 'ai',       label: '🤖 Кнопка ИИ-анализа',     hint: 'На экране «Месяц» (Премиум)' },
-  { id: 'chartTab', label: '📈 Вкладка «График»',      hint: 'Расходы за 6 месяцев' },
+  { id: 'months6',  label: '📊 Расходы за 6 месяцев',  hint: 'Столбики на вкладке «График»' },
+  { id: 'chartTab', label: '📈 Вкладка «График»',      hint: 'Дневной график и кэшфлоу' },
   { id: 'goalsTab', label: '🎯 Вкладка «Цели»',        hint: 'Накопления и прогресс' },
 ] as const;
 
@@ -18,7 +19,7 @@ export type BlockState = Record<BlockId, boolean>;
 
 const KEY = 'analytics_blocks';
 const DEFAULTS: BlockState = {
-  gauge: true, heatmap: true, speed: true, byUser: true, ai: true, chartTab: true, goalsTab: true,
+  gauge: true, heatmap: true, speed: true, byUser: true, ai: true, months6: true, chartTab: true, goalsTab: true,
 };
 
 let _state: BlockState = { ...DEFAULTS };

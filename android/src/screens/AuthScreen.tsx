@@ -87,7 +87,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
                 keyboardType="url"
                 autoCorrect={false}
               />
-              <PrimaryButton title="Продолжить →" onPress={handleServerUrl} loading={loading} />
+              <PrimaryButton title="Продолжить" onPress={handleServerUrl} loading={loading} />
             </>
           ) : (
             <>

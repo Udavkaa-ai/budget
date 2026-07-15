@@ -355,11 +355,13 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
             return (
               <TouchableOpacity
                 key={cat}
-                style={[styles.catBtn, { backgroundColor: active ? t.primary : t.surface2 }]}
+                style={[styles.catBtn, {
+                  backgroundColor: active ? t.primary : t.surface2,
+                  borderWidth: 2, borderColor: active ? t.primary : 'transparent',
+                }]}
                 onPress={() => handleCategorySelect(cat)}
               >
-                <Text style={{ fontSize: 20 }}>{catIcon2(cat)}</Text>
-                <Text style={{ fontSize: font.xs, color: active ? '#fff' : t.text, marginTop: 2 }}>{cat}</Text>
+                <Text style={{ fontSize: 26 }}>{catIcon2(cat)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -386,7 +388,7 @@ const styles = StyleSheet.create({
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
   predChip:  { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   catGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  catBtn:    { alignItems: 'center', borderRadius: radius.md, padding: spacing.sm, minWidth: 72 },
+  catBtn:    { alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, width: 52, height: 52 },
   submitBtn: { borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', marginTop: spacing.sm },
   submitText:{ color: '#fff', fontSize: font.md, fontWeight: '600' },
 });

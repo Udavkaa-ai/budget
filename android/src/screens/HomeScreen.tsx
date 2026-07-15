@@ -313,12 +313,13 @@ export default function HomeScreen() {
                 {cats.map(cat => (
                   <TouchableOpacity
                     key={cat}
-                    style={[styles.catChip, { backgroundColor: editCat === cat ? t.primary : t.surface2 }]}
+                    style={[styles.catChip, {
+                      backgroundColor: editCat === cat ? t.primary : t.surface2,
+                      borderWidth: 2, borderColor: editCat === cat ? t.primary : 'transparent',
+                    }]}
                     onPress={() => setEditCat(cat)}
                   >
-                    <Text style={{ color: editCat === cat ? '#fff' : t.text, fontSize: font.sm }}>
-                      {catIcon2(cat)} {cat}
-                    </Text>
+                    <Text style={{ fontSize: 24 }}>{catIcon2(cat)}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -385,6 +386,6 @@ const styles = StyleSheet.create({
   modalBox:   { borderRadius: radius.lg, padding: spacing.lg },
   modalTitle: { fontSize: font.lg, fontWeight: '700', marginBottom: spacing.md },
   input:      { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md, marginBottom: spacing.md },
-  catChip:    { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginRight: spacing.sm },
+  catChip:    { borderRadius: radius.md, width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
   modalBtn:   { flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
 });
