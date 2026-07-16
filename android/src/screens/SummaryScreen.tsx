@@ -116,7 +116,9 @@ export default function SummaryScreen() {
 
   // Сравнение с прошлым месяцем
   const [compare, setCompare] = useState(false);
-  const [prevData, setPrevData] = useState<SummaryData | null>(null);
+  const [prevExp, setPrevExp] = useState<Expense[]>([]);
+  // Режим сравнения: 'date' — до того же числа, 'full' — весь прошлый месяц
+  const [cmpMode, setCmpMode] = useState<'date' | 'full'>('date');
 
   // Фильтр категорий по участнику
   const [selUser, setSelUser] = useState<string | null>(null);
@@ -153,9 +155,12 @@ export default function SummaryScreen() {
       setPlan(p);
       setMonthExp(Array.isArray(me) ? me : []);
       setPlannedMonthly(st.plannedMonthly ?? 0);
-      // Прошлый месяц для сравнения
+      // Прошлый месяц для сравнения — берём расходы по дням, чтобы можно было
+      // сравнивать как с полным месяцем, так и до того же числа
       const pd = new Date(y, m - 2, 1);
-      summaryApi.get(pd.getMonth() + 1, pd.getFullYear()).then(setPrevData).catch(() => setPrevData(null));
+      expApi.forMonth(pd.getMonth() + 1, pd.getFullYear())
+        .then(r => setPrevExp(Array.isArray(r) ? r : []))
+        .catch(() => setPrevExp([]));
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -265,6 +270,18 @@ export default function SummaryScreen() {
   const planToDate = plannedMonthly > 0 ? plannedMonthly * daysPassed / daysInMonth : 0;
   const gaugePct = planToDate > 0 ? Math.round((data?.total ?? 0) / planToDate * 100) : null;
 
+  // Агрегат прошлого месяца для сравнения: до того же числа ('date') или весь ('full')
+  const prevCutoff = cmpMode === 'full' ? 31 : daysPassed;
+  const prevAgg = { total: 0, byCategory: {} as Record<string, number> };
+  for (const e of prevExp) {
+    const d = parseInt(e.date?.split('.')[0] ?? '');
+    if (!isNaN(d) && d <= prevCutoff) {
+      prevAgg.total += e.amount;
+      prevAgg.byCategory[e.category] = (prevAgg.byCategory[e.category] ?? 0) + e.amount;
+    }
+  }
+  const hasPrev = prevExp.length > 0;
+
   // Heatmap: суммы по дням месяца (с учётом фильтра по участнику)
   const dayTotals: Record<number, number> = {};
   for (const e of monthExp) {
@@ -311,24 +328,42 @@ export default function SummaryScreen() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
         >
           {/* Сравнить */}
-          <TouchableOpacity
-            style={[styles.compareChip, { backgroundColor: compare ? t.primary : t.surface }]}
-            onPress={() => { haptics.select(); setCompare(c => !c); }}
-          >
-            <Text style={{ color: compare ? '#fff' : t.primary, fontSize: font.sm, fontWeight: '600' }}>
-              ⚖️ Сравнить с прошлым месяцем
-            </Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
+            <TouchableOpacity
+              style={[styles.compareChip, { backgroundColor: compare ? t.primary : t.surface, marginBottom: 0 }]}
+              onPress={() => { haptics.select(); setCompare(c => !c); }}
+            >
+              <Text style={{ color: compare ? '#fff' : t.primary, fontSize: font.sm, fontWeight: '600' }}>
+                ⚖️ Сравнить с прошлым месяцем
+              </Text>
+            </TouchableOpacity>
+            {compare && isCurrentMonth && (
+              <>
+                <TouchableOpacity
+                  style={[styles.cmpModeChip, { backgroundColor: cmpMode === 'date' ? t.surface2 : t.surface, borderColor: cmpMode === 'date' ? t.primary : t.border }]}
+                  onPress={() => { haptics.select(); setCmpMode('date'); }}
+                >
+                  <Text style={{ color: cmpMode === 'date' ? t.primary : t.textMuted, fontSize: font.xs, fontWeight: '600' }}>до {daysPassed}-го</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cmpModeChip, { backgroundColor: cmpMode === 'full' ? t.surface2 : t.surface, borderColor: cmpMode === 'full' ? t.primary : t.border }]}
+                  onPress={() => { haptics.select(); setCmpMode('full'); }}
+                >
+                  <Text style={{ color: cmpMode === 'full' ? t.primary : t.textMuted, fontSize: font.xs, fontWeight: '600' }}>весь месяц</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
 
           {/* Total card */}
           <View ref={totalTarget} collapsable={false} onLayout={tOffset('summary.total')}>
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
-            {compare && prevData && (
-              <Text style={{ fontSize: font.sm, marginTop: 2, color: (data?.total ?? 0) > prevData.total ? '#ef4444' : '#22c55e' }}>
-                Прошлый месяц: {fmt(prevData.total)}
-                {prevData.total > 0 ? ` (${(data?.total ?? 0) > prevData.total ? '▲' : '▼'}${Math.abs(Math.round(((data?.total ?? 0) - prevData.total) / prevData.total * 100))}%)` : ''}
+            {compare && hasPrev && (
+              <Text style={{ fontSize: font.sm, marginTop: 2, color: (data?.total ?? 0) > prevAgg.total ? '#ef4444' : '#22c55e' }}>
+                Прошлый месяц{cmpMode === 'date' && isCurrentMonth ? ` (до ${daysPassed}-го)` : ''}: {fmt(prevAgg.total)}
+                {prevAgg.total > 0 ? ` (${(data?.total ?? 0) > prevAgg.total ? '▲' : '▼'}${Math.abs(Math.round(((data?.total ?? 0) - prevAgg.total) / prevAgg.total * 100))}%)` : ''}
               </Text>
             )}
             {plannedMonthly > 0 && (
@@ -614,7 +649,7 @@ export default function SummaryScreen() {
             const limit = selUser ? 0 : budgets[cat] ?? 0;
             const over = limit > 0 && amt > limit;
             const fillPct = limit > 0 ? Math.min(amt / limit, 1) : amt / maxCat;
-            const prevAmt = compare && prevData ? prevData.byCategory[cat] ?? 0 : null;
+            const prevAmt = compare && hasPrev ? prevAgg.byCategory[cat] ?? 0 : null;
             return (
               <TouchableOpacity key={cat} onPress={() => openDrill(cat)} activeOpacity={0.7}>
                 <Card>
@@ -832,4 +867,5 @@ const styles = StyleSheet.create({
   gradBarBg:    { height: 9, borderRadius: 5, overflow: 'hidden', marginTop: 6 },
   gradBarFill:  { height: '100%', borderRadius: 5 },
   compareChip:  { alignSelf: 'flex-start', borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.md },
+  cmpModeChip:  { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderWidth: 1.5 },
 });
