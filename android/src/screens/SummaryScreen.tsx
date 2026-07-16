@@ -17,6 +17,7 @@ import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { haptics } from '../haptics';
+import { useTourTarget } from '../tourTargets';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -110,6 +111,7 @@ export default function SummaryScreen() {
   const [selUser, setSelUser] = useState<string | null>(null);
   // Фильтр тепловой карты по участнику
   const [heatUser, setHeatUser] = useState<string | null>(null);
+  const gaugeTarget = useTourTarget('summary.gauge');
   const [monthPicker, setMonthPicker] = useState(false);
 
   // Heatmap + drill-down + planned budget
@@ -323,6 +325,7 @@ export default function SummaryScreen() {
 
           {/* Баблометр — спидометр как в вебе */}
           {blocks.gauge && gaugePct !== null && (
+            <View ref={gaugeTarget} collapsable={false}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Баблометр</Text>
               <View style={{ alignItems: 'center' }}>
@@ -364,6 +367,7 @@ export default function SummaryScreen() {
                 <Text style={{ color: t.textMuted, fontSize: font.xs, textAlign: 'right' }}>Дней{'\n'}{daysPassed} из {daysInMonth}</Text>
               </View>
             </Card>
+            </View>
           )}
 
           {/* Скорость трат: линия % факт/план нарастающим итогом, как в вебе */}

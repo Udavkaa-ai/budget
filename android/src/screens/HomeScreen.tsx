@@ -20,6 +20,8 @@ import { ScreenGradient } from '../components/ScreenGradient';
 import { FadeInItem } from '../components/Motion';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
+import { useTourTarget } from '../tourTargets';
+import { openHelp } from '../help';
 
 function todayStr() {
   const d = new Date();
@@ -53,6 +55,8 @@ export default function HomeScreen() {
   const [userFilter, setUserFilter] = useState<'all' | 'me' | 'partner'>('all');
   const [addedFlash, setAddedFlash] = useState(0);
   const slide = useRef(new Animated.Value(0)).current;
+  const fabTarget = useTourTarget('home.fab');
+  const filterTarget = useTourTarget('home.filter');
 
   // Эффект пролистывания: контент вылетает со стороны свайпа с оттяжкой
   const animateSwitch = (dir: 1 | -1) => {
@@ -214,8 +218,13 @@ export default function HomeScreen() {
         {/* Header — как в вебе: титул, дата, фильтр участников, итого */}
         <View style={styles.titleRow}>
           <Text style={[styles.screenTitle, { color: t.titleColor }]}>Бюджет</Text>
-          <View style={[styles.userChipTop, { backgroundColor: t.surface }]}>
-            <Text style={{ color: t.primary, fontWeight: '600', fontSize: font.sm }}>{user?.name ?? ''}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <TouchableOpacity onPress={openHelp} hitSlop={8}>
+              <Ionicons name="help-circle-outline" size={26} color={t.primary} />
+            </TouchableOpacity>
+            <View style={[styles.userChipTop, { backgroundColor: t.surface }]}>
+              <Text style={{ color: t.primary, fontWeight: '600', fontSize: font.sm }}>{user?.name ?? ''}</Text>
+            </View>
           </View>
         </View>
         <View style={[styles.header, { borderBottomColor: t.border }]}>
@@ -231,6 +240,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Фильтр Все / Я / Партнёр с суммами — стиль веб-чипов, скролл вместо обрезки */}
+        <View ref={filterTarget} collapsable={false}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
           {([['all', 'Все', total], ['me', 'Я', myTotal], ['partner', 'Партнёр', partnerTotal]] as const).map(([k, lbl, sum]) => (
             <TouchableOpacity
@@ -247,6 +257,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+        </View>
 
         {/* Итого за день */}
         <View style={[styles.totalCard, { backgroundColor: t.surface }]}>
@@ -369,6 +380,7 @@ export default function HomeScreen() {
 
         {/* FAB — градиент как у веб-кнопок */}
         <TouchableOpacity
+          ref={fabTarget}
           activeOpacity={0.85}
           style={styles.fab}
           onPress={() => { haptics.medium(); addSheetRef.current?.expand(); }}

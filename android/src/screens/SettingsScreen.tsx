@@ -20,6 +20,7 @@ import { Field, PrimaryButton } from '../components/UI';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
+import { openHelp } from '../help';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -646,11 +647,15 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </Card>
 
-        {/* Guide */}
+        {/* Guide & Help */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Обучение</Text>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Помощь</Text>
+          <TouchableOpacity style={styles.row} onPress={() => openHelp()}>
+            <Text style={{ color: t.text }}>❓ Помощь и частые вопросы</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.row} onPress={() => startTour()}>
-            <Text style={{ color: t.text }}>🧭 Гид по интерфейсу</Text>
+            <Text style={{ color: t.text }}>🧭 Пройти вводный тур</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
         </Card>
@@ -658,7 +663,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.9.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.10.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

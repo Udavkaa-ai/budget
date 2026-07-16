@@ -7,64 +7,86 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { useBlocks } from '../blocks';
 import { useTourActive, endTour } from '../tour';
 import { goToTab } from '../navigation';
+import { measureTarget, type Rect } from '../tourTargets';
+import { openHelp } from '../help';
 import { haptics } from '../haptics';
 
-const TAB_BAR_H = 60;
-
 type Step = {
-  tab?: string;          // на какую вкладку перейти
-  target: 'tab' | 'fab' | 'center';
-  tabName?: string;      // для target='tab' — какую вкладку подсветить
+  tab?: string;          // на какую вкладку перейти перед показом
+  targetId?: string;     // что подсветить (замеряется реально); нет — карточка без рамки
+  needBlock?: 'chartTab' | 'goalsTab' | 'gauge'; // пропустить шаг, если блок выключен
   icon: string;
   title: string;
   body: string;
 };
 
+// Сценарный тур: ведём нового человека по реальному пути, объясняя термины.
 const STEPS: Step[] = [
   {
-    target: 'center', icon: 'sparkles',
-    title: 'Добро пожаловать!',
-    body: 'Семейный бюджет — общий учёт расходов для всей семьи в реальном времени. Покажу за минуту, что где находится.',
+    icon: 'sparkles',
+    title: 'Привет!',
+    body: 'Это ваш семейный бюджет — общий учёт трат для всей семьи. Покажу за минуту, как им пользоваться. По шагам.',
   },
   {
-    tab: 'Home', target: 'tab', tabName: 'Home', icon: 'wallet',
-    title: 'Бюджет',
-    body: 'Лента расходов за день. Свайп влево/вправо — соседние дни. Долгое нажатие на расход — редактировать или удалить. Сверху — фильтр «Все / вы / партнёр».',
+    tab: 'Home', targetId: 'home.fab', icon: 'add-circle',
+    title: 'Шаг 1. Внесите расход',
+    body: 'Нажмите «+» и впишите, например, «кофе 200» — приложение само подберёт категорию. Так каждый день фиксируются траты. Позже: свайп по дням, долгое нажатие на расход — правка.',
   },
   {
-    tab: 'Home', target: 'fab', icon: 'add-circle',
-    title: 'Добавить расход',
-    body: 'Кнопка «+». По умолчанию — свободный текст с распознаванием ИИ («молоко 80, такси 300»). Есть и обычная форма, и скан чека камерой.',
+    tab: 'Home', targetId: 'home.filter', icon: 'people',
+    title: 'Кто потратил',
+    body: '«Партнёр» — это второй член семьи. Пока вы один, но когда пригласите близких, здесь можно смотреть траты каждого по отдельности или вместе.',
   },
   {
-    tab: 'Summary', target: 'tab', tabName: 'Summary', icon: 'pie-chart',
-    title: 'Месяц',
-    body: 'Итоги месяца: баблометр «факт/план», расходы по категориям с лимитами, тепловая карта по дням и сравнение с прошлым месяцем.',
+    tab: 'Summary', icon: 'pie-chart',
+    title: 'Шаг 2. Итоги месяца',
+    body: 'Все траты за месяц собираются здесь — по категориям и общей суммой. Так видно, на что уходят деньги.',
   },
   {
-    tab: 'Chart', target: 'tab', tabName: 'Chart', icon: 'trending-up',
-    title: 'График',
-    body: 'Динамика трат по дням, линия баланса и доходов. Ниже — кэшфлоу и поступления по дням. Ненужные линии можно отключать в легенде.',
+    tab: 'Summary', targetId: 'summary.gauge', needBlock: 'gauge', icon: 'speedometer',
+    title: 'Что за «баблометр»',
+    body: 'Это спидометр бюджета. Он показывает, сколько вы уже потратили относительно плана к этому дню месяца. Стрелка в зелёной зоне — идёте по плану, в красной — перерасход.',
   },
   {
-    tab: 'Goals', target: 'tab', tabName: 'Goals', icon: 'flag',
-    title: 'Цели',
-    body: 'Копите на общие цели семьёй: задайте сумму, пополняйте и следите за прогрессом. Здесь же — лимиты по категориям.',
+    tab: 'Summary', icon: 'options',
+    title: 'Настройте лимиты',
+    body: 'Задайте лимиты по категориям (кнопка «Лимиты» у списка категорий). Тогда под каждой категорией видно «осталось» или «перерасход» — сразу понятно, укладываетесь ли в план.',
   },
   {
-    tab: 'Settings', target: 'tab', tabName: 'Settings', icon: 'settings',
-    title: 'Настройки',
-    body: 'Название семьи и приглашения, тема (светлая/тёмная/авто), конструктор блоков аналитики, замок по отпечатку или PIN, шифрованные резервные копии.',
+    tab: 'Chart', needBlock: 'chartTab', icon: 'trending-up',
+    title: 'Динамика и доходы',
+    body: 'Вкладка «График» показывает, в какие дни тратили больше, линию баланса и доходы. Удобно ловить моменты, когда деньги уходят быстрее плана.',
   },
   {
-    tab: 'Settings', target: 'center', icon: 'diamond',
+    tab: 'Goals', needBlock: 'goalsTab', icon: 'flag',
+    title: 'Копите на общее',
+    body: '«Цели» — копилка на отпуск, технику, что угодно. Задайте сумму и пополняйте, приложение покажет прогресс.',
+  },
+  {
+    tab: 'Settings', icon: 'people-circle',
+    title: 'Шаг 3. Позовите семью',
+    body: 'Откройте Настройки и нажмите «Пригласить в семью». Близкие вводят код у себя — и все вносят расходы со своих телефонов, видя общую картину в реальном времени. Так бюджет становится действительно семейным.',
+  },
+  {
+    tab: 'Settings', icon: 'construct',
+    title: 'Соберите аналитику под себя',
+    body: 'Баблометр, тепловую карту, графики и другие блоки можно включать и выключать в «Конструкторе». Оставьте те, что нравятся, остальное скройте.',
+  },
+  {
+    tab: 'Settings', icon: 'lock-closed',
+    title: 'Приватность',
+    body: 'Вход по отпечатку или PIN-коду, а резервные копии шифруются прямо на телефоне: на сервер данные уходят уже зашифрованными, читать их можете только вы.',
+  },
+  {
+    tab: 'Settings', icon: 'diamond',
     title: 'Премиум',
-    body: 'ИИ-разбор текста и голоса, сканирование чеков и ИИ-анализ месяца. Сейчас доступен бесплатно в тестовом режиме — включается в Настройках.',
+    body: 'ИИ разбирает текст и чеки и делает разбор месяца с советами. Сейчас доступен бесплатно в тестовом режиме — включается в Настройках.',
   },
   {
-    target: 'center', icon: 'checkmark-circle',
+    icon: 'checkmark-circle',
     title: 'Готово!',
-    body: 'Это всё основное. Повторить тур можно в любой момент: Настройки → «Гид по интерфейсу».',
+    body: 'Это всё основное. Открыть подробную «Помощь» или пройти тур заново можно в Настройках. Удачного планирования!',
+    targetId: '__help',
   },
 ];
 
@@ -74,79 +96,71 @@ export function Tour() {
   const blocks = useBlocks();
   const insets = useSafeAreaInsets();
   const [i, setI] = useState(0);
-  const [dim, setDim] = useState(() => Dimensions.get('window'));
+  const [spot, setSpot] = useState<Rect | null>(null);
+  const [dim] = useState(() => Dimensions.get('window'));
 
-  useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ window }) => setDim(window));
-    return () => sub.remove();
-  }, []);
-
-  // Сброс на первый шаг при каждом запуске
   useEffect(() => { if (active) setI(0); }, [active]);
 
-  // Пропускаем шаги про отключённые вкладки (Chart/Goals в конструкторе)
+  // Отфильтрованные шаги (пропускаем про выключенные вкладки/блоки)
   const steps = STEPS.filter(s => {
-    const name = s.tabName ?? s.tab;
-    if (name === 'Chart') return blocks.chartTab;
-    if (name === 'Goals') return blocks.goalsTab;
+    if (s.needBlock === 'chartTab') return blocks.chartTab;
+    if (s.needBlock === 'goalsTab') return blocks.goalsTab;
+    if (s.needBlock === 'gauge') return blocks.gauge;
     return true;
   });
-
   const step = steps[i];
 
-  // Переход на нужную вкладку для текущего шага
+  // При смене шага: перейти на вкладку и замерить цель (с ретраями на монтирование)
   useEffect(() => {
-    if (active && step?.tab) goToTab(step.tab);
-  }, [active, i, step?.tab]);
+    if (!active || !step) return;
+    let cancelled = false;
+    setSpot(null);
+    if (step.tab) goToTab(step.tab);
+    (async () => {
+      if (!step.targetId || step.targetId.startsWith('__')) return;
+      for (let attempt = 0; attempt < 14 && !cancelled; attempt++) {
+        await new Promise(r => setTimeout(r, 130));
+        const r = await measureTarget(step.targetId!);
+        if (cancelled) return;
+        if (r) {
+          // Цель должна быть в пределах экрана — иначе показываем без рамки
+          if (r.y > -20 && r.y + r.h < dim.height + 20) setSpot(r);
+          return;
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [active, i, step?.tab, step?.targetId]);
 
   if (!active || !step) return null;
 
-  // Список видимых вкладок в порядке таб-бара (совпадает с navigation)
-  const tabs = ['Home', 'Summary', blocks.chartTab && 'Chart', 'Settings', blocks.goalsTab && 'Goals']
-    .filter(Boolean) as string[];
-
   const W = dim.width, H = dim.height;
-  const barTop = H - TAB_BAR_H - insets.bottom;
-
-  // Прямоугольник подсветки
-  let spot: { x: number; y: number; w: number; h: number } | null = null;
-  if (step.target === 'tab' && step.tabName) {
-    const idx = Math.max(0, tabs.indexOf(step.tabName));
-    const tw = W / tabs.length;
-    spot = { x: idx * tw, y: barTop, w: tw, h: TAB_BAR_H };
-  } else if (step.target === 'fab') {
-    const size = 60;
-    spot = { x: W - 24 - size, y: barTop - 24 - size, w: size, h: size };
-  }
-
   const isLast = i === steps.length - 1;
   const next = () => { haptics.select(); if (isLast) finish(); else setI(n => n + 1); };
   const back = () => { haptics.select(); setI(n => Math.max(0, n - 1)); };
   const finish = () => { haptics.success(); endTour(); };
-
-  // Куда поставить карточку-подсказку: если подсветка снизу — карточку выше, иначе по центру
-  const cardAtBottom = !spot || spot.y > H * 0.5;
+  const openHelpFromTour = () => { endTour(); openHelp(); };
 
   const PAD = 8;
-  const overlay = 'rgba(10,8,25,0.72)';
+  const overlay = 'rgba(10,8,25,0.74)';
+  // Карточку ставим на противоположную от подсветки половину экрана
+  const cardAtBottom = !spot || (spot.y + spot.h / 2) < H * 0.5;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Затемнение: либо 4 полосы вокруг подсветки, либо сплошное */}
       {spot ? (
         <>
-          <View style={[styles.mask, { backgroundColor: overlay, top: 0, left: 0, right: 0, height: spot.y - PAD }]} />
+          <View style={[styles.mask, { backgroundColor: overlay, top: 0, left: 0, right: 0, height: Math.max(0, spot.y - PAD) }]} />
           <View style={[styles.mask, { backgroundColor: overlay, top: spot.y + spot.h + PAD, left: 0, right: 0, bottom: 0 }]} />
-          <View style={[styles.mask, { backgroundColor: overlay, top: spot.y - PAD, left: 0, width: spot.x - PAD, height: spot.h + PAD * 2 }]} />
+          <View style={[styles.mask, { backgroundColor: overlay, top: spot.y - PAD, left: 0, width: Math.max(0, spot.x - PAD), height: spot.h + PAD * 2 }]} />
           <View style={[styles.mask, { backgroundColor: overlay, top: spot.y - PAD, left: spot.x + spot.w + PAD, right: 0, height: spot.h + PAD * 2 }]} />
-          {/* Рамка вокруг подсвеченного элемента */}
           <View
             pointerEvents="none"
             style={{
               position: 'absolute',
               left: spot.x - PAD, top: spot.y - PAD,
               width: spot.w + PAD * 2, height: spot.h + PAD * 2,
-              borderRadius: 16, borderWidth: 2.5, borderColor: t.primary,
+              borderRadius: 18, borderWidth: 2.5, borderColor: t.primary,
             }}
           />
         </>
@@ -154,7 +168,6 @@ export function Tour() {
         <View style={[StyleSheet.absoluteFill, { backgroundColor: overlay }]} />
       )}
 
-      {/* Карточка-подсказка */}
       <Animated.View
         key={i}
         entering={FadeIn.duration(220)}
@@ -162,8 +175,8 @@ export function Tour() {
           styles.card,
           { backgroundColor: t.surface, borderColor: t.border },
           cardAtBottom
-            ? { bottom: TAB_BAR_H + insets.bottom + 24 }
-            : { top: H * 0.5 - 40 },
+            ? { bottom: 64 + insets.bottom + 20 }
+            : { top: insets.top + 20 },
         ]}
       >
         <View style={styles.cardHead}>
@@ -172,9 +185,15 @@ export function Tour() {
           </View>
           <Text style={[styles.title, { color: t.text }]}>{step.title}</Text>
         </View>
-        <Text style={{ color: t.textMuted, fontSize: font.md, lineHeight: 22 }}>{step.body}</Text>
+        <Text style={{ color: t.textMuted, fontSize: font.md, lineHeight: 23 }}>{step.body}</Text>
 
-        {/* Точки-прогресс */}
+        {step.targetId === '__help' && (
+          <TouchableOpacity onPress={openHelpFromTour} style={{ marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="help-circle" size={18} color={t.primary} />
+            <Text style={{ color: t.primary, fontWeight: '600', fontSize: font.sm }}>Открыть раздел «Помощь»</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.dots}>
           {steps.map((_, k) => (
             <View key={k} style={[styles.dot, { backgroundColor: k === i ? t.primary : t.border }]} />
@@ -182,17 +201,17 @@ export function Tour() {
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity onPress={finish}>
+          <TouchableOpacity onPress={finish} hitSlop={8}>
             <Text style={{ color: t.textMuted, fontSize: font.sm }}>Пропустить</Text>
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {i > 0 && (
               <TouchableOpacity onPress={back} style={[styles.navBtn, { backgroundColor: t.surface2 }]}>
-                <Text style={{ color: t.text, fontWeight: '600' }}>Назад</Text>
+                <Text numberOfLines={1} style={{ color: t.text, fontWeight: '600' }}>Назад</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={next} style={[styles.navBtn, { backgroundColor: t.primary }]}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>{isLast ? 'Готово' : 'Далее'}</Text>
+              <Text numberOfLines={1} style={{ color: '#fff', fontWeight: '700' }}>{isLast ? 'Готово' : 'Далее'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -211,8 +230,8 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   iconBadge: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: font.xl, fontWeight: '800', flex: 1 },
-  dots: { flexDirection: 'row', gap: 6, justifyContent: 'center', marginTop: spacing.lg },
+  dots: { flexDirection: 'row', gap: 6, justifyContent: 'center', marginTop: spacing.lg, flexWrap: 'wrap' },
   dot: { width: 7, height: 7, borderRadius: 4 },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
-  navBtn: { borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  navBtn: { borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, minWidth: 88, alignItems: 'center' },
 });

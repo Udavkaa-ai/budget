@@ -12,6 +12,7 @@ import { initThemeMode, useEffectiveScheme } from './src/theme';
 import { initAppLock, useLockEnabled, isAuthInProgress } from './src/applock';
 import { LockScreen } from './src/components/LockScreen';
 import { Tour } from './src/components/Tour';
+import { HelpScreen } from './src/components/HelpScreen';
 import { initTour, tourSeen, isTourActive, startTour, useTourLoaded } from './src/tour';
 
 import { AppNavigator, navigationRef } from './src/navigation';
@@ -132,6 +133,7 @@ function Root() {
         <AppNavigator />
       </NavigationContainer>
       <Tour />
+      <HelpScreen />
     </View>
   );
 }
