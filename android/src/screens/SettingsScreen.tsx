@@ -14,7 +14,8 @@ import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
 import { useCategories, refreshCategories } from '../categories';
-import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate } from '../applock';
+import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate, useHasPin, setPin, clearPin } from '../applock';
+import { PinPad } from '../components/PinPad';
 import { Field, PrimaryButton } from '../components/UI';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
@@ -26,6 +27,13 @@ export default function SettingsScreen() {
   const blocks = useBlocks();
   const themeMode = useThemeMode();
   const lockEnabled = useLockEnabled();
+  const hasPinSet = useHasPin();
+  // PIN-модалка: setup = задать (ввод дважды), change/remove через подтверждение
+  const [pinModal, setPinModal] = useState(false);
+  const [pinStage, setPinStage] = useState<'enter' | 'confirm'>('enter');
+  const [pinFirst, setPinFirst] = useState('');
+  const [pinErr, setPinErr] = useState(false);
+  const [pinAfterSet, setPinAfterSet] = useState(false); // включить замок после задания PIN
   const { custom } = useCategories();
   const [newCatName, setNewCatName] = useState('');
   const [newCatEmoji, setNewCatEmoji] = useState('');
@@ -205,15 +213,58 @@ export default function SettingsScreen() {
 
   const toggleLock = async (v: boolean) => {
     if (v) {
-      if (!(await canUseBiometrics())) {
-        Alert.alert('Недоступно', 'На устройстве не настроен отпечаток/пароль. Настройте блокировку экрана в системе.');
-        return;
+      const bio = await canUseBiometrics();
+      if (bio) {
+        if (await authenticate()) await setLockEnabled(true);
+      } else if (hasPinSet) {
+        await setLockEnabled(true);
+      } else {
+        // Ни биометрии, ни PIN — предлагаем задать PIN, затем включим замок
+        Alert.alert(
+          'Нужен способ разблокировки',
+          'Отпечаток/Face ID недоступны. Задайте PIN-код, чтобы включить замок.',
+          [
+            { text: 'Отмена', style: 'cancel' },
+            { text: 'Задать PIN', onPress: () => openPinSetup(true) },
+          ],
+        );
       }
-      if (await authenticate()) await setLockEnabled(true);
     } else {
       // подтверждаем личность перед отключением
-      if (await authenticate()) await setLockEnabled(false);
+      const bio = await canUseBiometrics();
+      if (bio ? await authenticate() : hasPinSet) {
+        await setLockEnabled(false);
+      }
     }
+  };
+
+  const openPinSetup = (afterSet = false) => {
+    setPinAfterSet(afterSet);
+    setPinStage('enter'); setPinFirst(''); setPinErr(false); setPinModal(true);
+  };
+
+  const onPinEntered = async (pin: string) => {
+    if (pinStage === 'enter') {
+      setPinFirst(pin);
+      setPinStage('confirm');
+    } else {
+      if (pin === pinFirst) {
+        await setPin(pin);
+        setPinModal(false);
+        if (pinAfterSet) { await setLockEnabled(true); setPinAfterSet(false); }
+        Alert.alert('Готово', 'PIN-код установлен.');
+      } else {
+        setPinErr(true);
+        setTimeout(() => { setPinErr(false); setPinStage('enter'); setPinFirst(''); }, 900);
+      }
+    }
+  };
+
+  const removePin = () => {
+    Alert.alert('Убрать PIN-код?', 'Разблокировка останется только по отпечатку/Face ID (если доступны).', [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Убрать', style: 'destructive', onPress: () => clearPin() },
+    ]);
   };
 
   const handleLogout = () => {
@@ -353,7 +404,7 @@ export default function SettingsScreen() {
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Профиль</Text>
           <Text style={[styles.profileName, { color: t.text }]}>{user?.name ?? '—'}</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Семья: {user?.family ?? '—'}</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Семья: {familyName.trim() || user?.family || '—'}</Text>
         </Card>
 
         {/* Family */}
@@ -439,13 +490,22 @@ export default function SettingsScreen() {
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Безопасность</Text>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: t.text }}>🔒 Вход по отпечатку / паролю</Text>
+              <Text style={{ color: t.text }}>🔒 Замок при открытии</Text>
               <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
-                Запрашивать разблокировку при открытии приложения
+                Разблокировка по отпечатку / Face ID или PIN-коду
               </Text>
             </View>
             <Switch value={lockEnabled} onValueChange={toggleLock} trackColor={{ true: t.primary }} />
           </View>
+          <TouchableOpacity style={styles.row} onPress={() => openPinSetup()}>
+            <Text style={{ color: t.text }}>🔢 {hasPinSet ? 'Изменить PIN-код' : 'Задать PIN-код'}</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+          {hasPinSet && (
+            <TouchableOpacity style={styles.row} onPress={removePin}>
+              <Text style={{ color: t.danger }}>Убрать PIN-код</Text>
+            </TouchableOpacity>
+          )}
         </Card>
 
         {/* Theme */}
@@ -588,7 +648,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.7.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.8.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.
@@ -688,6 +748,24 @@ export default function SettingsScreen() {
                 <Text style={{ color: '#fff', fontWeight: '700' }}>Сохранить</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* PIN setup modal */}
+      <Modal visible={pinModal} animationType="slide" transparent onRequestClose={() => setPinModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: t.surface, alignItems: 'center' }]}>
+            <Text style={[styles.modalTitle, { color: t.text }]}>
+              {pinStage === 'enter' ? 'Придумайте PIN-код' : 'Повторите PIN-код'}
+            </Text>
+            <Text style={{ color: pinErr ? t.danger : t.textMuted, fontSize: font.sm, marginBottom: spacing.lg, textAlign: 'center' }}>
+              {pinErr ? 'PIN не совпал — попробуйте снова' : '4 цифры для разблокировки приложения'}
+            </Text>
+            <PinPad key={pinStage + (pinErr ? 'e' : '')} onComplete={onPinEntered} error={pinErr} />
+            <TouchableOpacity style={{ marginTop: spacing.xl }} onPress={() => setPinModal(false)}>
+              <Text style={{ color: t.textMuted }}>Отмена</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

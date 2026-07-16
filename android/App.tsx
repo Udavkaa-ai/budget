@@ -4,13 +4,13 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme, ActivityIndicator, View, AppState } from 'react-native';
+import { ActivityIndicator, View, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
 import { refreshCategories } from './src/categories';
-import { initThemeMode, useEffectiveScheme, useTheme } from './src/theme';
-import { initAppLock, useLockEnabled, authenticate } from './src/applock';
-import { Text, TouchableOpacity } from 'react-native';
+import { initThemeMode, useEffectiveScheme } from './src/theme';
+import { initAppLock, useLockEnabled, isAuthInProgress } from './src/applock';
+import { LockScreen } from './src/components/LockScreen';
 
 import { AppNavigator } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -69,26 +69,15 @@ async function registerPushToken() {
 
 function Root() {
   const { user, loading, onLoginSuccess } = useAuth();
-  const scheme = useColorScheme();
-  const t = useTheme();
   const lockEnabled = useLockEnabled();
   const [unlocked, setUnlocked] = React.useState(false);
-  const [tried, setTried] = React.useState(false);
 
-  const tryUnlock = React.useCallback(async () => {
-    setTried(true);
-    if (await authenticate()) setUnlocked(true);
-  }, []);
-
-  useEffect(() => {
-    if (lockEnabled && !unlocked && !tried && !loading) tryUnlock();
-  }, [lockEnabled, unlocked, tried, loading, tryUnlock]);
-
-  // Блокируем заново при уходе в фон
+  // Блокируем заново при уходе в фон. Игнорируем ложный уход в фон,
+  // вызванный системным окном биометрии (иначе промпт «мигает» и не срабатывает).
   useEffect(() => {
     if (!lockEnabled) return;
     const sub = AppState.addEventListener('change', st => {
-      if (st === 'background') { setUnlocked(false); setTried(false); }
+      if (st !== 'active' && !isAuthInProgress()) setUnlocked(false);
     });
     return () => sub.remove();
   }, [lockEnabled]);
@@ -121,21 +110,7 @@ function Root() {
   }
 
   if (lockEnabled && !unlocked && !loading && user) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: t.bg, padding: 32 }}>
-        <Text style={{ fontSize: 56, marginBottom: 12 }}>🔒</Text>
-        <Text style={{ color: t.text, fontSize: 20, fontWeight: '800', marginBottom: 6 }}>Семейный бюджет</Text>
-        <Text style={{ color: t.textMuted, textAlign: 'center', marginBottom: 24 }}>
-          Приложение заблокировано
-        </Text>
-        <TouchableOpacity
-          style={{ backgroundColor: t.primary, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28 }}
-          onPress={tryUnlock}
-        >
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Разблокировать</Text>
-        </TouchableOpacity>
-      </View>
-    );
+    return <LockScreen onUnlock={() => setUnlocked(true)} />;
   }
 
   if (!user) {

@@ -39,9 +39,17 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [predicting, setPredicting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [mode, setMode] = useState<'form' | 'text'>('form');
+  // По умолчанию — свободный ввод текстом с ИИ-распознаванием (если премиум).
+  // Без премиума открываем форму, чтобы не упереться в платный разбор.
+  const [mode, setMode] = useState<'form' | 'text'>(premium ? 'text' : 'form');
   const [freeText, setFreeText] = useState('');
   const [parsing, setParsing] = useState(false);
+
+  // Премиум мог инициализироваться асинхронно после монтирования —
+  // тогда переключаем дефолт на «Текстом» (срабатывает один раз, при появлении премиума)
+  useEffect(() => {
+    if (premium) setMode('text');
+  }, [premium]);
 
   // Predict category as user types
   useEffect(() => {
@@ -245,6 +253,9 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       enablePanDownToClose
       backgroundStyle={{ backgroundColor: t.surface }}
       handleIndicatorStyle={{ backgroundColor: t.border }}
+      // Поверх всего экрана: иначе карточки с elevation (напр. «Итого за день»)
+      // на Android «пробивают» лист ввода
+      containerStyle={{ elevation: 30, zIndex: 30 }}
     >
       <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg }}>
         <View style={styles.titleRow}>

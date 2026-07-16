@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   userChipTop:{ borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   filterRow:  { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   filterChip: { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1.5 },
-  totalCard:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', margin: spacing.md, marginBottom: spacing.xs, padding: spacing.lg, borderRadius: radius.lg, elevation: 5, shadowColor: '#5947E0', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, zIndex: 2 },
+  totalCard:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', margin: spacing.md, marginBottom: spacing.xs, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(89,71,224,0.16)', shadowColor: '#5947E0', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
   groupHdr:   { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.md, paddingBottom: spacing.xs },
   header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
   navBtn:     { padding: spacing.md },
