@@ -106,11 +106,15 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", 'https://accounts.google.com', 'https://cdn.jsdelivr.net'],
+      // 'unsafe-eval' и blob: нужны Chart.js/плагину зума (иначе график падает).
+      // Инлайн-скрипты по-прежнему запрещены (нет 'unsafe-inline'), поэтому
+      // основная защита от XSS сохраняется.
+      scriptSrc: ["'self'", "'unsafe-eval'", 'blob:', 'https://accounts.google.com', 'https://cdn.jsdelivr.net'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'", 'https://accounts.google.com'],
+      connectSrc: ["'self'", 'https://accounts.google.com', 'https://cdn.jsdelivr.net'],
+      workerSrc: ["'self'", 'blob:'],
       frameSrc: ['https://accounts.google.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
