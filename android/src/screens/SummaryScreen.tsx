@@ -247,7 +247,7 @@ export default function SummaryScreen() {
   const incomes = plan?.incomes ?? {};
   const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
 
-  // Баблометр: факт против плана, пропорционально прошедшим дням
+  // Барометр бюджета: факт против плана, пропорционально прошедшим дням
   const daysInMonth = new Date(year, month, 0).getDate();
   const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
   const daysPassed = isCurrentMonth ? now.getDate() : daysInMonth;
@@ -333,11 +333,11 @@ export default function SummaryScreen() {
           </Card>
           </View>
 
-          {/* Баблометр — спидометр как в вебе */}
+          {/* Барометр бюджета — спидометр как в вебе */}
           {blocks.gauge && gaugePct !== null && (
             <View ref={gaugeTarget} collapsable={false} onLayout={tOffset('summary.gauge')}>
             <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Баблометр</Text>
+              <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Барометр бюджета</Text>
               <View style={{ alignItems: 'center' }}>
                 <Svg width="100%" height={150} viewBox="0 0 260 150">
                   {/* Зоны: зелёная до 70%, жёлтая 70-100%, красная 100-160% */}
