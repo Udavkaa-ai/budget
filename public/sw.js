@@ -1,5 +1,5 @@
 // Service Worker — network-first: всегда свежие файлы, кэш только при офлайне
-const CACHE = 'budget-v8';
+const CACHE = 'budget-v9';
 const STATIC = ['/', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -18,17 +18,34 @@ self.addEventListener('activate', e => {
   );
 });
 
+// Имя текущего пользователя — страница присылает его через postMessage.
+// Храним в Cache (переживает перезапуск воркера), чтобы не показывать
+// уведомления о собственных записях — они нужны только про партнёра.
+const META = 'budget-meta';
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'set-self') {
+    e.waitUntil(caches.open(META).then(c => c.put('/__self', new Response(e.data.name || ''))));
+  }
+});
+async function getSelfName() {
+  try { const r = await caches.match('/__self'); return r ? await r.text() : null; }
+  catch { return null; }
+}
+
 self.addEventListener('push', e => {
-  const data = e.data?.json() || {};
-  e.waitUntil(
-    self.registration.showNotification(data.title || 'Семейный бюджет', {
+  e.waitUntil((async () => {
+    const data = e.data?.json() || {};
+    const selfName = await getSelfName();
+    // Своё же действие — не уведомляем
+    if (data.by && selfName && data.by === selfName) return;
+    await self.registration.showNotification(data.title || 'Семейный бюджет', {
       body: data.body || '',
       icon: '/icon-512.png',
       badge: '/icon-512.png',
       data: { url: data.url || '/' },
       vibrate: [100, 50, 100],
-    })
-  );
+    });
+  })());
 });
 
 self.addEventListener('notificationclick', e => {
