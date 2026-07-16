@@ -4,8 +4,9 @@ import {
   Alert, TextInput, Modal, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
-import { goals as goalsApi, budgetPlan, type Goal, type BudgetPlan } from '../api/client';
+import { goals as goalsApi, budgetPlan, expenses as expApi, settings as settingsApi, type Goal, type BudgetPlan, type Expense } from '../api/client';
 import { useCategories } from '../categories';
 import { PrimaryButton } from '../components/UI';
 import { Card } from '../components/Card';
@@ -13,6 +14,7 @@ import { ScreenGradient } from '../components/ScreenGradient';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
+import { ACHIEVEMENTS, useAchievements, evaluateFromData } from '../achievements';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -20,7 +22,8 @@ function fmt(n: number) {
 
 export default function GoalsScreen() {
   const t = useTheme();
-  const { cats: allCats, icon: catIcon } = useCategories();
+  const { cats: allCats, icon: catIcon, custom } = useCategories();
+  const { unlocked, count, total } = useAchievements();
   const [list, setList] = useState<Goal[]>([]);
   // Лимиты по категориям (как в вебе на вкладке Цели)
   const [plan, setPlan] = useState<BudgetPlan | null>(null);
@@ -52,9 +55,32 @@ export default function GoalsScreen() {
         for (const [c, v] of Object.entries(budgets)) ld[c] = v ? String(v) : '';
         setLimitDraft(ld);
       }
+      evaluateAchievements(g).catch(() => {});
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
+  };
+
+  // Собираем данные за последние 3 месяца и проверяем достижения
+  const evaluateAchievements = async (goalsList: Goal[]) => {
+    const now = new Date();
+    const months = [0, 1, 2].map(off => {
+      const d = new Date(now.getFullYear(), now.getMonth() - off, 1);
+      return { m: d.getMonth() + 1, y: d.getFullYear() };
+    });
+    const chunks = await Promise.all(
+      months.map(({ m, y }) => expApi.forMonth(m, y).catch(() => [] as Expense[])),
+    );
+    const expenses = chunks.flat().filter(Boolean);
+    const st = await settingsApi.get().catch(() => ({} as { plannedMonthly?: number }));
+    const users = [...new Set(expenses.map(e => e.user).filter(Boolean))];
+    evaluateFromData({
+      expenses,
+      plannedMonthly: st.plannedMonthly ?? 0,
+      customCatCount: custom.length,
+      goals: goalsList.map(g => ({ saved: g.saved, target: g.target })),
+      users,
+    });
   };
 
   const saveLimits = async () => {
@@ -204,6 +230,38 @@ export default function GoalsScreen() {
                 </Card>
               );
             })}
+
+            {/* Мои достижения */}
+            <Card>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                <Text style={{ fontSize: font.sm, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textMuted }}>
+                  🏅 Мои достижения
+                </Text>
+                <Text style={{ color: t.primary, fontWeight: '700', fontSize: font.sm }}>{count} / {total}</Text>
+              </View>
+              {ACHIEVEMENTS.map(a => {
+                const got = !!unlocked[a.id];
+                const hidden = a.secret && !got;
+                return (
+                  <View key={a.id} style={[styles.achRow, { borderColor: t.border }]}>
+                    <Text style={{ fontSize: 26, opacity: got ? 1 : 0.35, width: 36, textAlign: 'center' }}>
+                      {hidden ? '❓' : a.emoji}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: got ? t.text : t.textMuted, fontWeight: got ? '700' : '600', fontSize: font.md }}>
+                        {hidden ? 'Секретное достижение' : a.title}
+                      </Text>
+                      <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 1 }}>
+                        {hidden ? 'Условие откроется, когда вы его выполните' : a.desc}
+                      </Text>
+                    </View>
+                    {got
+                      ? <Ionicons name="checkmark-circle" size={22} color={t.success} />
+                      : <Ionicons name="lock-closed" size={16} color={t.textMuted} />}
+                  </View>
+                );
+              })}
+            </Card>
           </ScrollView>
         )}
 
@@ -263,6 +321,7 @@ const styles = StyleSheet.create({
   progBg:      { height: 10, borderRadius: 5, overflow: 'hidden' },
   progFill:    { height: '100%', borderRadius: 5 },
   contribBtn:  { marginTop: spacing.md, borderRadius: radius.sm, padding: spacing.sm, alignItems: 'center' },
+  achRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
   modal:       { flex: 1 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   modalTitle:  { fontSize: font.lg, fontWeight: '700' },

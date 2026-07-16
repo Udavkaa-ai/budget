@@ -16,6 +16,7 @@ import { expenses, ai, type AuthUser, type ParsedExpense } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
+import { checkOnAddExpense } from '../achievements';
 
 function todayStr() {
   const d = new Date();
@@ -104,6 +105,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       await learn(description, selectedCat);
       queueContribution(description, selectedCat);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      checkOnAddExpense();
       reset();
       sheetRef?.current?.close();
       onAdded();
@@ -121,6 +123,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
                 await queueExpense(item);
                 await learn(description, selectedCat!);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                checkOnAddExpense();
                 reset();
                 sheetRef?.current?.close();
                 onAdded();
@@ -194,6 +197,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         })),
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      checkOnAddExpense({ receipt: preview.source === 'photo' });
       setPreview(null); setCatEditIdx(null); setDateEditIdx(null);
       setFreeText('');
       sheetRef?.current?.close();

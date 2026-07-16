@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
 import { useBlocks } from '../blocks';
 import { useTourActive, endTour } from '../tour';
+import { unlock } from '../achievements';
 import { goToTab } from '../navigation';
 import { measureTarget, measureNode, scrollTargetIntoView, type Rect } from '../tourTargets';
 import { openHelp } from '../help';
@@ -148,8 +149,10 @@ export function Tour() {
   const isLast = i === steps.length - 1;
   const next = () => { haptics.select(); if (isLast) finish(); else setI(n => n + 1); };
   const back = () => { haptics.select(); setI(n => Math.max(0, n - 1)); };
-  const finish = () => { haptics.success(); endTour(); };
-  const openHelpFromTour = () => { endTour(); openHelp(); };
+  // Дошёл до конца — ачивка «Экскурсовод». «Пропустить» — без ачивки.
+  const finish = () => { haptics.success(); unlock('tour'); endTour(); };
+  const skip = () => { haptics.select(); endTour(); };
+  const openHelpFromTour = () => { unlock('tour'); endTour(); openHelp(); };
 
   const PAD = 8;
   const overlay = 'rgba(10,8,25,0.74)';
@@ -211,7 +214,7 @@ export function Tour() {
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity onPress={finish} hitSlop={8}>
+          <TouchableOpacity onPress={skip} hitSlop={8}>
             <Text style={{ color: t.textMuted, fontSize: font.sm }}>Пропустить</Text>
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>

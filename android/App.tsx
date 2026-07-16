@@ -13,7 +13,9 @@ import { initAppLock, useLockEnabled, isAuthInProgress } from './src/applock';
 import { LockScreen } from './src/components/LockScreen';
 import { Tour } from './src/components/Tour';
 import { HelpScreen } from './src/components/HelpScreen';
+import { AchievementToast } from './src/components/AchievementToast';
 import { initTour, tourSeen, isTourActive, startTour, useTourLoaded } from './src/tour';
+import { initAchievements } from './src/achievements';
 
 import { AppNavigator, navigationRef } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -38,6 +40,7 @@ initBlocks().catch(console.error);
 initThemeMode().catch(console.error);
 initAppLock().catch(console.error);
 initTour().catch(console.error);
+initAchievements().catch(console.error);
 
 // Download crowd dictionary from server and merge into local DB
 async function syncCrowdDict() {
@@ -134,6 +137,7 @@ function Root() {
       </NavigationContainer>
       <Tour />
       <HelpScreen />
+      <AchievementToast />
     </View>
   );
 }
