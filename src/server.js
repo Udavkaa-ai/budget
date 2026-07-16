@@ -401,6 +401,7 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
       title: `💸 ${req.user.name} добавил расход`,
       body: `${desc} — ${total.toLocaleString('ru')} ₽`,
       url: '/',
+      by: req.user.name,
     }).catch(() => {});
   }
 
@@ -687,6 +688,7 @@ app.post('/api/sync/records', authMiddleware, (req, res) => {
       title: '💸 Обновление бюджета',
       body: `${req.user.name} внёс изменения`,
       url: '/',
+      by: req.user.name,
     }).catch(() => {});
   }
   res.json(out);

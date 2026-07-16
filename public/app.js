@@ -446,9 +446,22 @@ function closeBeautySheet() {
 
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
+// Сообщаем service worker'у, кто мы, — чтобы он не показывал уведомления
+// о наших же записях (они нужны только про партнёра)
+async function pushSelfToSW() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    (reg.active || navigator.serviceWorker.controller)?.postMessage({
+      type: 'set-self', name: currentUser?.name || '',
+    });
+  } catch { /* ignore */ }
+}
+
 async function initPushNotifications() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
+    pushSelfToSW();
     const settings = await apiJson('GET', '/api/push/settings');
     updatePushToggleUI(settings.enabled);
     if (!settings.enabled) return;
@@ -465,6 +478,7 @@ async function subscribeToPush() {
     applicationServerKey: urlBase64ToUint8Array(publicKey),
   });
   await apiJson('POST', '/api/push/subscribe', { subscription: sub.toJSON() });
+  pushSelfToSW();
 }
 
 async function unsubscribeFromPush() {
