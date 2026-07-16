@@ -221,6 +221,16 @@ const ANALYSIS_SYSTEM_PROMPT = `Ты — финансовый советник �
 /**
  * Финансовый анализ бюджета семьи через AI
  */
+// Шрифт интерфейса (Onest) не содержит стрелочных глифов → ↑ ↓ ← —
+// заменяем их на глифы, которые в шрифте есть, чтобы не рисовался мусор.
+function sanitizeArrows(s) {
+  return (s || '')
+    .replace(/[→⟶➜➡⇒⟹➔➙🡒]/g, '›')
+    .replace(/[↑↗⬆🡑]/g, '▲')
+    .replace(/[↓↘⬇🡓]/g, '▼')
+    .replace(/[←⟵⬅🡐]/g, '‹');
+}
+
 export async function analyzeFinances(reportText) {
   if (!config.openRouterKey) {
     return { report: null, error: 'Нет API ключа' };
@@ -271,7 +281,7 @@ export async function analyzeFinances(reportText) {
       if (!content) continue;
 
       console.log(`✅ Analysis via ${model}`);
-      return { report: content, model };
+      return { report: sanitizeArrows(content), model };
     } catch (e) {
       clearTimeout(timeout);
       console.warn(`Analysis ${model}: ${e.message}`);

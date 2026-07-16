@@ -1,6 +1,10 @@
 // Service Worker — network-first: всегда свежие файлы, кэш только при офлайне
-const CACHE = 'budget-v9';
-const STATIC = ['/', '/style.css', '/app.js', '/manifest.json'];
+const CACHE = 'budget-v10';
+const STATIC = [
+  '/', '/style.css', '/app.js', '/manifest.json',
+  '/vendor/chart.umd.min.js', '/vendor/hammer.min.js',
+  '/vendor/chartjs-plugin-zoom.min.js', '/vendor/chartjs-plugin-datalabels.min.js',
+];
 
 self.addEventListener('install', e => {
   // Предзаполняем кэш и сразу активируемся (не ждём закрытия вкладок)
@@ -61,6 +65,12 @@ self.addEventListener('notificationclick', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Перехватываем только GET своего origin. Чужие домены (Google-шрифты, GIS)
+  // отдаём браузеру напрямую — иначе opaque-ответы кэшируются криво и на
+  // мобильном PWA ломали загрузку внешних скриптов.
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+
   // API и Socket.IO — только сеть, без кэша
   if (e.request.url.includes('/api/') || e.request.url.includes('/socket.io/')) {
     return;

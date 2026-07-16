@@ -1620,10 +1620,13 @@ async function loadChart() {
     canvas.addEventListener('dblclick', () => mainChart?.resetZoom());
 
   } catch (e) {
+    console.error('loadChart error:', e);
     loadingEl.remove();
     const emp = document.createElement('div');
     emp.className = 'empty-state';
-    emp.textContent = 'Ошибка загрузки графика';
+    emp.textContent = typeof Chart === 'undefined'
+      ? 'Библиотека графиков не загрузилась'
+      : 'Ошибка загрузки графика: ' + (e?.message || e);
     container.insertBefore(emp, document.getElementById('chart-expand-btn'));
   }
 }

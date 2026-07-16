@@ -41,8 +41,19 @@ function arcPath(cx: number, cy: number, r: number, fromPct: number, toPct: numb
   return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
 }
 
+// Шрифт Onest не содержит стрелочных глифов (→ ↑ ↓ ←) — они рендерятся мусором
+// («'n», «ij»). Заменяем на глифы, которые в шрифте есть.
+function sanitizeArrows(s: string): string {
+  return (s || '')
+    .replace(/[→⟶➜➡⇒⟹➔➙🡒]/g, '›')
+    .replace(/[↑↗⬆🡑]/g, '▲')
+    .replace(/[↓↘⬇🡓]/g, '▼')
+    .replace(/[←⟵⬅🡐]/g, '‹');
+}
+
 // Простой markdown: ## заголовки, * пункты, **жирный**
 function MdText({ text, color, accent }: { text: string; color: string; accent: string }) {
+  const safe = sanitizeArrows(text);
   const renderInline = (line: string, base: object) => {
     const parts = line.split('**');
     return (
@@ -55,7 +66,7 @@ function MdText({ text, color, accent }: { text: string; color: string; accent: 
   };
   return (
     <>
-      {text.split('\n').map((raw, i) => {
+      {safe.split('\n').map((raw, i) => {
         const line = raw.trimEnd();
         if (!line.trim()) return <View key={i} style={{ height: 8 }} />;
         if (line.startsWith('## ')) {
