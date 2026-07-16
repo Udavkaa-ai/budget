@@ -1,9 +1,16 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNavigationContainerRef } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import { useBlocks } from '../blocks';
 import { haptics } from '../haptics';
+
+// Ref для программного переключения вкладок (используется вводным туром)
+export const navigationRef = createNavigationContainerRef();
+export function goToTab(name: string) {
+  if (navigationRef.isReady()) navigationRef.navigate(name as never);
+}
 
 import HomeScreen from '../screens/HomeScreen';
 import SummaryScreen from '../screens/SummaryScreen';

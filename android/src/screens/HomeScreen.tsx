@@ -4,7 +4,7 @@ import {
   RefreshControl, Alert, Modal, TextInput, ScrollView, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -196,10 +196,17 @@ export default function HomeScreen() {
   }
   const isToday = date === todayStr();
 
-  // Свайп влево/вправо листает дни
-  const flingLeft = Gesture.Fling().direction(Directions.LEFT).runOnJS(true).onEnd(() => nextDay());
-  const flingRight = Gesture.Fling().direction(Directions.RIGHT).runOnJS(true).onEnd(() => prevDay());
-  const dayFling = Gesture.Exclusive(flingLeft, flingRight);
+  // Горизонтальный свайп листает дни. Pan с активацией только по X и провалом
+  // по Y — вертикальный скролл ленты не перехватывается, а тап по строке не
+  // конфликтует со свайпом (редактирование теперь по долгому нажатию).
+  const dayFling = Gesture.Pan()
+    .activeOffsetX([-24, 24])
+    .failOffsetY([-16, 16])
+    .runOnJS(true)
+    .onEnd(e => {
+      if (e.translationX <= -50) nextDay();
+      else if (e.translationX >= 50) prevDay();
+    });
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
@@ -278,8 +285,12 @@ export default function HomeScreen() {
             <TouchableOpacity
               activeOpacity={0.7}
               style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
-              onPress={() => { if (!pending && e.user === user?.name) { haptics.select(); openEdit(e); } }}
-              onLongPress={() => (pending || e.user === user?.name) && deleteExpense(e.id)}
+              // Долгое нажатие: свои — редактировать (внутри есть удаление),
+              // офлайн-очередь — сразу предложить удаление. Свайпам не мешает.
+              onLongPress={() => {
+                if (pending) { deleteExpense(e.id); }
+                else if (e.user === user?.name) { haptics.select(); openEdit(e); }
+              }}
             >
               <Text style={{ fontSize: 24 }}>{catIcon2(e.category)}</Text>
               <View style={styles.itemMid}>

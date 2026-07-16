@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
@@ -479,7 +480,7 @@ export default function SummaryScreen() {
                     <Text style={{ color: t.text, fontWeight: '700', flex: 1 }} numberOfLines={1}>
                       {drillDay} {getMonthName(month, year).toLowerCase()}{heatUser ? ` · ${heatUser}` : ''} · {fmt(dayTotals[drillDay] ?? 0)}
                       {monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length > 4
-                        ? `  (${monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ↓)` : ''}
+                        ? `  (${monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ▾)` : ''}
                     </Text>
                     <TouchableOpacity onPress={() => setDrillDay(null)} style={{ paddingHorizontal: 6 }}>
                       <Text style={{ color: t.textMuted }}>✕</Text>
@@ -692,8 +693,9 @@ export default function SummaryScreen() {
       <Modal visible={!!drillCat} animationType="slide" onRequestClose={() => setDrillCat(null)}>
         <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
           <View style={[styles.modalHeader, { borderBottomColor: t.border }]}>
-            <TouchableOpacity onPress={() => setDrillCat(null)}>
-              <Text style={{ color: t.primary }}>← Назад</Text>
+            <TouchableOpacity onPress={() => setDrillCat(null)} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="chevron-back" size={20} color={t.primary} />
+              <Text style={{ color: t.primary }}>Назад</Text>
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: t.text }]}>
               {drillCat ? `${catIcon2(drillCat)} ${drillCat}` : ''}

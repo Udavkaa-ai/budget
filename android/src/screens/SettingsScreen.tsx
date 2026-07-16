@@ -19,6 +19,7 @@ import { PinPad } from '../components/PinPad';
 import { Field, PrimaryButton } from '../components/UI';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
+import { startTour } from '../tour';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -645,10 +646,19 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </Card>
 
+        {/* Guide */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Обучение</Text>
+          <TouchableOpacity style={styles.row} onPress={() => startTour()}>
+            <Text style={{ color: t.text }}>🧭 Гид по интерфейсу</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+        </Card>
+
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.8.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.9.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

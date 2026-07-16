@@ -93,7 +93,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
             <>
               <PrimaryButton title="🔐 Войти через Google" onPress={handleGoogleLogin} loading={loading} />
               <TouchableOpacity onPress={() => setStep('url')} style={{ marginTop: spacing.lg }}>
-                <Text style={{ color: t.textMuted, textAlign: 'center' }}>← Изменить сервер</Text>
+                <Text style={{ color: t.textMuted, textAlign: 'center' }}>‹ Изменить сервер</Text>
               </TouchableOpacity>
             </>
           )}

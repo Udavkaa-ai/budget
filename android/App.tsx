@@ -11,8 +11,10 @@ import { refreshCategories } from './src/categories';
 import { initThemeMode, useEffectiveScheme } from './src/theme';
 import { initAppLock, useLockEnabled, isAuthInProgress } from './src/applock';
 import { LockScreen } from './src/components/LockScreen';
+import { Tour } from './src/components/Tour';
+import { initTour, tourSeen, isTourActive, startTour, useTourLoaded } from './src/tour';
 
-import { AppNavigator } from './src/navigation';
+import { AppNavigator, navigationRef } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { initClassifier } from './src/classifier';
@@ -34,6 +36,7 @@ initPremium().catch(console.error);
 initBlocks().catch(console.error);
 initThemeMode().catch(console.error);
 initAppLock().catch(console.error);
+initTour().catch(console.error);
 
 // Download crowd dictionary from server and merge into local DB
 async function syncCrowdDict() {
@@ -71,6 +74,12 @@ function Root() {
   const { user, loading, onLoginSuccess } = useAuth();
   const lockEnabled = useLockEnabled();
   const [unlocked, setUnlocked] = React.useState(false);
+  const tourReady = useTourLoaded();
+
+  // Автозапуск тура для новых пользователей (после входа и загрузки флага)
+  useEffect(() => {
+    if (user && tourReady && !tourSeen() && !isTourActive()) startTour();
+  }, [user, tourReady]);
 
   // Блокируем заново при уходе в фон. Игнорируем ложный уход в фон,
   // вызванный системным окном биометрии (иначе промпт «мигает» и не срабатывает).
@@ -118,9 +127,12 @@ function Root() {
   }
 
   return (
-    <NavigationContainer>
-      <AppNavigator />
-    </NavigationContainer>
+    <View style={{ flex: 1 }}>
+      <NavigationContainer ref={navigationRef}>
+        <AppNavigator />
+      </NavigationContainer>
+      <Tour />
+    </View>
   );
 }
 
