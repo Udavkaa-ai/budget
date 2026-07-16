@@ -86,6 +86,32 @@ jobs:
         working-directory: android/android
         run: chmod +x gradlew
 
+      # Init-скрипт устойчивости: Sonatype snapshots-репозиторий должен отдавать
+      # только -SNAPSHOT версии. Иначе Gradle пытается тянуть оттуда релизные
+      # артефакты (kotlin-stdlib) и падает на его периодических 504-таймаутах.
+      - name: Write Gradle repo-resilience init script
+        run: |
+          cat > /tmp/ci-init.gradle << 'EOF'
+          def restrict = { repos ->
+            repos.all { repo ->
+              if (repo instanceof MavenArtifactRepository) {
+                def u = repo.url?.toString() ?: ''
+                if (u.contains('oss.sonatype.org') && u.contains('snapshots')) {
+                  repo.mavenContent { snapshotsOnly() }
+                }
+              }
+            }
+          }
+          settingsEvaluated { s ->
+            restrict(s.pluginManagement.repositories)
+            try { restrict(s.dependencyResolutionManagement.repositories) } catch (ignored) {}
+          }
+          allprojects { p ->
+            restrict(p.repositories)
+            restrict(p.buildscript.repositories)
+          }
+          EOF
+
       # Standalone build: assembleRelease embeds the JS bundle so the APK works
       # without a Metro dev server. Expo's generated build.gradle signs the
       # release buildType with the debug keystore by default — installable for
@@ -93,7 +119,7 @@ jobs:
       - name: Build standalone APK
         if: ${{ github.event.inputs.build_type != 'store' }}
         working-directory: android/android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
@@ -104,7 +130,7 @@ jobs:
           # Write keystore from secret and switch release signing to it
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
           echo "apply from: '../../release-signing.gradle'" >> app/build.gradle
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
           KEYSTORE_PATH: release.jks
