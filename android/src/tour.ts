@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
 // Вводный тур: показывается новым пользователям один раз, повторяется по кнопке.
+// (пересборка после временного сбоя сети в CI)
 const KEY = 'tour_done_v1';
 
 let _seen = false;
