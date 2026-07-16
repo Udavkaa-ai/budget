@@ -12,6 +12,7 @@ import { Card } from '../components/Card';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
+import { useTourTarget } from '../tourTargets';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -29,6 +30,7 @@ export default function GoalsScreen() {
   const [addVisible, setAddVisible] = useState(false);
   const [contribGoal, setContribGoal] = useState<Goal | null>(null);
   const [flash, setFlash] = useState(0);
+  const goalsAddTarget = useTourTarget('goals.add');
 
   // Add form
   const [name, setName] = useState('');
@@ -115,6 +117,7 @@ export default function GoalsScreen() {
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Text style={[styles.title, { color: t.primary }]}>Цели</Text>
         <TouchableOpacity
+          ref={goalsAddTarget}
           style={[styles.addBtn, { backgroundColor: t.primary }]}
           onPress={() => setAddVisible(true)}
         >

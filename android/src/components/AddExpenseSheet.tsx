@@ -1,16 +1,18 @@
 import React, { forwardRef, useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Modal, ScrollView,
 } from 'react-native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, spacing, font, radius } from '../theme';
 import { predict, learn, queueContribution, type PredictResult } from '../classifier';
 import { useCategories, getCategories } from '../categories';
 import { PrimaryButton } from '../components/UI';
-import { expenses, ai, type AuthUser } from '../api/client';
+import { expenses, ai, type AuthUser, type ParsedExpense } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
 
@@ -44,6 +46,9 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [mode, setMode] = useState<'form' | 'text'>(premium ? 'text' : 'form');
   const [freeText, setFreeText] = useState('');
   const [parsing, setParsing] = useState(false);
+  // Тематическое превью ИИ-разбора (вместо системного Alert)
+  const [preview, setPreview] = useState<{ items: ParsedExpense[]; source: 'text' | 'photo' } | null>(null);
+  const [adding, setAdding] = useState(false);
 
   // Премиум мог инициализироваться асинхронно после монтирования —
   // тогда переключаем дефолт на «Текстом» (срабатывает один раз, при появлении премиума)
@@ -161,36 +166,36 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         Alert.alert('Не удалось распознать', 'На фото не нашлось расходов');
         return;
       }
-      const total = parsed.reduce((s, e) => s + (e.amount || 0), 0);
-      const preview = parsed.slice(0, 6).map(e => `• ${e.description} — ${e.amount} ₽`).join('\n')
-        + (parsed.length > 6 ? `\n… и ещё ${parsed.length - 6}` : '');
-      Alert.alert(
-        `Распознано: ${parsed.length} поз. на ${Math.round(total)} ₽`,
-        preview,
-        [
-          { text: 'Отмена', style: 'cancel' },
-          {
-            text: 'Добавить всё',
-            onPress: async () => {
-              await expenses.add({
-                expenses: parsed.map(e => ({
-                  date: e.date || todayStr(),
-                  category: e.category || 'Прочее',
-                  amount: e.amount,
-                  description: e.description,
-                })),
-              });
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              sheetRef?.current?.close();
-              onAdded();
-            },
-          },
-        ],
-      );
+      setPreview({ items: parsed, source: 'photo' });
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Подтверждение ИИ-превью: добавляем все распознанные позиции
+  const confirmPreview = async () => {
+    if (!preview) return;
+    setAdding(true);
+    try {
+      await expenses.add({
+        expenses: preview.items.map(e => ({
+          date: e.date || todayStr(),
+          category: e.category || 'Прочее',
+          amount: e.amount,
+          description: e.description,
+        })),
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPreview(null);
+      setFreeText('');
+      sheetRef?.current?.close();
+      onAdded();
+    } catch (e) {
+      Alert.alert('Ошибка', String(e));
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -202,28 +207,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       const res = await ai.parseText(freeText.trim());
       const parsed = res.expenses ?? [];
       if (parsed.length === 0) { Alert.alert('Не удалось разобрать текст'); return; }
-      const total = parsed.reduce((s, e) => s + (e.amount || 0), 0);
-      const preview = parsed.map(e => `• ${e.description} (${e.category}) — ${e.amount} ₽`).join('\n');
-      Alert.alert(`Распознано: ${parsed.length} поз. на ${Math.round(total)} ₽`, preview, [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Добавить всё',
-          onPress: async () => {
-            await expenses.add({
-              expenses: parsed.map(e => ({
-                date: e.date || todayStr(),
-                category: e.category || 'Прочее',
-                amount: e.amount,
-                description: e.description,
-              })),
-            });
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setFreeText('');
-            sheetRef?.current?.close();
-            onAdded();
-          },
-        },
-      ]);
+      setPreview({ items: parsed, source: 'text' });
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally {
@@ -383,6 +367,59 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         </>
         )}
       </BottomSheetScrollView>
+
+      {/* Тематическое превью ИИ-разбора */}
+      <Modal visible={!!preview} animationType="fade" transparent onRequestClose={() => setPreview(null)}>
+        <View style={styles.previewOverlay}>
+          <View style={[styles.previewBox, { backgroundColor: t.surface }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
+              <Ionicons name={preview?.source === 'photo' ? 'receipt' : 'sparkles'} size={22} color={t.primary} />
+              <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '800', flex: 1 }}>
+                Распознано: {preview?.items.length ?? 0} поз.
+              </Text>
+              <Text style={{ color: t.primary, fontSize: font.lg, fontWeight: '800' }}>
+                {new Intl.NumberFormat('ru-RU').format(Math.round((preview?.items ?? []).reduce((s, e) => s + (e.amount || 0), 0)))} ₽
+              </Text>
+            </View>
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator>
+              {(preview?.items ?? []).map((e, idx) => (
+                <View key={idx} style={[styles.previewRow, { borderBottomColor: t.border }]}>
+                  <Text style={{ fontSize: 22, marginRight: spacing.md }}>{catIcon2(e.category || 'Прочее')}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: t.text, fontSize: font.md }} numberOfLines={1}>{e.description}</Text>
+                    <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>
+                      {e.category}{e.date ? ` · ${e.date}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700' }}>
+                    {new Intl.NumberFormat('ru-RU').format(Math.round(e.amount))} ₽
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
+              <TouchableOpacity
+                style={[styles.previewBtn, { backgroundColor: t.surface2 }]}
+                onPress={() => setPreview(null)}
+                disabled={adding}
+              >
+                <Text style={{ color: t.text, fontWeight: '600' }}>Отмена</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ flex: 1 }} onPress={confirmPreview} disabled={adding} activeOpacity={0.85}>
+                <LinearGradient
+                  colors={t.gradient}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.previewBtn}
+                >
+                  {adding
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={{ color: '#fff', fontWeight: '700' }}>Добавить всё</Text>}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </BottomSheet>
   );
 });
@@ -398,6 +435,10 @@ const styles = StyleSheet.create({
   input:     { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md },
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
   predChip:  { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: spacing.lg },
+  previewBox: { borderRadius: radius.lg, padding: spacing.lg },
+  previewRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+  previewBtn: { flex: 1, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
   catGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   catBtn:    { alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, width: 52, height: 52 },
   submitBtn: { borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', marginTop: spacing.sm },

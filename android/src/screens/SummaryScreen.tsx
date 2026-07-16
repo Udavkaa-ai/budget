@@ -112,6 +112,7 @@ export default function SummaryScreen() {
   // Фильтр тепловой карты по участнику
   const [heatUser, setHeatUser] = useState<string | null>(null);
   const gaugeTarget = useTourTarget('summary.gauge');
+  const totalTarget = useTourTarget('summary.total');
   const [monthPicker, setMonthPicker] = useState(false);
 
   // Heatmap + drill-down + planned budget
@@ -302,6 +303,7 @@ export default function SummaryScreen() {
           </TouchableOpacity>
 
           {/* Total card */}
+          <View ref={totalTarget} collapsable={false}>
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
@@ -322,6 +324,7 @@ export default function SummaryScreen() {
               </Text>
             )}
           </Card>
+          </View>
 
           {/* Баблометр — спидометр как в вебе */}
           {blocks.gauge && gaugePct !== null && (

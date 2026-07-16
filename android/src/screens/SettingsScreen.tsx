@@ -21,6 +21,7 @@ import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import { openHelp } from '../help';
+import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -30,6 +31,17 @@ export default function SettingsScreen() {
   const themeMode = useThemeMode();
   const lockEnabled = useLockEnabled();
   const hasPinSet = useHasPin();
+  // Цели тура + прокрутка длинного экрана к нужной карточке
+  const scrollRef = React.useRef<ScrollView>(null);
+  const inviteTarget = useTourTarget('settings.invite');
+  const blocksTarget = useTourTarget('settings.blocks');
+  const securityTarget = useTourTarget('settings.security');
+  const premiumTarget = useTourTarget('settings.premium');
+  useEffect(() => {
+    registerScroller('settings', (y) => scrollRef.current?.scrollTo({ y, animated: true }));
+    return () => unregisterScroller('settings');
+  }, []);
+  const offset = (id: string) => (e: any) => setTargetOffset(id, e.nativeEvent.layout.y);
   // PIN-модалка: setup = задать (ввод дважды), change/remove через подтверждение
   const [pinModal, setPinModal] = useState(false);
   const [pinStage, setPinStage] = useState<'enter' | 'confirm'>('enter');
@@ -400,7 +412,7 @@ export default function SettingsScreen() {
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Text style={[styles.title, { color: t.primary }]}>Настройки</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ padding: spacing.md }}>
 
         {/* Profile */}
         <Card>
@@ -410,6 +422,7 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Family */}
+        <View ref={inviteTarget} collapsable={false} onLayout={offset('settings.invite')}>
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Семья</Text>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: 4 }}>Название семьи</Text>
@@ -437,8 +450,10 @@ export default function SettingsScreen() {
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
         </Card>
+        </View>
 
         {/* Subscription */}
+        <View ref={premiumTarget} collapsable={false} onLayout={offset('settings.premium')}>
         {premium ? (
           <Card style={{ borderColor: '#a855f7', borderWidth: 1.5 }}>
             <Text style={[styles.sectionTitle, { color: '#a855f7' }]}>💎 Премиум активен</Text>
@@ -468,6 +483,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </Card>
         )}
+        </View>
 
         {/* Notifications */}
         <Card>
@@ -488,6 +504,7 @@ export default function SettingsScreen() {
         </Card>
 
         {/* App lock */}
+        <View ref={securityTarget} collapsable={false} onLayout={offset('settings.security')}>
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Безопасность</Text>
           <View style={styles.toggleRow}>
@@ -509,6 +526,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           )}
         </Card>
+        </View>
 
         {/* Theme */}
         <Card>
@@ -572,6 +590,7 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Analytics constructor */}
+        <View ref={blocksTarget} collapsable={false} onLayout={offset('settings.blocks')}>
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Конструктор аналитики</Text>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
@@ -591,6 +610,7 @@ export default function SettingsScreen() {
             </View>
           ))}
         </Card>
+        </View>
 
         {/* Data */}
         <Card>

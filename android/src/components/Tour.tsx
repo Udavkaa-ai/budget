@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -7,7 +7,7 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { useBlocks } from '../blocks';
 import { useTourActive, endTour } from '../tour';
 import { goToTab } from '../navigation';
-import { measureTarget, type Rect } from '../tourTargets';
+import { measureTarget, measureNode, scrollTargetIntoView, type Rect } from '../tourTargets';
 import { openHelp } from '../help';
 import { haptics } from '../haptics';
 
@@ -38,9 +38,9 @@ const STEPS: Step[] = [
     body: '«Партнёр» — это второй член семьи. Пока вы один, но когда пригласите близких, здесь можно смотреть траты каждого по отдельности или вместе.',
   },
   {
-    tab: 'Summary', icon: 'pie-chart',
+    tab: 'Summary', targetId: 'summary.total', icon: 'pie-chart',
     title: 'Шаг 2. Итоги месяца',
-    body: 'Все траты за месяц собираются здесь — по категориям и общей суммой. Так видно, на что уходят деньги.',
+    body: 'Все траты за месяц собираются здесь: сколько потрачено, сколько осталось от плана. Ниже — разбивка по категориям.',
   },
   {
     tab: 'Summary', targetId: 'summary.gauge', needBlock: 'gauge', icon: 'speedometer',
@@ -48,39 +48,34 @@ const STEPS: Step[] = [
     body: 'Это спидометр бюджета. Он показывает, сколько вы уже потратили относительно плана к этому дню месяца. Стрелка в зелёной зоне — идёте по плану, в красной — перерасход.',
   },
   {
-    tab: 'Summary', icon: 'options',
-    title: 'Настройте лимиты',
-    body: 'Задайте лимиты по категориям (кнопка «Лимиты» у списка категорий). Тогда под каждой категорией видно «осталось» или «перерасход» — сразу понятно, укладываетесь ли в план.',
-  },
-  {
-    tab: 'Chart', needBlock: 'chartTab', icon: 'trending-up',
+    tab: 'Chart', targetId: 'chart.main', needBlock: 'chartTab', icon: 'trending-up',
     title: 'Динамика и доходы',
     body: 'Вкладка «График» показывает, в какие дни тратили больше, линию баланса и доходы. Удобно ловить моменты, когда деньги уходят быстрее плана.',
   },
   {
-    tab: 'Goals', needBlock: 'goalsTab', icon: 'flag',
+    tab: 'Goals', targetId: 'goals.add', needBlock: 'goalsTab', icon: 'flag',
     title: 'Копите на общее',
     body: '«Цели» — копилка на отпуск, технику, что угодно. Задайте сумму и пополняйте, приложение покажет прогресс.',
   },
   {
-    tab: 'Settings', icon: 'people-circle',
+    tab: 'Settings', targetId: 'settings.invite', icon: 'people-circle',
     title: 'Шаг 3. Позовите семью',
-    body: 'Откройте Настройки и нажмите «Пригласить в семью». Близкие вводят код у себя — и все вносят расходы со своих телефонов, видя общую картину в реальном времени. Так бюджет становится действительно семейным.',
+    body: 'Нажмите «Пригласить в семью» и отправьте код близким. Они вводят его у себя — и все вносят расходы со своих телефонов, видя общую картину в реальном времени.',
   },
   {
-    tab: 'Settings', icon: 'construct',
+    tab: 'Settings', targetId: 'settings.blocks', icon: 'construct',
     title: 'Соберите аналитику под себя',
-    body: 'Баблометр, тепловую карту, графики и другие блоки можно включать и выключать в «Конструкторе». Оставьте те, что нравятся, остальное скройте.',
+    body: 'Баблометр, тепловую карту, графики и другие блоки можно включать и выключать. Оставьте те, что нравятся, остальное скройте.',
   },
   {
-    tab: 'Settings', icon: 'lock-closed',
+    tab: 'Settings', targetId: 'settings.security', icon: 'lock-closed',
     title: 'Приватность',
     body: 'Вход по отпечатку или PIN-коду, а резервные копии шифруются прямо на телефоне: на сервер данные уходят уже зашифрованными, читать их можете только вы.',
   },
   {
-    tab: 'Settings', icon: 'diamond',
+    tab: 'Settings', targetId: 'settings.premium', icon: 'diamond',
     title: 'Премиум',
-    body: 'ИИ разбирает текст и чеки и делает разбор месяца с советами. Сейчас доступен бесплатно в тестовом режиме — включается в Настройках.',
+    body: 'ИИ разбирает текст и чеки и делает разбор месяца с советами. Сейчас доступен бесплатно в тестовом режиме — включается здесь же.',
   },
   {
     icon: 'checkmark-circle',
@@ -98,6 +93,7 @@ export function Tour() {
   const [i, setI] = useState(0);
   const [spot, setSpot] = useState<Rect | null>(null);
   const [dim] = useState(() => Dimensions.get('window'));
+  const rootRef = useRef<View>(null);
 
   useEffect(() => { if (active) setI(0); }, [active]);
 
@@ -118,16 +114,30 @@ export function Tour() {
     if (step.tab) goToTab(step.tab);
     (async () => {
       if (!step.targetId || step.targetId.startsWith('__')) return;
-      for (let attempt = 0; attempt < 14 && !cancelled; attempt++) {
+      await new Promise(r => setTimeout(r, 240));
+      const onScreen = (r: Rect) => r.y > -20 && r.y + r.h < dim.height + 20;
+      let last: Rect | null = null;
+      for (let attempt = 0; attempt < 18 && !cancelled; attempt++) {
+        // Прокручиваем цель в зону видимости (для длинных экранов вроде Настроек)
+        scrollTargetIntoView(step.targetId);
         await new Promise(r => setTimeout(r, 130));
-        const r = await measureTarget(step.targetId!);
+        const tgt = await measureTarget(step.targetId!);
         if (cancelled) return;
-        if (r) {
-          // Цель должна быть в пределах экрана — иначе показываем без рамки
-          if (r.y > -20 && r.y + r.h < dim.height + 20) setSpot(r);
+        if (!tgt) { last = null; continue; }
+        // Оконные координаты цели → координаты оверлея (иначе сдвиг на статус-бар)
+        const root = await measureNode(rootRef.current);
+        if (cancelled) return;
+        const rel: Rect = root
+          ? { x: tgt.x - root.x, y: tgt.y - root.y, w: tgt.w, h: tgt.h }
+          : tgt;
+        // Ждём стабилизации (конца анимации прокрутки): два одинаковых замера
+        if (last && Math.abs(last.y - rel.y) < 2 && Math.abs(last.x - rel.x) < 2) {
+          if (onScreen(rel)) setSpot(rel);
           return;
         }
+        last = rel;
       }
+      if (!cancelled && last && onScreen(last)) setSpot(last);
     })();
     return () => { cancelled = true; };
   }, [active, i, step?.tab, step?.targetId]);
@@ -147,7 +157,7 @@ export function Tour() {
   const cardAtBottom = !spot || (spot.y + spot.h / 2) < H * 0.5;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View ref={rootRef} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {spot ? (
         <>
           <View style={[styles.mask, { backgroundColor: overlay, top: 0, left: 0, right: 0, height: Math.max(0, spot.y - PAD) }]} />

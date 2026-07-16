@@ -16,6 +16,7 @@ import { useBlocks } from '../blocks';
 import { MonthPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { haptics } from '../haptics';
+import { useTourTarget } from '../tourTargets';
 
 const USER_COLORS = ['#6c5ce7', '#ec4899', '#f59e0b', '#22c55e'];
 
@@ -65,6 +66,7 @@ export default function ChartScreen() {
   const [unified, setUnified] = useState<UnifiedChart | null>(null);
   const [months6, setMonths6] = useState<Array<{ label: string; total: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const chartTarget = useTourTarget('chart.main');
 
   // Кэшфлоу-редактор
   const [members, setMembers] = useState<Record<string, CashflowMember>>({});
@@ -207,6 +209,7 @@ export default function ChartScreen() {
             const balRange = bal ? Math.max(balMax - balMinAll, 1) : 1;
             const balY = (v: number) => (H - PB) - (v - balMinAll) / balRange * (H - PB - 12);
             return (
+              <View ref={chartTarget} collapsable={false}>
               <Card>
                 <Text style={[styles.sectionTitle, { color: t.text }]}>Расходы, доход и баланс</Text>
                 <View style={styles.legend}>
@@ -296,6 +299,7 @@ export default function ChartScreen() {
                   </Text>
                 )}
               </Card>
+              </View>
             );
           })()}
 
