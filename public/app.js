@@ -2006,7 +2006,7 @@ async function renderGoogleLinkSection() {
 // ─── Конструктор аналитики: блоки вкл/выкл, хранится на устройстве ───────────
 
 const ANALYTICS_BLOCKS = [
-  { id: 'gauge',   label: '💸 Баблометр',              sel: '.bablometr-card' },
+  { id: 'gauge',   label: '💸 Барометр бюджета',        sel: '.bablometr-card' },
   { id: 'heatmap', label: '🗓 Расходы по дням',         sel: '#summary-heatmap' },
   { id: 'speed',   label: '📈 Скорость трат',           sel: '.speed-chart-card' },
   { id: 'byUser',  label: '👥 По участникам',           sel: '#summary-by-user' },
@@ -3251,7 +3251,7 @@ async function loadSpeedometer() {
   const daysElapsed = now.getDate();
   const plannedMonthly = appSettings.plannedMonthly || 0;
   if (!plannedMonthly) {
-    container.innerHTML = '<div class="empty-state">Укажите плановые расходы в настройках — тогда баблометр заработает</div>';
+    container.innerHTML = '<div class="empty-state">Укажите плановые расходы в настройках — тогда барометр бюджета заработает</div>';
     return;
   }
   try {
@@ -3261,7 +3261,7 @@ async function loadSpeedometer() {
     const ratio = expectedByNow > 0 ? spent / expectedByNow : 0;
     renderSpeedometer(container, spent, expectedByNow, plannedMonthly, ratio, daysElapsed, daysInMonth);
   } catch {
-    container.innerHTML = '<div class="empty-state">Нет данных для баблометра</div>';
+    container.innerHTML = '<div class="empty-state">Нет данных для барометра бюджета</div>';
   }
 }
 
