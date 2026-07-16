@@ -573,6 +573,7 @@ function navigate(screenName) {
   document.getElementById('topbar-title').textContent = SCREEN_TITLES[screenName] || '';
   currentScreen = screenName;
 
+  trackTabVisit(screenName);
   loadScreen(screenName);
 }
 
@@ -2168,6 +2169,7 @@ async function submitFormExpense() {
       });
       if (res.ok) {
         showToastSuccess('Расход добавлен');
+        achOnAddExpense();
         const fab = document.getElementById('fab-add');
         fab.classList.add('fab--success');
         setTimeout(() => fab.classList.remove('fab--success'), 700);
@@ -2245,6 +2247,7 @@ async function parseText() {
   try {
     const data = await apiJson('POST', '/api/parse', { text });
     parsedExpenses = data.expenses || [];
+    lastParseWasPhoto = false;
 
     if (parsedExpenses.length === 0) {
       showToastError('Не удалось распознать расходы. Попробуйте переформулировать.');
@@ -2374,6 +2377,8 @@ async function confirmParsedExpenses() {
     const res = await apiJson('POST', '/api/expenses', { expenses: parsedExpenses });
     if (res.ok) {
       showToastSuccess(`Сохранено ${res.count} записей`);
+      achOnAddExpense({ receipt: lastParseWasPhoto });
+      lastParseWasPhoto = false;
       parsedExpenses = [];
       const fab2 = document.getElementById('fab-add');
       fab2.classList.add('fab--success');
@@ -2529,6 +2534,7 @@ async function handlePhotoInput(file) {
     });
     if (data.error) { showToastError(data.error); return; }
     parsedExpenses = data.expenses || [];
+    lastParseWasPhoto = true;
     if (parsedExpenses.length === 0) {
       showToastError('Не удалось распознать расходы на фото');
       return;
@@ -3236,9 +3242,149 @@ async function saveCashflow() {
 
 // ─── GOALS / ЦЕЛИ SCREEN ─────────────────────────────────────────────────────
 
+// ─── Достижения (геймификация) ───────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  { id: 'tour',      emoji: '🎓', title: 'Экскурсовод',               desc: 'Заглянуть во все разделы приложения.' },
+  { id: 'first',     emoji: '👶', title: 'Первый шаг',                desc: 'Внести самый первый расход.' },
+  { id: 'week',      emoji: '📅', title: 'Неделя дисциплины',         desc: 'Вносить расходы каждый день 7 дней подряд.' },
+  { id: 'month30',   emoji: '🔥', title: 'Марафонец',                 desc: 'Вести учёт 30 дней подряд.' },
+  { id: 'redline',   emoji: '🏎️', title: 'Стрелку до отсечки',        desc: 'Барометр выше 160% три дня подряд.' },
+  { id: 'fast10',    emoji: '✍️', title: 'Помедленней, я записываю!', desc: 'Внести больше 10 расходов за один день.' },
+  { id: 'shelves',   emoji: '🗂️', title: 'У меня всё по полочкам',    desc: 'Создать 5 своих категорий.' },
+  { id: 'variety',   emoji: '🎨', title: 'Всего понемногу',           desc: 'Расходы из 5 разных категорий за один день.' },
+  { id: 'century',   emoji: '💯', title: 'Сотка',                     desc: 'Внести 100 расходов за всё время.' },
+  { id: 'onplan',    emoji: '🎯', title: 'Точно по плану',            desc: 'Закрыть месяц, уложившись в план (барометр ≤ 100%).' },
+  { id: 'goal',      emoji: '🏆', title: 'Мечты сбываются',           desc: 'Накопить на цель на 100%.' },
+  { id: 'family',    emoji: '🤝', title: 'Вместе веселее',            desc: 'Вести бюджет вдвоём или большей семьёй.' },
+  { id: 'midnight',  emoji: '🌙', title: 'Успеть до полуночи!',       desc: 'Внести расход в интервале 23:50–00:00.', secret: true },
+  { id: 'earlybird', emoji: '🌅', title: 'Ранняя пташка',            desc: 'Внести расход до 7 утра.', secret: true },
+  { id: 'receipt',   emoji: '🧾', title: 'Чекист',                    desc: 'Распознать чек с помощью ИИ.', secret: true },
+];
+
+function achSet() {
+  try { return new Set(JSON.parse(localStorage.getItem('budget_achievements') || '[]')); } catch { return new Set(); }
+}
+function unlockAchievement(id) {
+  if (!ACHIEVEMENTS.some(a => a.id === id)) return;
+  const s = achSet();
+  if (s.has(id)) return;
+  s.add(id);
+  localStorage.setItem('budget_achievements', JSON.stringify([...s]));
+  showAchievementToast(ACHIEVEMENTS.find(a => a.id === id));
+  if (currentScreen === 'goals') renderAchievements();
+}
+function showAchievementToast(a) {
+  if (!a) return;
+  const el = document.getElementById('achievement-toast');
+  if (!el) return;
+  el.innerHTML = `<span class="ach-toast-emoji">${a.emoji}</span><div><div class="ach-toast-label">ДОСТИЖЕНИЕ ПОЛУЧЕНО</div><div class="ach-toast-title">${esc(a.title)}</div></div>`;
+  el.classList.add('show');
+  clearTimeout(showAchievementToast._t);
+  showAchievementToast._t = setTimeout(() => el.classList.remove('show'), 3400);
+}
+function renderAchievements() {
+  const box = document.getElementById('achievements-list');
+  if (!box) return;
+  const s = achSet();
+  const cnt = ACHIEVEMENTS.filter(a => s.has(a.id)).length;
+  const cntEl = document.getElementById('achievements-count');
+  if (cntEl) cntEl.textContent = `${cnt} / ${ACHIEVEMENTS.length}`;
+  box.innerHTML = ACHIEVEMENTS.map(a => {
+    const got = s.has(a.id);
+    const hidden = a.secret && !got;
+    return `<div class="ach-row ${got ? 'ach-got' : ''}">
+      <span class="ach-emoji">${hidden ? '❓' : a.emoji}</span>
+      <div class="ach-info">
+        <div class="ach-title">${hidden ? 'Секретное достижение' : esc(a.title)}</div>
+        <div class="ach-desc">${hidden ? 'Условие откроется, когда вы его выполните' : esc(a.desc)}</div>
+      </div>
+      <span class="ach-status">${got ? '✓' : '🔒'}</span>
+    </div>`;
+  }).join('');
+}
+
+// Заглянул во все разделы → «Экскурсовод»
+const MAIN_TABS = ['budget', 'summary', 'chart', 'goals', 'settings'];
+function trackTabVisit(name) {
+  if (!MAIN_TABS.includes(name)) return;
+  let v; try { v = new Set(JSON.parse(localStorage.getItem('budget_tabs_seen') || '[]')); } catch { v = new Set(); }
+  if (v.has(name)) return;
+  v.add(name);
+  localStorage.setItem('budget_tabs_seen', JSON.stringify([...v]));
+  if (MAIN_TABS.every(x => v.has(x))) unlockAchievement('tour');
+}
+
+// Событийные ачивки при добавлении расхода
+let lastParseWasPhoto = false;
+function achOnAddExpense(opts = {}) {
+  const now = new Date(), h = now.getHours(), m = now.getMinutes();
+  if (h === 23 && m >= 50) unlockAchievement('midnight');
+  if (h < 7) unlockAchievement('earlybird');
+  if (opts.receipt) unlockAchievement('receipt');
+}
+
+function achDmyOrdinal(s) {
+  const p = (s || '').split('.').map(Number);
+  if (p.length < 3 || !p[0] || !p[1] || !p[2]) return null;
+  return Math.floor(Date.UTC(p[2], p[1] - 1, p[0]) / 86400000);
+}
+function achLongestRun(ords) {
+  const uniq = [...new Set(ords)].sort((a, b) => a - b);
+  let best = 0, cur = 0, prev = null;
+  for (const o of uniq) { cur = prev !== null && o === prev + 1 ? cur + 1 : 1; best = Math.max(best, cur); prev = o; }
+  return best;
+}
+
+async function evaluateAchievements() {
+  try {
+    const now = new Date();
+    const months = [0, 1, 2].map(off => { const d = new Date(now.getFullYear(), now.getMonth() - off, 1); return { m: d.getMonth() + 1, y: d.getFullYear() }; });
+    const chunks = await Promise.all(months.map(({ m, y }) =>
+      apiJson('GET', `/api/expenses/month?month=${m}&year=${y}`).then(r => Array.isArray(r) ? r : (r.expenses || [])).catch(() => [])));
+    const exp = chunks.flat().filter(Boolean);
+    const plannedMonthly = appSettings.plannedMonthly || 0;
+    const customCatCount = (appSettings.customCategories || []).length;
+    let goals = [];
+    try { goals = await apiJson('GET', '/api/goals'); } catch { /* ignore */ }
+
+    if (exp.length >= 1) unlockAchievement('first');
+    if (exp.length >= 100) unlockAchievement('century');
+    if (customCatCount >= 5) unlockAchievement('shelves');
+    if ([...new Set(exp.map(e => e.user).filter(Boolean))].length >= 2) unlockAchievement('family');
+    if ((goals || []).some(g => g.targetAmount > 0 && (g.contributions || []).reduce((s, c) => s + (c.amount || 0), 0) >= g.targetAmount)) unlockAchievement('goal');
+
+    const byDay = new Map();
+    for (const e of exp) { if (!e.date) continue; (byDay.get(e.date) || byDay.set(e.date, []).get(e.date)).push(e); }
+    for (const [, items] of byDay) {
+      if (items.length >= 10) unlockAchievement('fast10');
+      if (new Set(items.map(i => i.category)).size >= 5) unlockAchievement('variety');
+    }
+    const streak = achLongestRun([...byDay.keys()].map(achDmyOrdinal).filter(v => v !== null));
+    if (streak >= 7) unlockAchievement('week');
+    if (streak >= 30) unlockAchievement('month30');
+
+    if (plannedMonthly > 0) {
+      const byMonth = new Map();
+      for (const e of exp) { const p = (e.date || '').split('.'); if (p.length < 3) continue; const k = `${p[2]}-${p[1]}`; (byMonth.get(k) || byMonth.set(k, []).get(k)).push(e); }
+      const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      for (const [k, items] of byMonth) {
+        const [y, mo] = k.split('-').map(Number);
+        const dim = new Date(y, mo, 0).getDate();
+        const perDay = Array(dim + 1).fill(0);
+        for (const e of items) { const d = parseInt((e.date || '').split('.')[0]); if (d >= 1 && d <= dim) perDay[d] += e.amount; }
+        let cum = 0, run = 0;
+        for (let d = 1; d <= dim; d++) { cum += perDay[d]; const ptd = plannedMonthly * d / dim; const pct = ptd > 0 ? cum / ptd * 100 : 0; run = pct > 160 ? run + 1 : 0; if (run >= 3) { unlockAchievement('redline'); break; } }
+        if (k !== curKey) { const tot = items.reduce((s, e) => s + e.amount, 0); if (tot > 0 && tot <= plannedMonthly) unlockAchievement('onplan'); }
+      }
+    }
+  } catch { /* оценка достижений не должна ломать экран */ }
+}
+
 async function loadGoalsScreen() {
   loadSpeedometer();
   loadGoalsList();
+  renderAchievements();
+  evaluateAchievements();
   try {
     const planData = await apiJson('GET', '/api/budget-plan');
     lastPlanData = planData;

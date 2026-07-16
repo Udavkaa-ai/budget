@@ -249,6 +249,15 @@
         <div id="goals-list"></div>
       </div>
 
+      <!-- Мои достижения -->
+      <div class="card achievements-card">
+        <div class="achievements-header">
+          <span class="settings-title" style="margin:0">🏅 Мои достижения</span>
+          <span id="achievements-count" class="achievements-count">0 / 15</span>
+        </div>
+        <div id="achievements-list"></div>
+      </div>
+
     </div>
 
     <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
@@ -327,7 +336,7 @@
         <div class="settings-section">
           <div class="settings-title">О приложении</div>
           <div class="settings-info">
-            <div style="color:var(--text-muted);font-size:13px">Версия 2.9.0 W</div>
+            <div style="color:var(--text-muted);font-size:13px">Версия 2.10.0 W</div>
           </div>
         </div>
 
@@ -553,6 +562,9 @@
     <div class="loading">Загрузка…</div>
   </div>
 </div>
+
+<!-- Плашка получения достижения -->
+<div id="achievement-toast" class="achievement-toast"></div>
 
 <script src="/vendor/chartjs-plugin-datalabels.min.js"></script>
 <!-- Socket.io client -->

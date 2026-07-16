@@ -2549,3 +2549,43 @@ html, body {
 }
 .custom-cat-row:last-child { border-bottom: none; }
 .custom-cat-row .btn { padding: 6px 14px; font-size: 13px; }
+
+/* ─── Достижения (геймификация) ─────────────────────────────────────────── */
+.achievements-card { margin-top: 14px; }
+.achievements-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.achievements-count {
+  color: var(--primary); font-weight: 700; font-size: 14px;
+  background: var(--primary-light); padding: 2px 10px; border-radius: 999px;
+}
+.ach-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 2px; border-top: 1px solid var(--border-soft);
+}
+.ach-row:first-child { border-top: none; }
+.ach-emoji { font-size: 24px; width: 34px; text-align: center; opacity: 0.35; filter: grayscale(0.6); }
+.ach-got .ach-emoji { opacity: 1; filter: none; }
+.ach-info { flex: 1; min-width: 0; }
+.ach-title { color: var(--text-muted); font-weight: 600; font-size: 15px; }
+.ach-got .ach-title { color: var(--text); font-weight: 700; }
+.ach-desc { color: var(--text-muted); font-size: 12px; margin-top: 1px; }
+.ach-status { font-size: 14px; color: var(--text-muted); }
+.ach-got .ach-status { color: var(--accent); font-weight: 800; font-size: 18px; }
+
+.achievement-toast {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 50%;
+  transform: translate(-50%, -24px); z-index: 2000;
+  display: flex; align-items: center; gap: 12px;
+  max-width: 92vw; padding: 12px 18px;
+  background: var(--card); backdrop-filter: var(--card-blur);
+  border: 1.5px solid var(--primary); border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgba(89,71,224,0.28);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.achievement-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.ach-toast-emoji { font-size: 30px; }
+.ach-toast-label { color: var(--primary); font-weight: 800; font-size: 11px; letter-spacing: 0.4px; }
+.ach-toast-title { color: var(--text); font-weight: 700; font-size: 15px; }
