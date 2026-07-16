@@ -17,6 +17,7 @@ import { useCategories, refreshCategories } from '../categories';
 import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate } from '../applock';
 import { Field, PrimaryButton } from '../components/UI';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
+import { ScreenGradient } from '../components/ScreenGradient';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -342,6 +343,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
+      <ScreenGradient tint="settings" />
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Text style={[styles.title, { color: t.primary }]}>Настройки</Text>
       </View>
@@ -586,7 +588,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.6.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.7.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

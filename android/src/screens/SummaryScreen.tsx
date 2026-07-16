@@ -14,6 +14,8 @@ import { MonthPickerModal } from '../components/Pickers';
 import { usePremium } from '../premium';
 import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
+import { ScreenGradient } from '../components/ScreenGradient';
+import { haptics } from '../haptics';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -152,6 +154,7 @@ export default function SummaryScreen() {
 
   const prev = () => {
     const d = new Date(year, month - 2, 1);
+    haptics.light();
     setMonth(d.getMonth() + 1); setYear(d.getFullYear());
     load(d.getMonth() + 1, d.getFullYear());
   };
@@ -160,6 +163,7 @@ export default function SummaryScreen() {
     const cur = new Date(); cur.setDate(1);
     const d = new Date(year, month, 1);
     if (d > cur) return;
+    haptics.light();
     setMonth(d.getMonth() + 1); setYear(d.getFullYear());
     load(d.getMonth() + 1, d.getFullYear());
   };
@@ -263,6 +267,7 @@ export default function SummaryScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
+      <ScreenGradient tint="summary" />
       {/* Nav */}
       <View style={[styles.nav, { borderBottomColor: t.border }]}>
         <TouchableOpacity onPress={prev} style={styles.navBtn}>
@@ -286,7 +291,7 @@ export default function SummaryScreen() {
           {/* Сравнить */}
           <TouchableOpacity
             style={[styles.compareChip, { backgroundColor: compare ? t.primary : t.surface }]}
-            onPress={() => setCompare(c => !c)}
+            onPress={() => { haptics.select(); setCompare(c => !c); }}
           >
             <Text style={{ color: compare ? '#fff' : t.primary, fontSize: font.sm, fontWeight: '600' }}>
               ⚖️ Сравнить с прошлым месяцем
@@ -420,7 +425,7 @@ export default function SummaryScreen() {
                 <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' }}>
                   <TouchableOpacity
                     style={[styles.userChip, { backgroundColor: heatUser === null ? t.primary : t.surface2 }]}
-                    onPress={() => { setHeatUser(null); setDrillDay(null); }}
+                    onPress={() => { haptics.select(); setHeatUser(null); setDrillDay(null); }}
                   >
                     <Text style={{ color: heatUser === null ? '#fff' : t.text, fontSize: font.sm }}>Все</Text>
                   </TouchableOpacity>
@@ -428,7 +433,7 @@ export default function SummaryScreen() {
                     <TouchableOpacity
                       key={u}
                       style={[styles.userChip, { backgroundColor: heatUser === u ? t.primary : t.surface2 }]}
-                      onPress={() => { setHeatUser(x => x === u ? null : u); setDrillDay(null); }}
+                      onPress={() => { haptics.select(); setHeatUser(x => x === u ? null : u); setDrillDay(null); }}
                     >
                       <Text style={{ color: heatUser === u ? '#fff' : t.text, fontSize: font.sm }}>{u}</Text>
                     </TouchableOpacity>
@@ -455,7 +460,7 @@ export default function SummaryScreen() {
                     <TouchableOpacity
                       key={d}
                       style={[styles.heatCell, { backgroundColor: heatColor(v) }]}
-                      onPress={() => v > 0 && setDrillDay(d)}
+                      onPress={() => { if (v > 0) { haptics.select(); setDrillDay(d); } }}
                     >
                       <Text numberOfLines={1} style={{ fontSize: font.xs, fontWeight: '700', color: heatText(v) }}>{d}</Text>
                       {v > 0 && (
@@ -554,7 +559,7 @@ export default function SummaryScreen() {
               <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap' }}>
                 <TouchableOpacity
                   style={[styles.userChip, { backgroundColor: selUser === null ? t.primary : t.surface2 }]}
-                  onPress={() => setSelUser(null)}
+                  onPress={() => { haptics.select(); setSelUser(null); }}
                 >
                   <Text style={{ color: selUser === null ? '#fff' : t.text, fontSize: font.sm }}>Все</Text>
                 </TouchableOpacity>
@@ -562,7 +567,7 @@ export default function SummaryScreen() {
                   <TouchableOpacity
                     key={u}
                     style={[styles.userChip, { backgroundColor: selUser === u ? t.primary : t.surface2 }]}
-                    onPress={() => setSelUser(x => x === u ? null : u)}
+                    onPress={() => { haptics.select(); setSelUser(x => x === u ? null : u); }}
                   >
                     <Text style={{ color: selUser === u ? '#fff' : t.text, fontSize: font.sm }}>{u}</Text>
                   </TouchableOpacity>

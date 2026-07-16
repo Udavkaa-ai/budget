@@ -14,6 +14,8 @@ import { Card } from '../components/Card';
 import { useAuth } from '../hooks/useAuth';
 import { useBlocks } from '../blocks';
 import { MonthPickerModal } from '../components/Pickers';
+import { ScreenGradient } from '../components/ScreenGradient';
+import { haptics } from '../haptics';
 
 const USER_COLORS = ['#6c5ce7', '#ec4899', '#f59e0b', '#22c55e'];
 
@@ -72,11 +74,11 @@ export default function ChartScreen() {
   const [selBal, setSelBal] = useState<number | null>(null);   // выбранный столбик баланса
   const [monthPicker, setMonthPicker] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const toggleSeries = (k: string) => setHidden(h => {
+  const toggleSeries = (k: string) => { haptics.select(); setHidden(h => {
     const n = new Set(h);
     if (n.has(k)) n.delete(k); else n.add(k);
     return n;
-  });
+  }); };
 
   const load = useCallback(async (m = month, y = year) => {
     setLoading(true);
@@ -113,6 +115,7 @@ export default function ChartScreen() {
     const d = new Date(year, month - 1 + dir, 1);
     const cur = new Date(); cur.setDate(1); cur.setHours(0, 0, 0, 0);
     if (dir === 1 && d > cur) return;
+    haptics.light();
     setMonth(d.getMonth() + 1); setYear(d.getFullYear());
     load(d.getMonth() + 1, d.getFullYear());
   };
@@ -127,6 +130,7 @@ export default function ChartScreen() {
           .filter(e => e.day >= 1 && e.day <= 31 && e.amount > 0),
       };
       await cfApi.save(ym, body);
+      haptics.success();
       Alert.alert('Кэшфлоу сохранён');
       load();
     } catch (e) {
@@ -154,6 +158,7 @@ export default function ChartScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
+      <ScreenGradient tint="chart" />
       <View style={styles.header}>
         <Text style={[styles.title, { color: t.primary }]}>График</Text>
       </View>

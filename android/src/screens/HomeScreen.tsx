@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handler';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme, spacing, font, radius } from '../theme';
 import { expenses as expApi, type Expense } from '../api/client';
@@ -14,6 +16,10 @@ import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
+import { ScreenGradient } from '../components/ScreenGradient';
+import { FadeInItem } from '../components/Motion';
+import { SuccessFlash } from '../components/SuccessFlash';
+import { haptics } from '../haptics';
 
 function todayStr() {
   const d = new Date();
@@ -45,6 +51,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [userFilter, setUserFilter] = useState<'all' | 'me' | 'partner'>('all');
+  const [addedFlash, setAddedFlash] = useState(0);
   const slide = useRef(new Animated.Value(0)).current;
 
   // Эффект пролистывания: контент вылетает со стороны свайпа с оттяжкой
@@ -82,6 +89,7 @@ export default function HomeScreen() {
   React.useEffect(() => onOutboxChange(() => { load(); }), [load]);
 
   const onRefresh = async () => {
+    haptics.light();
     setRefreshing(true);
     await load();
     setRefreshing(false);
@@ -92,6 +100,7 @@ export default function HomeScreen() {
     const dt = new Date(y, m - 1, d - 1);
     const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
     setDate(nd);
+    haptics.light();
     animateSwitch(-1);
     load(nd);
   };
@@ -103,6 +112,7 @@ export default function HomeScreen() {
     if (dt > today) return;
     const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
     setDate(nd);
+    haptics.light();
     animateSwitch(1);
     load(nd);
   };
@@ -118,6 +128,7 @@ export default function HomeScreen() {
           } else {
             await expApi.delete(id);
           }
+          haptics.warning();
           setEditing(null);
           setList(prev => prev.filter(e => e.id !== id));
         },
@@ -192,6 +203,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
+        <ScreenGradient tint="home" />
         {/* Header — как в вебе: титул, дата, фильтр участников, итого */}
         <View style={styles.titleRow}>
           <Text style={[styles.screenTitle, { color: t.titleColor }]}>Бюджет</Text>
@@ -220,7 +232,7 @@ export default function HomeScreen() {
                 backgroundColor: userFilter === k ? t.surface2 : t.surface,
                 borderColor: userFilter === k ? t.primary : t.border,
               }]}
-              onPress={() => setUserFilter(k)}
+              onPress={() => { haptics.select(); setUserFilter(k); }}
             >
               <Text numberOfLines={1} style={{ color: userFilter === k ? t.primary : t.textMuted, fontSize: font.sm, fontWeight: '600' }}>
                 {lbl}{sum > 0 ? ` · ${fmt(sum)}` : ''}
@@ -248,7 +260,7 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             if ('hdr' in item) {
               return (
                 <View style={styles.groupHdr}>
@@ -262,9 +274,11 @@ export default function HomeScreen() {
             const e = item;
             const pending = (e as Expense & { pending?: boolean }).pending;
             return (
+            <FadeInItem index={index}>
             <TouchableOpacity
+              activeOpacity={0.7}
               style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
-              onPress={() => !pending && e.user === user?.name && openEdit(e)}
+              onPress={() => { if (!pending && e.user === user?.name) { haptics.select(); openEdit(e); } }}
               onLongPress={() => (pending || e.user === user?.name) && deleteExpense(e.id)}
             >
               <Text style={{ fontSize: 24 }}>{catIcon2(e.category)}</Text>
@@ -276,6 +290,7 @@ export default function HomeScreen() {
               </View>
               <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
             </TouchableOpacity>
+            </FadeInItem>
             );
           }}
         />
@@ -341,19 +356,28 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* FAB */}
+        {/* FAB — градиент как у веб-кнопок */}
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: t.primary }]}
-          onPress={() => addSheetRef.current?.expand()}
+          activeOpacity={0.85}
+          style={styles.fab}
+          onPress={() => { haptics.medium(); addSheetRef.current?.expand(); }}
         >
-          <Text style={{ color: '#fff', fontSize: font.xxl, lineHeight: 32 }}>+</Text>
+          <LinearGradient
+            colors={t.gradient}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.fabInner}
+          >
+            <Ionicons name="add" size={30} color="#fff" />
+          </LinearGradient>
         </TouchableOpacity>
+
+        <SuccessFlash token={addedFlash} label="Расход добавлен" />
 
         {user && (
           <AddExpenseSheet
             ref={addSheetRef}
             user={user}
-            onAdded={() => load()}
+            onAdded={() => { setAddedFlash(n => n + 1); load(); }}
           />
         )}
     </SafeAreaView>
@@ -381,7 +405,8 @@ const styles = StyleSheet.create({
   itemDesc:   { fontSize: font.md, fontWeight: '500' },
   itemMeta:   { fontSize: font.sm, marginTop: 2 },
   itemAmt:    { fontSize: font.md, fontWeight: '700' },
-  fab:        { position: 'absolute', bottom: 24, right: 24, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6 },
+  fab:        { position: 'absolute', bottom: 24, right: 24, width: 60, height: 60, borderRadius: 30, elevation: 8, shadowColor: '#5947E0', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
+  fabInner:   { flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
   modalBox:   { borderRadius: radius.lg, padding: spacing.lg },
   modalTitle: { fontSize: font.lg, fontWeight: '700', marginBottom: spacing.md },

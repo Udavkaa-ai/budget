@@ -14,6 +14,10 @@ export const palette = {
   green:       '#22c55e',
 };
 
+// Ненавязчивый цветовой «дымок» вверху каждой вкладки — свой оттенок,
+// как акцентные фоны в вебе. Верхний цвет тает в прозрачность к ~45% экрана.
+export type TabTint = 'home' | 'summary' | 'chart' | 'settings' | 'goals';
+
 const light = {
   bg:          '#EAE4FF',
   surface:     '#FDFCFF',
@@ -29,6 +33,13 @@ const light = {
   success:     palette.green,
   gradient:    [palette.primaryHi, palette.primary] as [string, string],
   titleColor:  palette.primary,
+  tints: {
+    home:     'rgba(137,107,255,0.22)',
+    summary:  'rgba(255,122,179,0.20)',
+    chart:    'rgba(122,224,195,0.22)',
+    settings: 'rgba(122,115,150,0.16)',
+    goals:    'rgba(255,180,122,0.22)',
+  } as Record<TabTint, string>,
 };
 
 const dark = {
@@ -46,6 +57,13 @@ const dark = {
   success:     palette.green,
   gradient:    [palette.primaryHi, palette.primary] as [string, string],
   titleColor:  palette.primaryHi,
+  tints: {
+    home:     'rgba(137,107,255,0.18)',
+    summary:  'rgba(255,122,179,0.15)',
+    chart:    'rgba(122,224,195,0.14)',
+    settings: 'rgba(157,151,196,0.12)',
+    goals:    'rgba(255,180,122,0.15)',
+  } as Record<TabTint, string>,
 };
 
 export type Theme = typeof light;

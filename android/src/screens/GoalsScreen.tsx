@@ -9,6 +9,9 @@ import { goals as goalsApi, budgetPlan, type Goal, type BudgetPlan } from '../ap
 import { useCategories } from '../categories';
 import { PrimaryButton } from '../components/UI';
 import { Card } from '../components/Card';
+import { ScreenGradient } from '../components/ScreenGradient';
+import { SuccessFlash } from '../components/SuccessFlash';
+import { haptics } from '../haptics';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -25,6 +28,7 @@ export default function GoalsScreen() {
   const [loading, setLoading] = useState(true);
   const [addVisible, setAddVisible] = useState(false);
   const [contribGoal, setContribGoal] = useState<Goal | null>(null);
+  const [flash, setFlash] = useState(0);
 
   // Add form
   const [name, setName] = useState('');
@@ -77,7 +81,9 @@ export default function GoalsScreen() {
     if (isNaN(t2) || t2 <= 0) { Alert.alert('Некорректная сумма'); return; }
     try {
       await goalsApi.add({ name: name.trim(), target: t2, emoji });
+      haptics.success();
       setAddVisible(false); setName(''); setTarget(''); setEmoji('🎯');
+      setFlash(n => n + 1);
       load();
     } catch (e) { Alert.alert('Ошибка', String(e)); }
   };
@@ -88,7 +94,9 @@ export default function GoalsScreen() {
     if (isNaN(amt) || amt <= 0) return;
     try {
       await goalsApi.contribute(contribGoal.id, amt);
+      haptics.success();
       setContribGoal(null); setContribAmt('');
+      setFlash(n => n + 1);
       load();
     } catch (e) { Alert.alert('Ошибка', String(e)); }
   };
@@ -96,12 +104,14 @@ export default function GoalsScreen() {
   const deleteGoal = (id: string) => {
     Alert.alert('Удалить цель?', undefined, [
       { text: 'Отмена', style: 'cancel' },
-      { text: 'Удалить', style: 'destructive', onPress: async () => { await goalsApi.delete(id); load(); } },
+      { text: 'Удалить', style: 'destructive', onPress: async () => { await goalsApi.delete(id); haptics.warning(); load(); } },
     ]);
   };
 
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
+      <ScreenGradient tint="goals" />
+      <SuccessFlash token={flash} label="Готово" />
       <View style={[styles.header, { borderBottomColor: t.border }]}>
         <Text style={[styles.title, { color: t.primary }]}>Цели</Text>
         <TouchableOpacity
