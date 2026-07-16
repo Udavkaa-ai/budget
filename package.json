@@ -1,6 +1,6 @@
 {
   "name": "budget-tracker",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "Семейный трекер расходов — веб-приложение с AI-парсингом и синхронизацией в реальном времени",
   "type": "module",
   "main": "src/index.js",
