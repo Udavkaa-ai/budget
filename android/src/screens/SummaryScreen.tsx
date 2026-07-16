@@ -17,7 +17,7 @@ import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { haptics } from '../haptics';
-import { useTourTarget } from '../tourTargets';
+import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -113,6 +113,12 @@ export default function SummaryScreen() {
   const [heatUser, setHeatUser] = useState<string | null>(null);
   const gaugeTarget = useTourTarget('summary.gauge');
   const totalTarget = useTourTarget('summary.total');
+  const scrollRef = React.useRef<ScrollView>(null);
+  useEffect(() => {
+    registerScroller('summary', (y) => scrollRef.current?.scrollTo({ y, animated: true }));
+    return () => unregisterScroller('summary');
+  }, []);
+  const tOffset = (id: string) => (e: any) => setTargetOffset(id, e.nativeEvent.layout.y);
   const [monthPicker, setMonthPicker] = useState(false);
 
   // Heatmap + drill-down + planned budget
@@ -289,6 +295,7 @@ export default function SummaryScreen() {
         <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
       ) : (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
         >
@@ -303,7 +310,7 @@ export default function SummaryScreen() {
           </TouchableOpacity>
 
           {/* Total card */}
-          <View ref={totalTarget} collapsable={false}>
+          <View ref={totalTarget} collapsable={false} onLayout={tOffset('summary.total')}>
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
@@ -328,7 +335,7 @@ export default function SummaryScreen() {
 
           {/* Баблометр — спидометр как в вебе */}
           {blocks.gauge && gaugePct !== null && (
-            <View ref={gaugeTarget} collapsable={false}>
+            <View ref={gaugeTarget} collapsable={false} onLayout={tOffset('summary.gauge')}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Баблометр</Text>
               <View style={{ alignItems: 'center' }}>

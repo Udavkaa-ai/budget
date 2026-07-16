@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
 import { canUseBiometrics, authenticate, hasPin, verifyPin } from '../applock';
@@ -14,10 +14,15 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   const [pinSet, setPinSet] = useState(false);
   const [mode, setMode] = useState<'bio' | 'pin'>('bio');
   const [pinError, setPinError] = useState(false);
+  const unlockedRef = useRef(false);
 
-  const tryBiometrics = async () => {
-    if (await authenticate()) { onUnlock(); }
+  const runBio = async () => {
+    if (unlockedRef.current) return;
+    if (!(await canUseBiometrics())) return;
+    const ok = await authenticate();
+    if (ok && !unlockedRef.current) { unlockedRef.current = true; onUnlock(); }
   };
+  const tryBiometrics = () => { runBio(); };
 
   useEffect(() => {
     let cancelled = false;
@@ -27,17 +32,22 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
       if (cancelled) return;
       setBioAvailable(bio);
       setPinSet(pin);
-      if (bio) {
-        setMode('bio');
-        // Авто-запрос биометрии при каждом показе экрана — это и чинит
-        // «после автоблокировки телефона отпечаток не появляется»
-        if (await authenticate()) { if (!cancelled) onUnlock(); }
-      } else if (pin) {
-        setMode('pin');
-      }
+      setMode(bio ? 'bio' : (pin ? 'pin' : 'bio'));
+      // Небольшая задержка: после возврата из фона Android-активность ещё не
+      // «resumed», и ранний authenticateAsync молча падает — ждём и пробуем.
+      if (bio) { await new Promise(r => setTimeout(r, 350)); if (!cancelled) runBio(); }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Повторяем запрос биометрии при каждом возврате приложения на передний план
+  // (промпт биометрии сам уводит app в фон — поэтому реагируем именно на 'active')
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', st => {
+      if (st === 'active' && mode === 'bio') runBio();
+    });
+    return () => sub.remove();
+  }, [mode]);
 
   const onPin = async (pin: string) => {
     if (await verifyPin(pin)) {

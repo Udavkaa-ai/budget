@@ -15,6 +15,7 @@ import { PrimaryButton } from '../components/UI';
 import { expenses, ai, type AuthUser, type ParsedExpense } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
+import { DayPickerModal } from '../components/Pickers';
 
 function todayStr() {
   const d = new Date();
@@ -46,9 +47,14 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [mode, setMode] = useState<'form' | 'text'>(premium ? 'text' : 'form');
   const [freeText, setFreeText] = useState('');
   const [parsing, setParsing] = useState(false);
-  // Тематическое превью ИИ-разбора (вместо системного Alert)
+  // Тематическое превью ИИ-разбора (вместо системного Alert) — позиции редактируемы
   const [preview, setPreview] = useState<{ items: ParsedExpense[]; source: 'text' | 'photo' } | null>(null);
   const [adding, setAdding] = useState(false);
+  const [catEditIdx, setCatEditIdx] = useState<number | null>(null);
+  const [dateEditIdx, setDateEditIdx] = useState<number | null>(null);
+
+  const updateItem = (idx: number, patch: Partial<ParsedExpense>) =>
+    setPreview(p => p ? { ...p, items: p.items.map((it, i) => i === idx ? { ...it, ...patch } : it) } : p);
 
   // Премиум мог инициализироваться асинхронно после монтирования —
   // тогда переключаем дефолт на «Текстом» (срабатывает один раз, при появлении премиума)
@@ -188,7 +194,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         })),
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setPreview(null);
+      setPreview(null); setCatEditIdx(null); setDateEditIdx(null);
       setFreeText('');
       sheetRef?.current?.close();
       onAdded();
@@ -369,7 +375,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       </BottomSheetScrollView>
 
       {/* Тематическое превью ИИ-разбора */}
-      <Modal visible={!!preview} animationType="fade" transparent onRequestClose={() => setPreview(null)}>
+      <Modal visible={!!preview} animationType="fade" transparent onRequestClose={() => { setPreview(null); setCatEditIdx(null); setDateEditIdx(null); }}>
         <View style={styles.previewOverlay}>
           <View style={[styles.previewBox, { backgroundColor: t.surface }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
@@ -381,26 +387,66 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
                 {new Intl.NumberFormat('ru-RU').format(Math.round((preview?.items ?? []).reduce((s, e) => s + (e.amount || 0), 0)))} ₽
               </Text>
             </View>
-            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator>
+            <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+              Проверьте и при необходимости поправьте — иконку категории, название, дату или сумму можно нажать.
+            </Text>
+            <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">
               {(preview?.items ?? []).map((e, idx) => (
                 <View key={idx} style={[styles.previewRow, { borderBottomColor: t.border }]}>
-                  <Text style={{ fontSize: 22, marginRight: spacing.md }}>{catIcon2(e.category || 'Прочее')}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: t.text, fontSize: font.md }} numberOfLines={1}>{e.description}</Text>
-                    <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>
-                      {e.category}{e.date ? ` · ${e.date}` : ''}
-                    </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity
+                      onPress={() => { Haptics.selectionAsync(); setCatEditIdx(catEditIdx === idx ? null : idx); }}
+                      style={[styles.prevCatBtn, { backgroundColor: t.surface2 }]}
+                    >
+                      <Text style={{ fontSize: 22 }}>{catIcon2(e.category || 'Прочее')}</Text>
+                    </TouchableOpacity>
+                    <View style={{ flex: 1 }}>
+                      <TextInput
+                        value={e.description}
+                        onChangeText={v => updateItem(idx, { description: v })}
+                        placeholder="Название"
+                        placeholderTextColor={t.textMuted}
+                        style={{ color: t.text, fontSize: font.md, paddingVertical: 2 }}
+                      />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <TouchableOpacity onPress={() => { Haptics.selectionAsync(); setDateEditIdx(idx); }}>
+                          <Text style={{ color: t.primary, fontSize: font.xs }}>📅 {e.date || todayStr()}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => { Haptics.selectionAsync(); setCatEditIdx(catEditIdx === idx ? null : idx); }}>
+                          <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>{e.category || 'Прочее'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        value={String(e.amount ?? '')}
+                        onChangeText={v => updateItem(idx, { amount: parseFloat(v.replace(',', '.')) || 0 })}
+                        keyboardType="decimal-pad"
+                        style={{ color: t.text, fontSize: font.md, fontWeight: '700', minWidth: 56, textAlign: 'right' }}
+                      />
+                      <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700' }}> ₽</Text>
+                    </View>
                   </View>
-                  <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700' }}>
-                    {new Intl.NumberFormat('ru-RU').format(Math.round(e.amount))} ₽
-                  </Text>
+                  {catEditIdx === idx && (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginTop: spacing.sm }}>
+                      {cats.map(c => (
+                        <TouchableOpacity
+                          key={c}
+                          onPress={() => { updateItem(idx, { category: c }); setCatEditIdx(null); Haptics.selectionAsync(); }}
+                          style={[styles.prevCatChip, { backgroundColor: e.category === c ? t.primary : t.surface2 }]}
+                        >
+                          <Text style={{ fontSize: 20 }}>{catIcon2(c)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
               ))}
             </ScrollView>
             <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
               <TouchableOpacity
                 style={[styles.previewBtn, { backgroundColor: t.surface2 }]}
-                onPress={() => setPreview(null)}
+                onPress={() => { setPreview(null); setCatEditIdx(null); setDateEditIdx(null); }}
                 disabled={adding}
               >
                 <Text style={{ color: t.text, fontWeight: '600' }}>Отмена</Text>
@@ -419,6 +465,14 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
             </View>
           </View>
         </View>
+
+        {/* Изменение даты позиции */}
+        <DayPickerModal
+          visible={dateEditIdx !== null}
+          date={(dateEditIdx !== null && preview?.items[dateEditIdx]?.date) || todayStr()}
+          onClose={() => setDateEditIdx(null)}
+          onPick={d => { if (dateEditIdx !== null) updateItem(dateEditIdx, { date: d }); setDateEditIdx(null); }}
+        />
       </Modal>
     </BottomSheet>
   );
@@ -437,8 +491,10 @@ const styles = StyleSheet.create({
   predChip:  { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: spacing.lg },
   previewBox: { borderRadius: radius.lg, padding: spacing.lg },
-  previewRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+  previewRow: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
   previewBtn: { flex: 1, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  prevCatBtn: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
+  prevCatChip:{ width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
   catGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   catBtn:    { alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, width: 52, height: 52 },
   submitBtn: { borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', marginTop: spacing.sm },

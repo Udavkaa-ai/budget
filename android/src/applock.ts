@@ -88,19 +88,28 @@ export async function canUseBiometrics(): Promise<boolean> {
 }
 
 // true = разблокировано биометрией (или системным PIN/паролем устройства как fallback)
+// Защита от параллельных вызовов: на Android второй authenticateAsync во время
+// активного промпта завершается ошибкой «уже выполняется» — тогда биометрия
+// «залипает». Повторный вызов переиспользует уже идущий промпт.
+let _authPromise: Promise<boolean> | null = null;
 export async function authenticate(): Promise<boolean> {
+  if (_authPromise) return _authPromise;
   _authInProgress = true;
-  try {
-    const res = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Разблокируйте Семейный бюджет',
-      cancelLabel: 'Отмена',
-      disableDeviceFallback: false,
-    });
-    return res.success;
-  } catch {
-    return false;
-  } finally {
-    // небольшая задержка: событие AppState 'active' приходит чуть позже промпта
-    setTimeout(() => { _authInProgress = false; }, 400);
-  }
+  _authPromise = (async () => {
+    try {
+      const res = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Разблокируйте Семейный бюджет',
+        cancelLabel: 'Отмена',
+        disableDeviceFallback: false,
+      });
+      return res.success;
+    } catch {
+      return false;
+    } finally {
+      _authPromise = null;
+      // небольшая задержка: событие AppState 'active' приходит чуть позже промпта
+      setTimeout(() => { _authInProgress = false; }, 400);
+    }
+  })();
+  return _authPromise;
 }
