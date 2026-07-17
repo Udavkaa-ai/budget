@@ -1094,11 +1094,15 @@ export function removeUserPushSubscriptions(userId, family) {
   debouncedSave();
 }
 
-export function getFamilyPushSubscriptions(family, excludeUserId = null) {
+// excludeUser может быть строкой или массивом (имя И логин отправителя) —
+// подписка могла сохраниться под любым из идентификаторов, особенно после
+// слияния Google-аккаунта, поэтому исключаем по всем вариантам.
+export function getFamilyPushSubscriptions(family, excludeUser = null) {
   if (!data.pushSubscriptions) return [];
   const f = fam(family);
+  const excl = new Set((Array.isArray(excludeUser) ? excludeUser : [excludeUser]).filter(Boolean));
   return data.pushSubscriptions.filter(
-    s => s.family === f && (!excludeUserId || s.userId !== excludeUserId)
+    s => s.family === f && !excl.has(s.userId)
   );
 }
 

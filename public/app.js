@@ -458,6 +458,15 @@ async function pushSelfToSW() {
   } catch { /* ignore */ }
 }
 
+// Переотправляем имя воркеру при возврате на вкладку и смене воркера —
+// чтобы фильтр «не уведомлять о своих» работал даже после перезапуска SW
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentUser) pushSelfToSW();
+});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (currentUser) pushSelfToSW(); });
+}
+
 async function initPushNotifications() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
