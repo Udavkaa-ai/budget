@@ -299,6 +299,31 @@
           <div class="settings-hint">Получайте уведомления когда партнёр добавляет расходы, даже если приложение закрыто.</div>
         </div>
 
+        <div class="settings-section" id="e2e-section">
+          <div class="settings-title">🔒 Приватность</div>
+          <div id="e2e-status" class="settings-hint"></div>
+          <div id="e2e-off" class="hidden">
+            <div class="settings-hint" style="margin-bottom:10px">
+              Сквозное шифрование: расходы шифруются на устройстве, сервер хранит только зашифрованные данные и никак не может их прочитать. Ключ есть только у вас и тех, кому вы его передадите.
+            </div>
+            <div class="settings-hint" style="margin-bottom:10px;color:var(--danger,#e5484d)">
+              ⚠️ Ключ хранится только на ваших устройствах. Потеряете ключ — потеряете доступ к данным без возможности восстановления.
+            </div>
+            <button id="btn-e2e-enable" class="btn btn-primary btn-full">🔒 Включить шифрование</button>
+          </div>
+          <div id="e2e-on" class="hidden">
+            <button id="btn-e2e-showkey" class="btn btn-outline btn-full">🔑 Показать ключ</button>
+            <div style="margin-top:8px">
+              <button id="btn-e2e-importkey" class="btn btn-outline btn-full">📥 Ввести ключ с другого устройства</button>
+            </div>
+          </div>
+          <div id="e2e-key-box" class="hidden" style="margin-top:10px">
+            <div class="settings-hint" style="margin-bottom:6px">Ключ семьи (сохраните в надёжном месте):</div>
+            <code id="e2e-key-text" style="display:block;word-break:break-all;background:var(--surface-2,#f4f4f7);padding:10px;border-radius:8px;font-size:12px"></code>
+            <button id="btn-e2e-copykey" class="btn btn-outline btn-full" style="margin-top:8px">📋 Скопировать</button>
+          </div>
+        </div>
+
         <div class="settings-section">
           <div class="settings-title">Конструктор аналитики</div>
           <div class="settings-hint">Включайте только те блоки, которыми пользуетесь. Настройка личная для этого устройства.</div>
@@ -336,7 +361,7 @@
         <div class="settings-section">
           <div class="settings-title">О приложении</div>
           <div class="settings-info">
-            <div style="color:var(--text-muted);font-size:13px">Версия 2.10.1 W</div>
+            <div style="color:var(--text-muted);font-size:13px">Версия 2.11.0 W</div>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 // Service Worker — network-first: всегда свежие файлы, кэш только при офлайне
-const CACHE = 'budget-v12';
+const CACHE = 'budget-v13';
 const STATIC = [
-  '/', '/style.css', '/app.js', '/manifest.json',
+  '/', '/style.css', '/app.js', '/e2e.js', '/manifest.json',
   '/vendor/chart.umd.min.js', '/vendor/hammer.min.js',
   '/vendor/chartjs-plugin-zoom.min.js', '/vendor/chartjs-plugin-datalabels.min.js',
 ];
