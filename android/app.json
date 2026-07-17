@@ -2,7 +2,7 @@
   "expo": {
     "name": "Семейный бюджет",
     "slug": "family-budget",
-    "version": "2.18.0",
+    "version": "2.19.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -20,7 +20,7 @@
         "backgroundColor": "#123B6D"
       },
       "package": "com.familybudget.app",
-      "versionCode": 14,
+      "versionCode": 15,
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",

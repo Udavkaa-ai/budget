@@ -1,10 +1,15 @@
 import * as SecureStore from 'expo-secure-store';
+import { isE2E } from '../e2e';
+import * as e2e from '../e2e/compute';
 
 const SERVER_URL_KEY = 'server_url';
 const TOKEN_KEY = 'auth_token';
 
 let _serverUrl = '';
 let _token = '';
+
+// Имя текущего пользователя из JWT — нужно как автор при локальной записи (E2E)
+function currentUserName(): string { return parseJwt(_token)?.name ?? ''; }
 
 export async function initApi() {
   _serverUrl = (await SecureStore.getItemAsync(SERVER_URL_KEY)) || '';
@@ -112,20 +117,29 @@ export interface AddExpensePayload {
 }
 
 export const expenses = {
-  add:    (payload: AddExpensePayload) => api.post<{ ok: boolean }>('/api/expenses', payload),
-  update: (id: string, data: Partial<Expense>) => api.put<{ ok: boolean }>(`/api/expenses/${id}`, data),
-  delete: (id: string) => api.delete<{ ok: boolean }>(`/api/expenses/${id}`),
+  add:    (payload: AddExpensePayload) => isE2E()
+    ? e2e.addExpenses(payload.expenses, currentUserName()).then(() => ({ ok: true }))
+    : api.post<{ ok: boolean }>('/api/expenses', payload),
+  update: (id: string, data: Partial<Expense>) => isE2E()
+    ? e2e.updateExpense(id, data).then(() => ({ ok: true }))
+    : api.put<{ ok: boolean }>(`/api/expenses/${id}`, data),
+  delete: (id: string) => isE2E()
+    ? e2e.deleteExpense(id).then(() => ({ ok: true }))
+    : api.delete<{ ok: boolean }>(`/api/expenses/${id}`),
   // Server expects YYYY-MM-DD and returns { entries: [...] }
   forDay: async (date: string): Promise<{ expenses: Expense[] }> => {
+    if (isE2E()) return e2e.forDay(date);
     const [d, m, y] = date.split('.');
     const res = await api.get<{ entries?: Expense[] } | Expense[]>(`/api/expenses/day?date=${y}-${m}-${d}`);
     const list = Array.isArray(res) ? res : res.entries ?? [];
     return { expenses: list };
   },
-  forMonth: (month: number, year: number) =>
-    api.get<Expense[]>(`/api/expenses/month?month=${month}&year=${year}`),
-  byCategory: (cat: string, month: number, year: number) =>
-    api.get<Expense[]>(`/api/expenses/category/${encodeURIComponent(cat)}?month=${month}&year=${year}`),
+  forMonth: (month: number, year: number) => isE2E()
+    ? e2e.forMonth(month, year)
+    : api.get<Expense[]>(`/api/expenses/month?month=${month}&year=${year}`),
+  byCategory: (cat: string, month: number, year: number) => isE2E()
+    ? e2e.byCategory(cat, month, year)
+    : api.get<Expense[]>(`/api/expenses/category/${encodeURIComponent(cat)}?month=${month}&year=${year}`),
 };
 
 // ─── Шифрованные бэкапы ──────────────────────────────────────────────────────
@@ -152,9 +166,20 @@ export const categoriesApi = {
 
 // ─── Family settings ─────────────────────────────────────────────────────────
 
+type SettingsShape = { familyName?: string; plannedMonthly?: number; categories?: string[]; customCategories?: Array<{ name: string; emoji: string }> };
 export const settings = {
-  get: () => api.get<{ familyName?: string; plannedMonthly?: number; categories?: string[]; customCategories?: Array<{ name: string; emoji: string }> }>('/api/settings'),
-  set: (key: string, value: unknown) => api.put<{ ok: boolean }>('/api/settings', { key, value }),
+  get: async (): Promise<SettingsShape> => {
+    if (isE2E()) {
+      // Имя семьи и категории — нефинансовые, берём с сервера; план-сумма локальная
+      let base: SettingsShape = {};
+      try { base = await api.get<SettingsShape>('/api/settings'); } catch { /* офлайн */ }
+      return { ...base, plannedMonthly: await e2e.getPlannedMonthly() };
+    }
+    return api.get<SettingsShape>('/api/settings');
+  },
+  set: (key: string, value: unknown) => (isE2E() && key === 'plannedMonthly')
+    ? e2e.setPlannedMonthly(Number(value)).then(() => ({ ok: true }))
+    : api.put<{ ok: boolean }>('/api/settings', { key, value }),
 };
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
@@ -167,6 +192,10 @@ export interface SummaryData {
 
 export const summary = {
   get: (month?: number, year?: number) => {
+    if (isE2E()) {
+      const now = new Date();
+      return e2e.summary(month ?? now.getMonth() + 1, year ?? now.getFullYear());
+    }
     const params = new URLSearchParams();
     if (month) params.set('month', String(month));
     if (year)  params.set('year',  String(year));
@@ -182,8 +211,10 @@ export interface BudgetPlan {
 }
 
 export const budgetPlan = {
-  get:  () => api.get<BudgetPlan>('/api/budget-plan'),
-  save: (plan: BudgetPlan) => api.put<{ ok: boolean }>('/api/budget-plan', plan),
+  get:  () => isE2E() ? e2e.getBudgetPlan() : api.get<BudgetPlan>('/api/budget-plan'),
+  save: (plan: BudgetPlan) => isE2E()
+    ? e2e.saveBudgetPlan(plan).then(() => ({ ok: true }))
+    : api.put<{ ok: boolean }>('/api/budget-plan', plan),
 };
 
 // ─── Goals ───────────────────────────────────────────────────────────────────
@@ -209,12 +240,16 @@ const normGoal = (g: ServerGoal): Goal => ({
 });
 
 export const goals = {
-  list: async () => (await api.get<ServerGoal[]>('/api/goals')).map(normGoal),
-  add: (goal: Omit<Goal, 'id' | 'saved'>) =>
-    api.post<{ ok: boolean }>('/api/goals', { name: goal.name, targetAmount: goal.target, emoji: goal.emoji }),
-  contribute: (id: string, amount: number) =>
-    api.post<{ ok: boolean }>(`/api/goals/${id}/contribute`, { amount }),
-  delete: (id: string) => api.delete<{ ok: boolean }>(`/api/goals/${id}`),
+  list: async () => isE2E() ? e2e.listGoals() : (await api.get<ServerGoal[]>('/api/goals')).map(normGoal),
+  add: (goal: Omit<Goal, 'id' | 'saved'>) => isE2E()
+    ? e2e.addGoal(goal.name, goal.target, goal.emoji).then(() => ({ ok: true }))
+    : api.post<{ ok: boolean }>('/api/goals', { name: goal.name, targetAmount: goal.target, emoji: goal.emoji }),
+  contribute: (id: string, amount: number) => isE2E()
+    ? e2e.contributeGoal(id, amount).then(() => ({ ok: true }))
+    : api.post<{ ok: boolean }>(`/api/goals/${id}/contribute`, { amount }),
+  delete: (id: string) => isE2E()
+    ? e2e.deleteGoal(id).then(() => ({ ok: true }))
+    : api.delete<{ ok: boolean }>(`/api/goals/${id}`),
 };
 
 // ─── Cashflow ────────────────────────────────────────────────────────────────
@@ -234,9 +269,11 @@ export interface UnifiedChart {
 }
 
 export const cashflow = {
-  get:     (ym: string) => api.get<Cashflow>(`/api/cashflow/${ym}`),
-  save:    (ym: string, body: Cashflow) => api.put<{ ok: boolean }>(`/api/cashflow/${ym}`, body),
-  unified: (ym: string) => api.get<UnifiedChart>(`/api/unified-chart-data/${ym}`),
+  get:     (ym: string) => isE2E() ? e2e.getCashflow(ym) : api.get<Cashflow>(`/api/cashflow/${ym}`),
+  save:    (ym: string, body: Cashflow) => isE2E()
+    ? e2e.saveCashflow(ym, body).then(() => ({ ok: true }))
+    : api.put<{ ok: boolean }>(`/api/cashflow/${ym}`, body),
+  unified: (ym: string) => isE2E() ? e2e.unified(ym) : api.get<UnifiedChart>(`/api/unified-chart-data/${ym}`),
 };
 
 // ─── AI (paid only) ──────────────────────────────────────────────────────────
@@ -249,8 +286,14 @@ export interface ParsedExpense {
 }
 
 export const ai = {
-  analyze: (month: number, year: number) =>
-    api.post<{ report: string; model: string }>('/api/analyze', { month, year }),
+  analyze: async (month: number, year: number) => {
+    if (isE2E()) {
+      // Сырые данные не покидают устройство — шлём обезличенную сводку
+      const reportText = await e2e.buildAiReport(month, year);
+      return api.post<{ report: string; model: string }>('/api/analyze-raw', { reportText });
+    }
+    return api.post<{ report: string; model: string }>('/api/analyze', { month, year });
+  },
   parseText: (text: string) =>
     api.post<{ expenses: ParsedExpense[] }>('/api/parse', { text }),
   parseImage: (base64: string, mimeType = 'image/jpeg') =>

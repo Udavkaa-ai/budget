@@ -16,6 +16,8 @@ import { HelpScreen } from './src/components/HelpScreen';
 import { AchievementToast } from './src/components/AchievementToast';
 import { initTour, tourSeen, isTourActive, startTour, useTourLoaded } from './src/tour';
 import { initAchievements } from './src/achievements';
+import { initE2E, isE2E } from './src/e2e';
+import { syncNow } from './src/e2e/sync';
 
 import { AppNavigator, navigationRef } from './src/navigation';
 import AuthScreen from './src/screens/AuthScreen';
@@ -101,7 +103,18 @@ function Root() {
       registerPushToken();
       refreshCategories();
       flushOutbox().catch(() => {});
+      // E2E: узнаём статус семьи и подтягиваем шифрованные изменения
+      initE2E().then(() => { if (isE2E()) syncNow().catch(() => {}); }).catch(() => {});
     }
+  }, [user]);
+
+  // E2E: досинхронизация при возврате в приложение
+  useEffect(() => {
+    if (!user) return;
+    const sub = AppState.addEventListener('change', s => {
+      if (s === 'active' && isE2E()) syncNow().catch(() => {});
+    });
+    return () => sub.remove();
   }, [user]);
 
   // Офлайн-очередь: пробуем дослать при возврате в приложение и раз в 30 секунд

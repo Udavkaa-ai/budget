@@ -22,6 +22,8 @@ import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import { openHelp } from '../help';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
+import { useE2E } from '../e2e';
+import { enableE2E } from '../e2e/enable';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -31,6 +33,37 @@ export default function SettingsScreen() {
   const themeMode = useThemeMode();
   const lockEnabled = useLockEnabled();
   const hasPinSet = useHasPin();
+  const e2e = useE2E();
+
+  const doEnableE2E = () => {
+    Alert.alert(
+      'Включить сквозное шифрование?',
+      'Все данные семьи переедут в зашифрованный вид. После этого сервер (и тот, кто им владеет) не сможет видеть ваши суммы и расходы — только зашифрованные блобы.\n\n⚠️ Ключ хранится ТОЛЬКО на устройствах. Если потеряете ключ-фразу и все устройства — данные восстановить будет НЕЛЬЗЯ. Сразу сохраните ключ-фразу и передайте её членам семьи.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Включить', style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            const r = await enableE2E();
+            setBusy(false);
+            if (r.ok) {
+              Alert.alert(
+                '🔒 Шифрование включено',
+                `Перенесено расходов: ${r.migrated}.\n\nСОХРАНИТЕ ключ-фразу — без неё данные не восстановить и не подключить второе устройство:\n\n${r.keyPhrase}`,
+                [
+                  { text: '📋 Поделиться', onPress: () => Share.share({ message: r.keyPhrase }) },
+                  { text: 'Я сохранил(а)' },
+                ],
+              );
+            } else {
+              Alert.alert('Не удалось включить', r.error);
+            }
+          },
+        },
+      ],
+    );
+  };
   // Цели тура + прокрутка длинного экрана к нужной карточке
   const scrollRef = React.useRef<ScrollView>(null);
   const inviteTarget = useTourTarget('settings.invite');
@@ -528,6 +561,38 @@ export default function SettingsScreen() {
         </Card>
         </View>
 
+        {/* End-to-end encryption */}
+        <Card style={e2e.enabled ? { borderColor: t.success, borderWidth: 1.5 } : undefined}>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>🔒 Приватность</Text>
+          {e2e.enabled ? (
+            <>
+              <Text style={{ color: t.text, fontSize: font.sm, lineHeight: 20 }}>
+                Сквозное шифрование включено. Сервер и его владелец видят только зашифрованные блобы — ваши суммы и расходы им недоступны.
+              </Text>
+              {!e2e.hasKey && (
+                <Text style={{ color: t.danger, fontSize: font.sm, marginTop: spacing.sm }}>
+                  На этом устройстве нет ключа — введите ключ-фразу ниже, иначе данные не расшифровать.
+                </Text>
+              )}
+              <TouchableOpacity style={styles.row} onPress={showKey}>
+                <Text style={{ color: t.text }}>🔑 Показать ключ (для второго устройства)</Text>
+                <Text style={{ color: t.textMuted }}>›</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.row} onPress={() => { setKeyInput(''); setKeyVisible(true); }}>
+                <Text style={{ color: t.text }}>📥 Ввести ключ с другого устройства</Text>
+                <Text style={{ color: t.textMuted }}>›</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md }}>
+                Сейчас сервер видит ваши расходы. Включите шифрование — данные будут храниться на сервере только зашифрованными, а ключ останется лишь на ваших устройствах. Тогда даже владелец сервера не сможет их прочитать.
+              </Text>
+              <PrimaryButton title="🔒 Включить шифрование" onPress={doEnableE2E} loading={busy} />
+            </>
+          )}
+        </Card>
+
         {/* Theme */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Оформление</Text>
@@ -683,7 +748,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.18.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.19.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.
