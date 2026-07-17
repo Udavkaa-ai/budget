@@ -394,7 +394,7 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   io.to(req.user.family).emit('expense:added', { expenses: withUser, by: req.user.name });
 
   // Web Push — отправляем другим участникам семьи у которых включены уведомления
-  const subs = getFamilyPushSubscriptions(req.user.family, req.user.name)
+  const subs = getFamilyPushSubscriptions(req.user.family, [req.user.name, req.user.login])
     .filter(s => getUserPushEnabled(s.userId, req.user.family));
   if (subs.length) {
     const total = withUser.reduce((s, e) => s + (e.amount || 0), 0);
@@ -685,7 +685,7 @@ app.post('/api/sync/records', authMiddleware, (req, res) => {
   io.to(req.user.family).emit('sync:changed', { by: req.user.name });
 
   // Пуш без деталей — сервер не знает сумм
-  const subs = getFamilyPushSubscriptions(req.user.family, req.user.name)
+  const subs = getFamilyPushSubscriptions(req.user.family, [req.user.name, req.user.login])
     .filter(sub => getUserPushEnabled(sub.userId, req.user.family));
   if (subs.length) {
     sendPushToSubscriptions(subs, {

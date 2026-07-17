@@ -334,19 +334,42 @@ export default function ChartScreen() {
                 </Svg>
                 </View>
                 </GestureDetector>
-                <View style={{ height: 44, justifyContent: 'center', marginTop: spacing.xs }}>
+                <View style={{ minHeight: 62, justifyContent: 'center', marginTop: spacing.sm }}>
                 {selDay !== null ? (
-                  <Text numberOfLines={2} style={{ color: t.text, fontSize: font.sm }}>
-                    День {selDay + 1}: {userNames
-                      .map(u => ({ u, v: unified!.userExpenses[u][selDay] || 0 }))
-                      .filter(x => x.v > 0)
-                      .map(x => `${x.u} ${fmt(x.v)}`)
-                      .join(' · ') || 'нет расходов'}
-                    {' · итого '}{fmt(dayTotals[selDay] ?? 0)}
-                    {bal ? ` · баланс ${fmt(bal[selDay] ?? 0)}` : ''}
-                  </Text>
+                  <View style={[styles.dayCard, { backgroundColor: t.surface2, borderColor: t.border }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs }}>
+                      <Text style={{ color: t.text, fontWeight: '800', fontSize: font.md }}>
+                        {selDay + 1} {getMonthName(month, year).split(' ')[0].toLowerCase()}
+                      </Text>
+                      <Text style={{ color: t.text, fontWeight: '800', fontSize: font.md }}>{fmt(dayTotals[selDay] ?? 0)}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                      {userNames.map((u, i) => ({ u, i, v: unified!.userExpenses[u][selDay] || 0 }))
+                        .filter(x => x.v > 0)
+                        .map(x => (
+                          <View key={x.u} style={styles.dayChip}>
+                            <View style={[styles.legendDot, { backgroundColor: USER_COLORS[x.i % USER_COLORS.length] }]} />
+                            <Text style={{ color: t.textMuted, fontSize: font.xs }}>{x.u}</Text>
+                            <Text style={{ color: t.text, fontSize: font.xs, fontWeight: '700' }}>{fmt(x.v)}</Text>
+                          </View>
+                        ))}
+                      {(dayTotals[selDay] ?? 0) === 0 && <Text style={{ color: t.textMuted, fontSize: font.xs }}>Расходов нет</Text>}
+                      {showIncome && incomeVals[selDay] > 0 && (
+                        <View style={styles.dayChip}>
+                          <View style={[styles.legendDot, { backgroundColor: '#7AE0C3' }]} />
+                          <Text style={{ color: t.textMuted, fontSize: font.xs }}>Доход</Text>
+                          <Text style={{ color: t.text, fontSize: font.xs, fontWeight: '700' }}>{fmt(incomeVals[selDay])}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {bal && (
+                      <Text style={{ fontSize: font.xs, marginTop: spacing.xs, color: t.textMuted }}>
+                        Баланс на конец дня: <Text style={{ color: bal[selDay] >= 0 ? '#22c55e' : '#ef4444', fontWeight: '700' }}>{fmt(bal[selDay] ?? 0)}</Text>
+                      </Text>
+                    )}
+                  </View>
                 ) : (
-                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Проведите пальцем по графику, чтобы увидеть показания дня</Text>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs, textAlign: 'center' }}>👆 Проведите пальцем по графику — покажет расходы, доход и баланс за день</Text>
                 )}
                 </View>
                 {unified!.hasBalance && (
@@ -475,6 +498,8 @@ const styles = StyleSheet.create({
   legend:       { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
   legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot:    { width: 10, height: 10, borderRadius: 5 },
+  dayCard:      { borderRadius: radius.md, borderWidth: 1, padding: spacing.md },
+  dayChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.sm, backgroundColor: 'rgba(89,71,224,0.06)' },
   dayChart:     { flexDirection: 'row', alignItems: 'flex-end', height: 130, gap: 1 },
   dayCol:       { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   dayBarWrap:   { width: '100%', justifyContent: 'flex-end' },
