@@ -4,7 +4,8 @@ import {
   ActivityIndicator, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Rect, Polyline, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Svg, { Rect, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { useTheme, spacing, font, radius } from '../theme';
 import {
   summary as summaryApi, cashflow as cfApi,
@@ -72,8 +73,9 @@ export default function ChartScreen() {
   const [members, setMembers] = useState<Record<string, CashflowMember>>({});
   const [incomeDays, setIncomeDays] = useState<Array<{ day: string; amount: string }>>([]);
   const [savingCf, setSavingCf] = useState(false);
-  const [selDay, setSelDay] = useState<number | null>(null);   // выбранный столбик расходов
+  const [selDay, setSelDay] = useState<number | null>(null);   // выбранный/наведённый день
   const [selBal, setSelBal] = useState<number | null>(null);   // выбранный столбик баланса
+  const [chartW, setChartW] = useState(0);                     // ширина области графика в px
   const [monthPicker, setMonthPicker] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const toggleSeries = (k: string) => { haptics.select(); setHidden(h => {
@@ -194,10 +196,12 @@ export default function ChartScreen() {
           {/* Единый график как в вебе: бары расходов по участникам,
               зелёные бары доходов, фиолетовая линия баланса */}
           {dayCount > 0 && (() => {
-            const W = 340, H = 170, PB = 16, PL = 6, PR = 34;
+            const W = 340, H = 196, TOP = 12, PB = 22, PL = 30, PR = 34;
+            const plotH = H - PB - TOP;
             const plotW = W - PL - PR;
             const n = unified!.labels.length;
             const colW = plotW / n;
+            const cx = (i: number) => PL + i * colW + colW / 2;
             const visUsers = userNames.filter(u => !hidden.has(u));
             const showIncome = !hidden.has('__income');
             const showBal = !hidden.has('__balance') && !!bal;
@@ -205,9 +209,40 @@ export default function ChartScreen() {
               visUsers.reduce((s2, u) => s2 + (unified!.userExpenses[u][i] || 0), 0));
             const incomeVals = unified!.labels.map((d, i) => unified!.incomeDays[String(i + 1)] || 0);
             const maxLeft = Math.max(...visTotals, ...(showIncome ? incomeVals : [0]), 1);
+            const barY = (v: number) => TOP + plotH - v / maxLeft * plotH;
+            const barH = (v: number) => v / maxLeft * plotH;
             const balMinAll = bal ? Math.min(...bal, 0) : 0;
             const balRange = bal ? Math.max(balMax - balMinAll, 1) : 1;
-            const balY = (v: number) => (H - PB) - (v - balMinAll) / balRange * (H - PB - 12);
+            const balY = (v: number) => TOP + plotH - (v - balMinAll) / balRange * plotH;
+            // Частота подписей дней: примерно 12 меток
+            const step = Math.max(1, Math.ceil(n / 12));
+            // Сегменты линии баланса: зелёная выше нуля, красная ниже (с разбивкой на пересечении)
+            const balSegs: Array<{ x1: number; y1: number; x2: number; y2: number; c: string }> = [];
+            if (showBal && bal) {
+              const col = (v: number) => v >= 0 ? '#22c55e' : '#ef4444';
+              for (let i = 0; i < bal.length - 1; i++) {
+                const a = bal[i], b = bal[i + 1];
+                const x1 = cx(i), x2 = cx(i + 1), y1 = balY(a), y2 = balY(b);
+                if ((a >= 0) === (b >= 0)) {
+                  balSegs.push({ x1, y1, x2, y2, c: col(a) });
+                } else {
+                  const r = Math.abs(a) / (Math.abs(a) + Math.abs(b) || 1);
+                  const xc = x1 + (x2 - x1) * r, yc = balY(0);
+                  balSegs.push({ x1, y1, x2: xc, y2: yc, c: col(a) });
+                  balSegs.push({ x1: xc, y1: yc, x2, y2, c: col(b) });
+                }
+              }
+            }
+            const onScrub = (px: number) => {
+              if (chartW <= 0) return;
+              const vbX = px / chartW * W;
+              let i = Math.round((vbX - PL - colW / 2) / colW);
+              i = Math.max(0, Math.min(n - 1, i));
+              setSelDay(prev => prev === i ? prev : i);
+            };
+            const scrub = Gesture.Pan()
+              .activeOffsetX([-8, 8]).failOffsetY([-14, 14]).runOnJS(true)
+              .onBegin(e => onScrub(e.x)).onUpdate(e => onScrub(e.x));
             return (
               <View ref={chartTarget} collapsable={false}>
               <Card>
@@ -230,54 +265,75 @@ export default function ChartScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-                <Svg width="100%" height={H + 18} viewBox={`0 0 ${W} ${H + 18}`}>
-                  {/* Сетка */}
-                  {[0.25, 0.5, 0.75, 1].map(f => (
-                    <SvgLine key={f} x1={PL} y1={(H - PB) * (1 - f) + 12 * f} x2={W - PR}
-                      y2={(H - PB) * (1 - f) + 12 * f} stroke={t.border} strokeWidth={0.5} />
-                  ))}
+                <GestureDetector gesture={scrub}>
+                <View onLayout={e => setChartW(e.nativeEvent.layout.width)}>
+                <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+                  {/* Сетка + подписи оси Y (левая ось — расходы/доход) */}
+                  {[0, 0.25, 0.5, 0.75, 1].map(f => {
+                    const y = TOP + plotH * (1 - f);
+                    return (
+                      <React.Fragment key={f}>
+                        <SvgLine x1={PL} y1={y} x2={W - PR} y2={y} stroke={t.border} strokeWidth={0.5} />
+                        <SvgText x={PL - 4} y={y + 3} fontSize={8.5} fill={t.textMuted} textAnchor="end">
+                          {f === 0 ? '0' : fmtShort(maxLeft * f)}
+                        </SvgText>
+                      </React.Fragment>
+                    );
+                  })}
+                  {/* Подсветка выбранного дня */}
+                  {selDay !== null && (
+                    <Rect x={PL + selDay * colW} y={TOP} width={colW} height={plotH} fill={t.primary} opacity={0.07} />
+                  )}
                   {/* Бары доходов (зелёные, за спиной) */}
                   {showIncome && incomeVals.map((v, i) => v > 0 && (
                     <Rect key={`inc${i}`} x={PL + i * colW + 0.5} width={Math.max(colW - 1, 1.5)}
-                      y={(H - PB) - v / maxLeft * (H - PB - 12)} height={v / maxLeft * (H - PB - 12)}
-                      fill="#7AE0C3" opacity={0.75} rx={1.5} />
+                      y={barY(v)} height={barH(v)} fill="#7AE0C3" opacity={0.7} rx={1.5} />
                   ))}
                   {/* Стек-бары расходов по участникам */}
                   {unified!.labels.map((d, i) => {
-                    let yCursor = H - PB;
+                    let yCursor = TOP + plotH;
                     return visUsers.map(u => {
                       const ui = userNames.indexOf(u);
                       const v = unified!.userExpenses[u][i] || 0;
                       if (v === 0) return null;
-                      const h = v / maxLeft * (H - PB - 12);
+                      const h = barH(v);
                       yCursor -= h;
                       return (
-                        <Rect key={`e${i}_${ui}`} x={PL + i * colW + colW * 0.22} width={Math.max(colW * 0.56, 1.5)}
-                          y={yCursor} height={h} fill={USER_COLORS[ui % USER_COLORS.length]} rx={1.5}
-                          onPress={() => setSelDay(sd => sd === i ? null : i)} />
+                        <Rect key={`e${i}_${ui}`} x={PL + i * colW + colW * 0.2} width={Math.max(colW * 0.6, 1.5)}
+                          y={yCursor} height={h} fill={USER_COLORS[ui % USER_COLORS.length]} rx={1.5} />
                       );
                     });
                   })}
-                  {/* Линия баланса */}
+                  {/* Нулевая ось баланса */}
+                  {showBal && bal && balMinAll < 0 && (
+                    <SvgLine x1={PL} y1={balY(0)} x2={W - PR} y2={balY(0)} stroke={t.textMuted}
+                      strokeWidth={0.8} strokeDasharray="3 3" opacity={0.6} />
+                  )}
+                  {/* Линия баланса: зелёная выше нуля, красная ниже */}
+                  {balSegs.map((s, i) => (
+                    <SvgLine key={`bs${i}`} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
+                      stroke={s.c} strokeWidth={2.4} strokeLinecap="round" />
+                  ))}
                   {showBal && bal && (
+                    <SvgText x={W - 2} y={balY(balMax) + 3} fontSize={8.5} fill={t.textMuted} textAnchor="end">{fmtShort(balMax)}</SvgText>
+                  )}
+                  {/* Ось X — чаще дни */}
+                  {unified!.labels.map((d, i) => (i === 0 || (i + 1) % step === 0 || i === n - 1) && (
+                    <SvgText key={`x${i}`} x={cx(i)} y={H - 6} fontSize={8.5}
+                      fill={selDay === i ? t.primary : t.textMuted} fontWeight={selDay === i ? '700' : '400'}
+                      textAnchor="middle">{d}</SvgText>
+                  ))}
+                  {/* Перекрестие + показания при скрабе */}
+                  {selDay !== null && (
                     <>
-                      <Polyline
-                        points={bal.map((v, i) => `${PL + i * colW + colW / 2},${balY(v)}`).join(' ')}
-                        fill="none" stroke={t.primary} strokeWidth={2.2} strokeLinejoin="round" />
-                      {bal.map((v, i) => (i === 0 || (i + 1) % 5 === 0 || i === bal.length - 1) && (
-                        <Circle key={`b${i}`} cx={PL + i * colW + colW / 2} cy={balY(v)} r={3} fill={t.primary} />
-                      ))}
-                      <SvgText x={W - 2} y={balY(balMax) + 3} fontSize={8.5} fill={t.primary} textAnchor="end">{fmtShort(balMax)}</SvgText>
-                      <SvgText x={W - 2} y={balY(balMinAll) + 3} fontSize={8.5} fill={t.primary} textAnchor="end">{fmtShort(balMinAll)}</SvgText>
+                      <SvgLine x1={cx(selDay)} y1={TOP} x2={cx(selDay)} y2={TOP + plotH} stroke={t.primary} strokeWidth={1} opacity={0.5} />
+                      {showBal && bal && <Circle cx={cx(selDay)} cy={balY(bal[selDay] ?? 0)} r={3.5} fill={bal[selDay] >= 0 ? '#22c55e' : '#ef4444'} stroke={t.surface} strokeWidth={1} />}
+                      <Circle cx={cx(selDay)} cy={barY(dayTotals[selDay] ?? 0)} r={3} fill={t.text} />
                     </>
                   )}
-                  {/* Ось X */}
-                  {unified!.labels.map((d, i) => (i === 0 || (i + 1) % 5 === 0) && (
-                    <SvgText key={`x${i}`} x={PL + i * colW + colW / 2} y={H + 12} fontSize={9}
-                      fill={t.textMuted} textAnchor="middle">{d}</SvgText>
-                  ))}
-                  <SvgText x={PL} y={10} fontSize={8.5} fill={t.textMuted}>{fmtShort(maxLeft)}</SvgText>
                 </Svg>
+                </View>
+                </GestureDetector>
                 <View style={{ height: 44, justifyContent: 'center', marginTop: spacing.xs }}>
                 {selDay !== null ? (
                   <Text numberOfLines={2} style={{ color: t.text, fontSize: font.sm }}>
@@ -290,7 +346,7 @@ export default function ChartScreen() {
                     {bal ? ` · баланс ${fmt(bal[selDay] ?? 0)}` : ''}
                   </Text>
                 ) : (
-                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Нажмите на столбик — детали дня</Text>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Проведите пальцем по графику, чтобы увидеть показания дня</Text>
                 )}
                 </View>
                 {unified!.hasBalance && (

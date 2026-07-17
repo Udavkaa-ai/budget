@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path, Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
+import Svg, { Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
@@ -16,6 +16,7 @@ import { usePremium } from '../premium';
 import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
+import { BudgetGauge } from '../components/BudgetGauge';
 import { haptics } from '../haptics';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
@@ -26,19 +27,6 @@ function fmt(n: number) {
 function getMonthName(m: number, y: number) {
   const names = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   return `${names[m - 1]} ${y}`;
-}
-
-// Точка на дуге спидометра: 0% слева (180°), максимум справа (0°)
-function polar(cx: number, cy: number, r: number, pct: number, maxPct = 160) {
-  const a = Math.PI * (1 - Math.min(pct, maxPct) / maxPct);
-  return { x: cx + r * Math.cos(a), y: cy - r * Math.sin(a) };
-}
-
-function arcPath(cx: number, cy: number, r: number, fromPct: number, toPct: number, maxPct = 160) {
-  const s = polar(cx, cy, r, fromPct, maxPct);
-  const e = polar(cx, cy, r, toPct, maxPct);
-  const large = (toPct - fromPct) / maxPct > 0.5 ? 1 : 0;
-  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
 }
 
 // Шрифт Onest не содержит стрелочных глифов (→ ↑ ↓ ←) — они рендерятся мусором
@@ -384,43 +372,20 @@ export default function SummaryScreen() {
             <View ref={gaugeTarget} collapsable={false} onLayout={tOffset('summary.gauge')}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Барометр бюджета</Text>
-              <View style={{ alignItems: 'center' }}>
-                <Svg width="100%" height={150} viewBox="0 0 260 150">
-                  {/* Зоны: зелёная до 70%, жёлтая 70-100%, красная 100-160% */}
-                  <Path d={arcPath(130, 128, 92, 0, 70)} stroke="#22c55e" strokeWidth={15} fill="none" strokeLinecap="round" />
-                  <Path d={arcPath(130, 128, 92, 70, 100)} stroke="#f59e0b" strokeWidth={15} fill="none" />
-                  <Path d={arcPath(130, 128, 92, 100, 160)} stroke="#ef4444" strokeWidth={15} fill="none" strokeLinecap="round" />
-                  {/* Короткая стрелка — не задевает цифру и дугу */}
-                  {(() => {
-                    const tip = polar(130, 128, 62, gaugePct);
-                    return <SvgLine x1={130} y1={128} x2={tip.x} y2={tip.y} stroke={t.text} strokeWidth={3.5} strokeLinecap="round" />;
-                  })()}
-                  <Circle cx={130} cy={128} r={6} fill={t.text} />
-                  {/* Подписи вне шкалы */}
-                  <SvgText x={30} y={147} fontSize={11} fill={t.textMuted} textAnchor="middle">0%</SvgText>
-                  {(() => { const p = polar(130, 128, 112, 70); return (
-                    <SvgText x={p.x} y={p.y} fontSize={11} fill={t.textMuted} textAnchor="middle">70%</SvgText>
-                  ); })()}
-                  {(() => { const p = polar(130, 128, 112, 100); return (
-                    <SvgText x={p.x} y={p.y} fontSize={11} fill={t.textMuted} textAnchor="middle">100%</SvgText>
-                  ); })()}
-                  <SvgText x={230} y={147} fontSize={11} fill={t.textMuted} textAnchor="middle">160%</SvgText>
-                </Svg>
-                <Text style={{
-                  fontSize: 34, fontWeight: '800', marginTop: 4,
-                  color: gaugePct <= 70 ? '#22c55e' : gaugePct <= 100 ? '#f59e0b' : '#ef4444',
-                }}>
-                  {gaugePct}%
-                </Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>ФАКТ / ПЛАН</Text>
-                <Text style={{ color: t.text, fontSize: font.sm, marginTop: 2 }}>
-                  {gaugePct > 100 ? 'Перерасход 🔴' : gaugePct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
-                </Text>
-              </View>
+              <BudgetGauge pct={gaugePct} />
               <View style={styles.gaugeStats}>
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>Потрачено{'\n'}{fmt(data?.total ?? 0)}</Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs, textAlign: 'center' }}>По плану{'\n'}{fmt(planToDate)}</Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs, textAlign: 'right' }}>Дней{'\n'}{daysPassed} из {daysInMonth}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Потрачено</Text>
+                  <Text style={{ color: t.text, fontSize: font.sm, fontWeight: '700' }}>{fmt(data?.total ?? 0)}</Text>
+                </View>
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>По плану</Text>
+                  <Text style={{ color: t.text, fontSize: font.sm, fontWeight: '700' }}>{fmt(planToDate)}</Text>
+                </View>
+                <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Дней</Text>
+                  <Text style={{ color: t.text, fontSize: font.sm, fontWeight: '700' }}>{daysPassed} из {daysInMonth}</Text>
+                </View>
               </View>
             </Card>
             </View>
