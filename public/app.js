@@ -1175,6 +1175,8 @@ async function loadSummary() {
   document.getElementById('category-detail').classList.add('hidden');
   document.getElementById('summary-by-user').classList.remove('hidden');
   document.getElementById('summary-total-bar').classList.remove('hidden');
+  document.querySelector('.speed-chart-card')?.classList.remove('hidden');
+  document.querySelector('.family-overview-card')?.classList.remove('hidden');
   loadHeatMap();
   try { loadSpeedChart(summaryMonth, summaryYear); } catch (e) { console.error('speedChart', e); }
 
@@ -1413,6 +1415,10 @@ async function loadCategoryDetail(cat, month, year) {
   document.getElementById('summary-compare-panel').classList.add('hidden');
   document.getElementById('summary-heatmap').classList.add('hidden');
   document.getElementById('summary-by-user').classList.add('hidden');
+  // Блоки аналитики за весь месяц не относятся к выбранной категории и лишь
+  // отделяют её сумму от списка расходов — прячем на время просмотра категории
+  document.querySelector('.speed-chart-card')?.classList.add('hidden');
+  document.querySelector('.family-overview-card')?.classList.add('hidden');
 
   const detail = document.getElementById('category-detail');
   detail.classList.remove('hidden');
@@ -2920,7 +2926,10 @@ function setupEventListeners() {
     document.getElementById('summary-by-user').classList.remove('hidden');
     document.getElementById('summary-total-bar').classList.remove('hidden');
     document.getElementById('summary-heatmap').classList.remove('hidden');
+    document.querySelector('.speed-chart-card')?.classList.remove('hidden');
+    document.querySelector('.family-overview-card')?.classList.remove('hidden');
     renderSummaryView();
+    applyBlockVisibility(); // вернуть блокам видимость согласно «Конструктору аналитики»
   });
 
   // Chart navigation
