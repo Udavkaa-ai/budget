@@ -2,6 +2,8 @@
 //  Семейный бюджет — PWA Frontend
 // ════════════════════════════════════════════════════════════════
 
+import * as E2E from './e2e.js';
+
 const PLAN_CATEGORIES = [
   { key: 'Продукты',    icon: '🛒' },
   { key: 'Дом',         icon: '🏠' },
@@ -220,6 +222,11 @@ async function api(method, path, body) {
 }
 
 async function apiJson(method, path, body) {
+  // E2E: финансовые запросы обслуживаются локально (сервер видит только шифроблобы)
+  if (E2E.active()) {
+    const handled = await E2E.handle(method, path, body);
+    if (handled !== E2E.PASS) return handled;
+  }
   const res = await api(method, path, body);
   try {
     return await res.json();
@@ -550,6 +557,20 @@ function initSocket() {
 
   socket.on('goals:updated', () => {
     if (currentScreen === 'goals') loadGoalsList();
+  });
+
+  // E2E: другое устройство залило шифроблобы — подтягиваем и обновляем экран
+  socket.on('sync:changed', ({ by } = {}) => {
+    if (!E2E.active()) return;
+    E2E.syncNow().then(() => {
+      if (by && by !== currentUser.name) showToastInfo(`${by} обновил бюджет`);
+      refreshCurrentScreen();
+    }).catch(() => {});
+  });
+
+  // E2E включили с другого устройства — перезагружаемся, чтобы подтянуть режим
+  socket.on('e2e:enabled', () => {
+    setTimeout(() => window.location.reload(), 500);
   });
 
   socket.on('connect_error', (err) => {
@@ -1771,6 +1792,80 @@ async function loadSettingsScreen() {
     document.getElementById('admin-panel-btn-section').classList.remove('hidden');
     document.getElementById('admin-update-section').classList.remove('hidden');
   }
+
+  renderE2ESection();
+}
+
+// ─── E2E (Приватность) ────────────────────────────────────────────────────────
+
+function renderE2ESection() {
+  const statusEl = document.getElementById('e2e-status');
+  const offEl = document.getElementById('e2e-off');
+  const onEl = document.getElementById('e2e-on');
+  if (!statusEl || !offEl || !onEl) return;
+
+  const on = E2E.active();
+  const enabledNoKey = E2E.enabled() && !E2E.hasKey();
+
+  if (on) {
+    statusEl.textContent = '✅ Шифрование включено. Сервер не видит ваши расходы.';
+    onEl.classList.remove('hidden');
+    offEl.classList.add('hidden');
+  } else if (enabledNoKey) {
+    statusEl.textContent = '🔑 В этой семье включено шифрование, но на этом устройстве нет ключа. Введите ключ с другого устройства, чтобы видеть данные.';
+    onEl.classList.remove('hidden');
+    offEl.classList.add('hidden');
+  } else {
+    statusEl.textContent = 'Шифрование выключено — сервер видит расходы в открытом виде.';
+    offEl.classList.remove('hidden');
+    onEl.classList.add('hidden');
+  }
+  document.getElementById('e2e-key-box')?.classList.add('hidden');
+}
+
+async function doEnableE2E() {
+  const ok = confirm(
+    'Включить сквозное шифрование?\n\n' +
+    'После включения расходы будут шифроваться на устройстве, и сервер не сможет их прочитать.\n\n' +
+    '⚠️ ВАЖНО: ключ хранится только на ваших устройствах. Если вы его потеряете — данные будет НЕВОЗМОЖНО восстановить. Сразу после включения сохраните ключ в надёжном месте.'
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('btn-e2e-enable');
+  if (btn) { btn.disabled = true; btn.textContent = 'Включаю…'; }
+  try {
+    const res = await E2E.enableE2E();
+    if (res.ok) {
+      renderE2ESection();
+      showE2EKey(res.keyPhrase);
+      showToastSuccess(`Шифрование включено. Перенесено расходов: ${res.migrated}`);
+    } else {
+      showToastError(res.error || 'Не удалось включить шифрование');
+    }
+  } catch {
+    showToastError('Ошибка при включении шифрования');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔒 Включить шифрование'; }
+  }
+}
+
+function showE2EKey(phrase) {
+  const box = document.getElementById('e2e-key-box');
+  const text = document.getElementById('e2e-key-text');
+  if (!box || !text) return;
+  text.textContent = phrase || E2E.exportKeyHex() || '(ключ недоступен)';
+  box.classList.remove('hidden');
+}
+
+async function doImportE2EKey() {
+  const hex = prompt('Вставьте ключ семьи (64 символа), полученный с другого устройства:');
+  if (!hex) return;
+  const ok = await E2E.importKeyHex(hex);
+  if (!ok) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
+  showToastSuccess('Ключ сохранён. Обновляю данные…');
+  try { await E2E.syncNow(); } catch { /* ignore */ }
+  renderE2ESection();
+  refreshCurrentScreen();
 }
 
 function updateFamilyChip(name) {
@@ -2614,6 +2709,13 @@ async function initApp() {
   } catch { logout(); return; }
 
   document.getElementById('topbar-user').textContent = currentUser.name;
+
+  // E2E: узнаём статус семьи и подтягиваем шифрованные данные до первой отрисовки
+  try {
+    await E2E.init({ getToken: () => token, userName: currentUser.name });
+    if (E2E.active()) await E2E.syncNow();
+  } catch { /* сеть — синхронизируемся позже */ }
+
   showApp();
   initSocket();
   initCategoryGrid();
@@ -2902,6 +3004,15 @@ function setupEventListeners() {
     } else {
       showToastError(res.error || 'Ошибка сохранения');
     }
+  });
+
+  // E2E (Приватность)
+  document.getElementById('btn-e2e-enable')?.addEventListener('click', doEnableE2E);
+  document.getElementById('btn-e2e-showkey')?.addEventListener('click', () => showE2EKey(E2E.exportKeyHex()));
+  document.getElementById('btn-e2e-importkey')?.addEventListener('click', doImportE2EKey);
+  document.getElementById('btn-e2e-copykey')?.addEventListener('click', () => {
+    const t = document.getElementById('e2e-key-text')?.textContent || '';
+    navigator.clipboard?.writeText(t).then(() => showToastSuccess('Ключ скопирован')).catch(() => {});
   });
 
   // Push notifications toggle
