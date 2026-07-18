@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, Modal, TextInput, ScrollView, Animated,
@@ -88,6 +89,12 @@ export default function HomeScreen() {
     }
   }, [date, user?.name]);
 
+  // Загружаем день при входе на вкладку и при возврате на неё. Это же
+  // покрывает первый показ «Сегодня»: раньше начальной загрузки не было —
+  // список оставался пустым, пока не перелистнёшь день или не обновишь вручную.
+  // Смена даты пересоздаёт load → эффект перезапускается с новой датой.
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
   // Real-time sync + обновление при изменении офлайн-очереди
   useSocket(useCallback(() => { load(); }, [load]));
   React.useEffect(() => onOutboxChange(() => { load(); }), [load]);
@@ -106,7 +113,6 @@ export default function HomeScreen() {
     setDate(nd);
     haptics.light();
     animateSwitch(-1);
-    load(nd);
   };
 
   const nextDay = () => {
@@ -118,7 +124,6 @@ export default function HomeScreen() {
     setDate(nd);
     haptics.light();
     animateSwitch(1);
-    load(nd);
   };
 
   const deleteExpense = (id: string) => {
@@ -323,7 +328,7 @@ export default function HomeScreen() {
           visible={pickerVisible}
           date={date}
           onClose={() => setPickerVisible(false)}
-          onPick={d => { setDate(d); load(d); }}
+          onPick={d => { setDate(d); }}
         />
 
         {/* Edit expense modal */}
