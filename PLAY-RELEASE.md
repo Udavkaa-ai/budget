@@ -51,9 +51,10 @@ GitHub → **Actions → «Android APK Build» → Run workflow** → в пол�
 - **Feature graphic 1024×500:** `store-assets/play-feature-1024x500.png`
 - **Скриншоты телефона:** минимум 2 (до 8), 16:9 или 9:16.
   ⚠️ Сделай свежие скриншоты **на демо-данных**, без реальных сумм семьи.
+- **Имя разработчика (издатель):** Udav Kaa
 - **Политика конфиденциальности (URL):** `https://<домен>/privacy.html`
   (после деплоя — твой Amvera-адрес, позже заменишь на family-budget.online)
-- **Контактный email:** _(подтверди — сейчас в политике стоит udavkaa2011@gmail.com)_
+- **Контактный email:** udavkaa2011@gmail.com
 
 ## 5. «Безопасность данных» (Data safety) — как отвечать
 
