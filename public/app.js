@@ -3124,92 +3124,94 @@ function setupEventListeners() {
 
 }
 
+// Свайп-навигация в стиле Apple: 1:1-трекинг пальца, скорость → инерция
+// (лёгкий флик = переход), прогрессивная резинка на закрытой границе,
+// симметричные вход/выход. Уважает prefers-reduced-motion.
 function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
-  let startX = 0, startY = 0, active = false, transitioning = false;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const SPRING = 'transform 0.34s cubic-bezier(0.32,0.72,0,1)';
+  let startX = 0, startY = 0, active = false, decided = false, horizontal = false, transitioning = false;
+  let lastX = 0, lastT = 0, vx = 0; // vx: px/ms
+  const width = () => el.clientWidth || window.innerWidth || 360;
+  // Резинка: чем дальше за границу, тем меньше следует за пальцем (раздел 9 скилла)
+  const rubber = (x, dim, c = 0.55) => (x * dim * c) / (dim + c * Math.abs(x));
+
+  function snapBack() {
+    el.style.transition = SPRING;
+    el.style.transform = '';
+  }
+
+  function commit(goLeft) {
+    transitioning = true;
+    if (navigator.vibrate) navigator.vibrate(8); // тактильный «прищёлк» (Android; iOS игнорирует)
+    el.style.transition = 'transform 0.19s cubic-bezier(0.4,0,1,1)'; // ускорение на выход
+    el.style.transform = `translateX(${goLeft ? '-105%' : '105%'})`;
+    setTimeout(() => {
+      // мгновенно на противоположную сторону, грузим новые данные
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${goLeft ? '60%' : '-60%'})`;
+      if (goLeft) onLeft(); else onRight();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.style.transition = SPRING;               // въезд с той стороны, откуда пришло
+        el.style.transform = '';
+        setTimeout(() => { transitioning = false; }, 360);
+      }));
+    }, 190);
+  }
 
   el.addEventListener('touchstart', e => {
-    if (transitioning) return;
-    startX = e.touches[0].clientX;
+    if (transitioning || e.touches.length > 1) return;
+    startX = lastX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    active = true;
+    lastT = e.timeStamp; vx = 0;
+    active = true; decided = false; horizontal = false;
     el.style.transition = 'none';
   }, { passive: true });
 
   el.addEventListener('touchmove', e => {
     if (!active) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-    // Cancel tracking if clearly a vertical scroll
-    if (Math.abs(dy) > 20 && Math.abs(dy) > Math.abs(dx)) {
-      active = false;
-      el.style.transition = 'transform 0.2s ease';
-      el.style.transform = '';
-      return;
+    const x = e.touches[0].clientX, y = e.touches[0].clientY;
+    const dx = x - startX, dy = y - startY;
+    if (!decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; // ждём явного намерения
+      decided = true;
+      horizontal = Math.abs(dx) > Math.abs(dy);
+      if (!horizontal) { active = false; return; }     // вертикаль — отдаём скроллу
     }
-    // Follow finger with dampening (rubber-band feel)
-    el.style.transform = `translateX(${dx * 0.35}px)`;
+    if (!horizontal || reduce) return;
+    const dt = e.timeStamp - lastT;
+    if (dt > 0) vx = (x - lastX) / dt;
+    lastX = x; lastT = e.timeStamp;
+    // 1:1 в разрешённую сторону, резинка — в закрытую
+    const goLeft = dx < 0;
+    const blocked = goLeft ? (canLeft && !canLeft()) : (canRight && !canRight());
+    const eff = blocked ? rubber(dx, width()) : dx;
+    el.style.transform = `translateX(${eff}px)`;
   }, { passive: true });
 
   function finish(dx, dy) {
     if (!active) return;
     active = false;
-    const isHorizontal = Math.abs(dx) >= 55 && Math.abs(dx) >= Math.abs(dy) * 1.3;
-    if (isHorizontal) {
-      const goLeft = dx < 0;
-      const canProceed = goLeft ? (!canLeft || canLeft()) : (!canRight || canRight());
-
-      if (!canProceed) {
-        // Boundary reached — rubber-band bounce
-        const bump = goLeft ? '-28px' : '28px';
-        el.style.transition = 'transform 0.12s ease-out';
-        el.style.transform = `translateX(${bump})`;
-        setTimeout(() => {
-          el.style.transition = 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)';
-          el.style.transform = '';
-        }, 120);
-        return;
-      }
-
-      // Lock against new swipes for the full animation cycle
-      transitioning = true;
-
-      // Slide screen out
-      el.style.transition = 'transform 0.2s ease-in';
-      el.style.transform = `translateX(${goLeft ? '-105%' : '105%'})`;
-      setTimeout(() => {
-        // Instantly jump to opposite side, fire data load
-        el.style.transition = 'none';
-        el.style.transform = `translateX(${goLeft ? '60%' : '-60%'})`;
-        if (goLeft) onLeft(); else onRight();
-        // Slide back to center
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          el.style.transition = 'transform 0.22s ease-out';
-          el.style.transform = '';
-          // Unlock only after slide-in animation completes
-          setTimeout(() => { transitioning = false; }, 260);
-        }));
-      }, 200);
-    } else {
-      // Not a valid swipe — snap back
-      el.style.transition = 'transform 0.25s ease';
-      el.style.transform = '';
-    }
+    if (!horizontal) { snapBack(); return; }
+    const w = width();
+    // проекция точки покоя по скорости (раздел 6): v(px/s) * 0.998/(1-0.998)/1000
+    const projected = dx + vx * 499;
+    const goLeft = projected < 0;
+    const passed = Math.abs(projected) > w * 0.26 || Math.abs(vx) > 0.45;
+    const canProceed = goLeft ? (!canLeft || canLeft()) : (!canRight || canRight());
+    if (reduce) { if (passed && canProceed) { goLeft ? onLeft() : onRight(); } return; }
+    if (passed && canProceed) commit(goLeft);
+    else snapBack();
   }
 
   el.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
-    if (active && Math.abs(dx) >= 55 && Math.abs(dx) >= Math.abs(dy) * 1.3) {
-      e.preventDefault(); // prevent synthetic click after horizontal swipe
-    }
+    if (active && horizontal && Math.abs(dx) > 24) e.preventDefault(); // гасим фантомный click
     finish(dx, dy);
   });
 
-  el.addEventListener('touchcancel', () => {
-    active = false;
-    el.style.transition = 'transform 0.25s ease';
-    el.style.transform = '';
-  }, { passive: true });
+  el.addEventListener('touchcancel', () => { active = false; snapBack(); }, { passive: true });
 }
 
 function switchAddTab(tab) {
