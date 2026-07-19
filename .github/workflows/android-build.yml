@@ -130,9 +130,12 @@ jobs:
         if: ${{ github.event.inputs.build_type == 'store' }}
         working-directory: android/android
         run: |
-          # Write keystore from secret and switch release signing to it
+          # Write keystore from secret and switch release signing to it.
+          # Leading newline is required: the Expo-generated build.gradle has no
+          # trailing newline, so a bare append would glue onto the last statement
+          # and Groovy would parse it as apply(...).apply(...) → NPE.
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
-          echo "apply from: '../../release-signing.gradle'" >> app/build.gradle
+          printf '\napply from: "../../release-signing.gradle"\n' >> app/build.gradle
           ./gradlew bundleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
