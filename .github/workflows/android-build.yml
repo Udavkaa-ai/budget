@@ -123,14 +123,17 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
-      - name: Build store APK
+      # Store build for Google Play: a signed Android App Bundle (.aab).
+      # Play requires AAB, not APK, for new apps. Signed with the upload key
+      # (Play App Signing re-signs on Google's side).
+      - name: Build store AAB
         if: ${{ github.event.inputs.build_type == 'store' }}
         working-directory: android/android
         run: |
           # Write keystore from secret and switch release signing to it
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
           echo "apply from: '../../release-signing.gradle'" >> app/build.gradle
-          ./gradlew assembleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
+          ./gradlew bundleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
           KEYSTORE_PATH: release.jks
@@ -138,26 +141,32 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      # ── Upload APK ────────────────────────────────────────────────────────────
-      - name: Upload APK
+      # ── Upload build ──────────────────────────────────────────────────────────
+      # store → signed .aab for Google Play; standalone → installable .apk
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: family-budget-${{ github.event.inputs.build_type || 'standalone' }}-${{ github.run_number }}
-          path: android/android/app/build/outputs/apk/release/app-release.apk
+          path: ${{ github.event.inputs.build_type == 'store' && 'android/android/app/build/outputs/bundle/release/app-release.aab' || 'android/android/app/build/outputs/apk/release/app-release.apk' }}
           retention-days: 30
 
       # ── Print download instructions ───────────────────────────────────────────
       - name: Build summary
         run: |
-          echo "## ✅ APK собран" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Тип:** ${{ github.event.inputs.build_type || 'standalone' }} (JS-бандл встроен, Metro не нужен)" >> $GITHUB_STEP_SUMMARY
-          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Скачать: Actions → этот запуск → Artifacts → \`family-budget-*\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Установка на устройство" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "adb install app-release.apk" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "Или просто отправьте APK-файл тестировщику — он устанавливается напрямую." >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.build_type }}" = "store" ]; then
+            echo "## ✅ AAB для Google Play собран" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Тип:** store — подписанный \`app-release.aab\` (upload key)" >> $GITHUB_STEP_SUMMARY
+            echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Скачать: Actions → этот запуск → Artifacts → \`family-budget-store-*\`" >> $GITHUB_STEP_SUMMARY
+            echo "Загрузить в Play Console → Testing → Closed testing → Create release → Upload." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ APK собран" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Тип:** standalone (JS-бандл встроен, Metro не нужен)" >> $GITHUB_STEP_SUMMARY
+            echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Скачать: Actions → этот запуск → Artifacts → \`family-budget-*\`" >> $GITHUB_STEP_SUMMARY
+            echo "Установка: \`adb install app-release.apk\` или отправьте APK тестировщику напрямую." >> $GITHUB_STEP_SUMMARY
+          fi
