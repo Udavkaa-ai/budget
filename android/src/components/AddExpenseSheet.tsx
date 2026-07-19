@@ -17,6 +17,7 @@ import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
 import { checkOnAddExpense } from '../achievements';
+import { beginSystemUi, endSystemUi } from '../applock';
 
 function todayStr() {
   const d = new Date();
@@ -154,19 +155,28 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
 
   const pickImage = async (camera: boolean) => {
     try {
-      if (camera) {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) { Alert.alert('Нет доступа к камере'); return; }
+      // Системные экраны (запрос доступа, камера, галерея) уводят приложение в
+      // background — подавляем автоблокировку, иначе после выбора фото процесс
+      // скана чека сбрасывается на экран разблокировки.
+      let result: ImagePicker.ImagePickerResult | null = null;
+      beginSystemUi();
+      try {
+        if (camera) {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) { Alert.alert('Нет доступа к камере'); return; }
+        }
+        const opts: ImagePicker.ImagePickerOptions = {
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          base64: true,
+          quality: 0.5,
+        };
+        result = camera
+          ? await ImagePicker.launchCameraAsync(opts)
+          : await ImagePicker.launchImageLibraryAsync(opts);
+      } finally {
+        endSystemUi();
       }
-      const opts: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        base64: true,
-        quality: 0.5,
-      };
-      const result = camera
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
-      if (result.canceled || !result.assets?.[0]?.base64) return;
+      if (!result || result.canceled || !result.assets?.[0]?.base64) return;
 
       setScanning(true);
       const res = await ai.parseImage(result.assets[0].base64);

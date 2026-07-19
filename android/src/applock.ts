@@ -18,6 +18,19 @@ const listeners = new Set<() => void>();
 let _authInProgress = false;
 export function isAuthInProgress() { return _authInProgress; }
 
+// Флаг «идёт системный экран, из-за которого приложение временно уходит в
+// background» — выбор фото из галереи, камера и т.п. Пока он поднят,
+// автоблокировка не срабатывает, иначе после возврата процесс (скан чека)
+// сбрасывается на экран разблокировки.
+let _systemUiInProgress = false;
+export function isSystemUiInProgress() { return _systemUiInProgress; }
+export function beginSystemUi() { _systemUiInProgress = true; }
+export function endSystemUi() {
+  // AppState 'active' приходит чуть позже закрытия системного экрана —
+  // держим флаг ещё немного, чтобы не поймать ложную блокировку.
+  setTimeout(() => { _systemUiInProgress = false; }, 600);
+}
+
 export async function initAppLock() {
   _enabled = (await SecureStore.getItemAsync(LOCK_KEY)) === '1';
   _hasPin = !!(await SecureStore.getItemAsync(PIN_KEY));

@@ -9,7 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
 import { refreshCategories } from './src/categories';
 import { initThemeMode, useEffectiveScheme } from './src/theme';
-import { initAppLock, useLockEnabled, isAuthInProgress } from './src/applock';
+import { initAppLock, useLockEnabled, isAuthInProgress, isSystemUiInProgress } from './src/applock';
 import { LockScreen } from './src/components/LockScreen';
 import { Tour } from './src/components/Tour';
 import { HelpScreen } from './src/components/HelpScreen';
@@ -87,12 +87,13 @@ function Root() {
     if (user && tourReady && !tourSeen() && !isTourActive()) startTour();
   }, [user, tourReady]);
 
-  // Блокируем заново при уходе в фон. Игнорируем ложный уход в фон,
-  // вызванный системным окном биометрии (иначе промпт «мигает» и не срабатывает).
+  // Блокируем заново при уходе в фон. Игнорируем ложный уход в фон, вызванный
+  // системным окном биометрии или выбором фото/камерой (иначе промпт «мигает»
+  // и не срабатывает, а скан чека сбрасывается на экран разблокировки).
   useEffect(() => {
     if (!lockEnabled) return;
     const sub = AppState.addEventListener('change', st => {
-      if (st !== 'active' && !isAuthInProgress()) setUnlocked(false);
+      if (st !== 'active' && !isAuthInProgress() && !isSystemUiInProgress()) setUnlocked(false);
     });
     return () => sub.remove();
   }, [lockEnabled]);
