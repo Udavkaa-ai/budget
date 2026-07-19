@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      # TEMP: push builds 'store' so CI can be iterated without manual dispatch.
-      # Revert the fallback to 'standalone' once the store AAB build is green.
-      BT: ${{ github.event.inputs.build_type || 'store' }}
+      # Resolved build type: dispatch input, or 'standalone' for push builds.
+      # To build a Google Play AAB: Run workflow → build_type: store.
+      BT: ${{ github.event.inputs.build_type || 'standalone' }}
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────────
