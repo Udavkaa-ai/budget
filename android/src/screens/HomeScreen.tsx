@@ -2,10 +2,9 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, Alert, Modal, TextInput, ScrollView, Animated,
+  RefreshControl, Alert, Modal, TextInput, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
@@ -18,7 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
-import { FadeInItem } from '../components/Motion';
+import { FadeInItem, SwipePager } from '../components/Motion';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
@@ -55,15 +54,8 @@ export default function HomeScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [userFilter, setUserFilter] = useState<'all' | 'me' | 'partner'>('all');
   const [addedFlash, setAddedFlash] = useState(0);
-  const slide = useRef(new Animated.Value(0)).current;
   const fabTarget = useTourTarget('home.fab');
   const filterTarget = useTourTarget('home.filter');
-
-  // Эффект пролистывания: контент вылетает со стороны свайпа с оттяжкой
-  const animateSwitch = (dir: 1 | -1) => {
-    slide.setValue(dir * 90);
-    Animated.spring(slide, { toValue: 0, useNativeDriver: true, friction: 7, tension: 60 }).start();
-  };
 
   const load = useCallback(async (d = date) => {
     // Сначала пробуем дослать офлайн-очередь
@@ -112,7 +104,6 @@ export default function HomeScreen() {
     const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
     setDate(nd);
     haptics.light();
-    animateSwitch(-1);
   };
 
   const nextDay = () => {
@@ -123,7 +114,6 @@ export default function HomeScreen() {
     const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
     setDate(nd);
     haptics.light();
-    animateSwitch(1);
   };
 
   const deleteExpense = (id: string) => {
@@ -208,15 +198,6 @@ export default function HomeScreen() {
   // Горизонтальный свайп листает дни. Pan с активацией только по X и провалом
   // по Y — вертикальный скролл ленты не перехватывается, а тап по строке не
   // конфликтует со свайпом (редактирование теперь по долгому нажатию).
-  const dayFling = Gesture.Pan()
-    .activeOffsetX([-24, 24])
-    .failOffsetY([-16, 16])
-    .runOnJS(true)
-    .onEnd(e => {
-      if (e.translationX <= -50) nextDay();
-      else if (e.translationX >= 50) prevDay();
-    });
-
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
         <ScreenGradient tint="home" />
@@ -272,9 +253,13 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Expense list */}
-        <GestureDetector gesture={dayFling}>
-        <Animated.View style={{ flex: 1, transform: [{ translateX: slide }] }}>
+        {/* Expense list — свайп влево/вправо меняет день (1:1, инерция, резинка) */}
+        <SwipePager
+          canNext={!isToday}
+          onPrev={prevDay}
+          onNext={nextDay}
+          onCommit={() => haptics.light()}
+        >
         <FlatList
           data={rows}
           keyExtractor={e => e.id}
@@ -321,8 +306,7 @@ export default function HomeScreen() {
             );
           }}
         />
-        </Animated.View>
-        </GestureDetector>
+        </SwipePager>
 
         <DayPickerModal
           visible={pickerVisible}
@@ -426,7 +410,7 @@ const styles = StyleSheet.create({
   dateText:   { fontSize: font.lg, fontWeight: '600' },
   totalRow:   { flexDirection: 'row', justifyContent: 'space-between', padding: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   totalLabel: { fontSize: font.sm },
-  totalAmt:   { fontSize: font.lg, fontWeight: '700' },
+  totalAmt:   { fontSize: font.lg, fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: -0.3 },
   empty:      { textAlign: 'center', marginTop: 60, fontSize: font.md },
   item:       { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, marginBottom: spacing.sm },
   itemMid:    { flex: 1 },

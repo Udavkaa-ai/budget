@@ -17,6 +17,7 @@ import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { BudgetGauge } from '../components/BudgetGauge';
+import { SwipePager } from '../components/Motion';
 import { haptics } from '../haptics';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
@@ -310,6 +311,12 @@ export default function SummaryScreen() {
       {loading ? (
         <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
       ) : (
+        <SwipePager
+          canNext={!isCurrentMonth}
+          onPrev={prev}
+          onNext={next}
+          onCommit={() => haptics.light()}
+        >
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}
@@ -658,6 +665,7 @@ export default function SummaryScreen() {
             );
           })}
         </ScrollView>
+        </SwipePager>
       )}
 
       <MonthPickerModal
@@ -803,7 +811,7 @@ const styles = StyleSheet.create({
   navBtn:       { padding: spacing.md },
   navLabel:     { fontSize: font.lg, fontWeight: '600' },
   totalLabel:   { fontSize: font.sm },
-  totalAmt:     { fontSize: 36, fontWeight: '800', marginTop: 4 },
+  totalAmt:     { fontSize: 36, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'], letterSpacing: -0.6 },
   sectionTitle: { fontSize: font.md, fontWeight: '700', marginBottom: spacing.md },
   userRow:      { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.xs },
   catHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },

@@ -1,10 +1,11 @@
 import React from 'react';
 import {
-  Text, TextInput, TouchableOpacity, ActivityIndicator,
+  Text, TextInput, ActivityIndicator,
   StyleSheet, type TextInputProps, type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, spacing, font, radius } from '../theme';
+import { PressableScale } from './Motion';
 
 // Поле ввода в стиле веба: скругление 14, фиолетовая полупрозрачная рамка
 export function Field(props: TextInputProps) {
@@ -32,7 +33,7 @@ export function PrimaryButton({ title, onPress, disabled, loading, style }: {
 }) {
   const t = useTheme();
   return (
-    <TouchableOpacity onPress={onPress} disabled={disabled || loading} activeOpacity={0.85} style={style}>
+    <PressableScale onPress={onPress} disabled={disabled || loading} style={style} scaleTo={0.97}>
       <LinearGradient
         colors={t.gradient}
         start={{ x: 0, y: 0 }}
@@ -43,7 +44,7 @@ export function PrimaryButton({ title, onPress, disabled, loading, style }: {
           ? <ActivityIndicator color="#fff" />
           : <Text style={styles.btnText}>{title}</Text>}
       </LinearGradient>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
