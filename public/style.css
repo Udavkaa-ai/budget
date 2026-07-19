@@ -2658,3 +2658,34 @@ button, a, .btn, .pill, .nav-btn, .icon-btn, .card, .category-item,
     backdrop-filter: none;
   }
 }
+
+/* ═══════════════════════════ APPLE-DESIGN: ВИДИМОЕ ДВИЖЕНИЕ ══ */
+/* Смена вкладки: контент влетает каскадом (fade + rise), а не появляется
+   резко. Только transform/opacity, единый «выходной» easing Apple. */
+.screen.active > * {
+  animation: contentRiseIn 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.screen.active > *:nth-child(1) { animation-delay: 0s; }
+.screen.active > *:nth-child(2) { animation-delay: 0.045s; }
+.screen.active > *:nth-child(3) { animation-delay: 0.09s; }
+.screen.active > *:nth-child(4) { animation-delay: 0.135s; }
+.screen.active > *:nth-child(5) { animation-delay: 0.18s; }
+.screen.active > *:nth-child(n+6) { animation-delay: 0.22s; }
+@keyframes contentRiseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Более ощутимое нажатие на карточках/строках расходов и целях. */
+.expense-item:active { transform: scale(0.975); transition: transform 0.08s ease-out; }
+.category-item:active { transform: scale(0.96); }
+.goal-card:active { transform: scale(0.98); }
+.card:active { transform: scale(0.992); }
+
+/* Активная вкладка: «подушка» под иконкой мягко проявляется. */
+.nav-btn.active .nav-icon {
+  transform: scale(1.14) translateY(-1px);
+}
+
+/* Под reduced-motion всё это уже нейтрализуется медиазапросом выше
+   (animation-duration: 0.01ms), сдвиги не проигрываются. */
