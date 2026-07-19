@@ -2589,3 +2589,72 @@ html, body {
 .ach-toast-emoji { font-size: 30px; }
 .ach-toast-label { color: var(--primary); font-weight: 800; font-size: 11px; letter-spacing: 0.4px; }
 .ach-toast-title { color: var(--text); font-weight: 700; font-size: 15px; }
+
+/* ═══════════════════════════════════════ APPLE-DESIGN POLISH ══ */
+/* Отклик прежде всего, чистая типографика больших чисел, уважение
+   системных предпочтений движения и прозрачности. */
+
+/* 1. Отклик на нажатие: убираем серую вспышку тапа и 300ms-задержку,
+   чтобы наш press-эффект был единственным сигналом и срабатывал мгновенно. */
+button, a, .btn, .pill, .nav-btn, .icon-btn, .card, .category-item,
+.cal-day, .goal-card, [role="button"], label.btn, summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Единый press-scale — реагируем на нажатие, а не на отпускание.
+   Только transform: дешёвая для композитора анимация. */
+.btn:not(:disabled):active { transform: scale(0.97); }
+.pill:active { transform: scale(0.96); }
+.icon-btn:active { transform: scale(0.9); background: rgba(89,71,224,0.12); color: var(--primary); }
+.nav-btn:active { transform: scale(0.92); }
+.nav-btn:active .nav-icon { transform: scale(0.92); }
+
+/* Снап-переход у пилюль: анимируем transform/цвет, без layout-свойств. */
+.pill {
+  transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1),
+              background 0.16s, border-color 0.16s, color 0.16s, box-shadow 0.16s;
+}
+
+/* 2. Типографика: крупные числа/суммы — плотнее трекинг и leading (как ужимает
+   большой текст Apple) + моноширинные цифры, чтобы суммы не «прыгали». */
+.highlight-total, .total-amount, .income-total-amount, .goal-amounts {
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 3. prefers-reduced-motion: сдвиги/пружины → короткий кроссфейд, без overshoot. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.12s !important;
+    transition-timing-function: ease !important;
+    scroll-behavior: auto !important;
+  }
+  *:active { transform: none !important; }
+  .nav-btn.active .nav-icon, .fab { transform: none !important; }
+}
+
+/* 4. prefers-reduced-transparency: матовое/сплошное стекло ради читаемости. */
+@media (prefers-reduced-transparency: reduce) {
+  :root { --card: #ffffff; --bg: #efeafd; }
+  .bottom-nav, .topbar, .pill, .btn-outline, .card, .total-bar,
+  .heatmap-card, .speed-chart-card, .family-overview-card, .heatmap-day-detail {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .bottom-nav, .topbar { background: #ffffff !important; }
+  .card, .total-bar, .pill, .btn-outline { background: #ffffff !important; }
+}
+
+/* 5. prefers-contrast: more — почти сплошной фон и чёткая рамка. */
+@media (prefers-contrast: more) {
+  :root { --text-muted: rgba(26,21,48,0.72); }
+  .card, .total-bar, .pill {
+    background: #ffffff;
+    border: 1px solid rgba(26,21,48,0.3);
+    backdrop-filter: none;
+  }
+}
