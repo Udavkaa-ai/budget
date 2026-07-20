@@ -92,17 +92,24 @@ export function SwipePager({
 }) {
   const reduce = useReducedMotion();
   const tx = useSharedValue(0);
+  const committing = useSharedValue(0); // 1 пока идёт анимация перехода — не сбрасываем
   const width = Dimensions.get('window').width;
 
   const OUT = { damping: 22, stiffness: 210, mass: 0.6 };
   const IN = { damping: 24, stiffness: 210, mass: 0.6 };
   const BACK = { damping: 20, stiffness: 300, mass: 0.5 };
 
+  // Жёстко разводим оси, чтобы горизонтальный свайп и вертикальный pull-to-refresh
+  // НЕ срабатывали одновременно: горизонталь активируется только после 24px и
+  // только если вертикаль ещё не ушла за 12px (иначе жест проваливается — работает
+  // скролл/refresh). failOffsetY гарантирует, что вертикальный потяг отдаётся списку.
   const pan = Gesture.Pan()
-    .activeOffsetX([-14, 14])   // горизонталь ловим после ~14px…
-    .failOffsetY([-16, 16])     // …а вертикаль отдаём скроллу/refresh
+    .activeOffsetX([-24, 24])
+    .failOffsetY([-12, 12])
     .onUpdate(e => {
       'worklet';
+      // Дополнительная страховка: если жест всё же вертикально-доминантный — не тянем вбок.
+      if (Math.abs(e.translationY) > Math.abs(e.translationX)) { tx.value = 0; return; }
       let d = e.translationX;
       if ((d > 0 && !canPrev) || (d < 0 && !canNext)) d = rubber(d, width);
       tx.value = d;
@@ -111,19 +118,27 @@ export function SwipePager({
       'worklet';
       const projected = e.translationX + project(e.velocityX);
       const th = width * 0.26;
-      if (canNext && projected < -th) {
+      const horizontal = Math.abs(e.translationX) > Math.abs(e.translationY);
+      if (horizontal && canNext && projected < -th) {
+        committing.value = 1;
         if (onCommit) runOnJS(onCommit)();
         tx.value = withSpring(-width, { ...OUT, velocity: e.velocityX }, fin => {
-          if (fin) { runOnJS(onNext)(); tx.value = width; tx.value = withSpring(0, IN); }
+          if (fin) { runOnJS(onNext)(); tx.value = width; tx.value = withSpring(0, IN, () => { committing.value = 0; }); }
         });
-      } else if (canPrev && projected > th) {
+      } else if (horizontal && canPrev && projected > th) {
+        committing.value = 1;
         if (onCommit) runOnJS(onCommit)();
         tx.value = withSpring(width, { ...OUT, velocity: e.velocityX }, fin => {
-          if (fin) { runOnJS(onPrev)(); tx.value = -width; tx.value = withSpring(0, IN); }
+          if (fin) { runOnJS(onPrev)(); tx.value = -width; tx.value = withSpring(0, IN, () => { committing.value = 0; }); }
         });
       } else {
         tx.value = withSpring(0, { ...BACK, velocity: e.velocityX });
       }
+    })
+    // Любое прерывание/отмена жеста возвращает экран на место — не «залипает» вбок.
+    .onFinalize(() => {
+      'worklet';
+      if (committing.value === 0) tx.value = withSpring(0, BACK);
     });
 
   const aStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));

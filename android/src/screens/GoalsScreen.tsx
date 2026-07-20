@@ -10,6 +10,7 @@ import { goals as goalsApi, budgetPlan, expenses as expApi, settings as settings
 import { useCategories } from '../categories';
 import { PrimaryButton } from '../components/UI';
 import { Card } from '../components/Card';
+import { FadeInItem } from '../components/Motion';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
@@ -156,6 +157,7 @@ export default function GoalsScreen() {
         : (
           <ScrollView contentContainerStyle={{ padding: spacing.md }}>
             {/* Лимиты по категориям — как в вебе */}
+            <FadeInItem index={0}>
             <Card>
               <Text style={{ fontSize: font.sm, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textMuted }}>
                 Лимиты по категориям
@@ -192,14 +194,16 @@ export default function GoalsScreen() {
               })()}
               <PrimaryButton title="Сохранить" onPress={saveLimits} loading={savingLimits} style={{ marginTop: spacing.sm }} />
             </Card>
+            </FadeInItem>
 
             {list.length === 0 && (
               <Text style={[styles.empty, { color: t.textMuted }]}>Нет целей. Добавьте первую!</Text>
             )}
-            {list.map(g => {
+            {list.map((g, i) => {
               const pct = Math.min(g.saved / g.target, 1);
               return (
-                <Card key={g.id}>
+                <FadeInItem key={g.id} index={i + 1}>
+                <Card>
                   <View style={styles.goalHeader}>
                     <Text style={{ fontSize: 28 }}>{g.emoji}</Text>
                     <View style={{ flex: 1, marginLeft: spacing.md }}>
@@ -228,10 +232,12 @@ export default function GoalsScreen() {
                     <Text style={{ color: t.primary, fontWeight: '600' }}>+ Пополнить</Text>
                   </TouchableOpacity>
                 </Card>
+                </FadeInItem>
               );
             })}
 
             {/* Мои достижения */}
+            <FadeInItem index={list.length + 1}>
             <Card>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
                 <Text style={{ fontSize: font.sm, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textMuted }}>
@@ -262,6 +268,7 @@ export default function GoalsScreen() {
                 );
               })}
             </Card>
+            </FadeInItem>
           </ScrollView>
         )}
 

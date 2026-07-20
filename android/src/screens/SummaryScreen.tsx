@@ -17,7 +17,7 @@ import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { BudgetGauge } from '../components/BudgetGauge';
-import { SwipePager } from '../components/Motion';
+import { SwipePager, FadeInItem } from '../components/Motion';
 import { haptics } from '../haptics';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
@@ -351,6 +351,7 @@ export default function SummaryScreen() {
           </View>
 
           {/* Total card */}
+          <FadeInItem index={0}>
           <View ref={totalTarget} collapsable={false} onLayout={tOffset('summary.total')}>
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
@@ -373,9 +374,11 @@ export default function SummaryScreen() {
             )}
           </Card>
           </View>
+          </FadeInItem>
 
           {/* Барометр бюджета — спидометр как в вебе */}
           {blocks.gauge && gaugePct !== null && (
+            <FadeInItem index={1}>
             <View ref={gaugeTarget} collapsable={false} onLayout={tOffset('summary.gauge')}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Барометр бюджета</Text>
@@ -396,6 +399,7 @@ export default function SummaryScreen() {
               </View>
             </Card>
             </View>
+            </FadeInItem>
           )}
 
           {/* Скорость трат: линия % факт/план нарастающим итогом, как в вебе */}
@@ -414,6 +418,7 @@ export default function SummaryScreen() {
             const y100 = H - 100 / MAX * (H - 15);
             const dotColor = (p: number) => p > 100 ? '#ef4444' : p > 80 ? '#f59e0b' : '#22c55e';
             return (
+              <FadeInItem index={2}>
               <Card>
                 <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
                 <Svg width="100%" height={H + 20} viewBox={`0 0 ${W} ${H + 20}`}>
@@ -447,11 +452,13 @@ export default function SummaryScreen() {
                   ))}
                 </Svg>
               </Card>
+              </FadeInItem>
             );
           })()}
 
           {/* Heatmap по дням */}
           {blocks.heatmap && monthExp.length > 0 && (
+            <FadeInItem index={3}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>📅 Расходы по дням</Text>
               {memberNames.length > 1 && (
@@ -536,6 +543,7 @@ export default function SummaryScreen() {
                 </View>
               )}
             </Card>
+            </FadeInItem>
           )}
 
           {/* AI analysis (premium) */}
@@ -556,6 +564,7 @@ export default function SummaryScreen() {
 
           {/* By user */}
           {blocks.byUser && data && Object.keys(data.byUser).length > 1 && (
+            <FadeInItem index={4}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>По участникам</Text>
               {Object.entries(data.byUser).map(([name, ud]) => {
@@ -578,9 +587,11 @@ export default function SummaryScreen() {
                 );
               })}
             </Card>
+            </FadeInItem>
           )}
 
           {/* Categories — карточки как в вебе */}
+          <FadeInItem index={5}>
           <Card>
             <View style={styles.catHeader}>
               <Text style={[styles.sectionTitle, { color: t.text, marginBottom: 0 }]}>Категории</Text>
@@ -616,14 +627,16 @@ export default function SummaryScreen() {
               <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Нет расходов за месяц</Text>
             )}
           </Card>
+          </FadeInItem>
 
-          {cats.map(([cat, amt]) => {
+          {cats.map(([cat, amt], ci) => {
             const limit = selUser ? 0 : budgets[cat] ?? 0;
             const over = limit > 0 && amt > limit;
             const fillPct = limit > 0 ? Math.min(amt / limit, 1) : amt / maxCat;
             const prevAmt = compare && hasPrev ? prevAgg.byCategory[cat] ?? 0 : null;
             return (
-              <TouchableOpacity key={cat} onPress={() => openDrill(cat)} activeOpacity={0.7}>
+              <FadeInItem key={cat} index={6 + ci}>
+              <TouchableOpacity onPress={() => openDrill(cat)} activeOpacity={0.7}>
                 <Card>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                     <Text style={{ fontSize: 32 }}>{catIcon2(cat)}</Text>
@@ -662,6 +675,7 @@ export default function SummaryScreen() {
                   </View>
                 </Card>
               </TouchableOpacity>
+              </FadeInItem>
             );
           })}
         </ScrollView>
