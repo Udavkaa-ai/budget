@@ -2117,6 +2117,12 @@ async function renderGoogleLinkSection() {
   const btnBox = document.getElementById('google-link-btn');
   if (!status || !btnBox) return;
   try {
+    // Если Google отключён на сервере (RuStore-конфиг) — прячем секцию целиком
+    const providers = await fetch('/api/auth/providers').then(r => r.json()).catch(() => ({}));
+    const section = document.getElementById('google-account-section');
+    if (!providers.google) { if (section) section.classList.add('hidden'); return; }
+    if (section) section.classList.remove('hidden');
+
     const me = await apiJson('GET', '/api/me');
     if (me.googleLinked) {
       status.textContent = '✅ Вход через Google привязан к этому аккаунту.';
