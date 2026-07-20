@@ -84,6 +84,13 @@ export async function mobileLogin(idToken: string): Promise<{ token: string; use
   return res;
 }
 
+// Вход по логину/паролю (используется демо-сборкой: lena / Lena)
+export async function passwordLogin(login: string, password: string): Promise<string> {
+  const res = await req<{ token: string }>('POST', '/api/auth/login', { login, password });
+  await setToken(res.token);
+  return res.token;
+}
+
 // Parse JWT payload (no verification — server validates on every request)
 export function parseJwt(token: string): AuthUser | null {
   try {

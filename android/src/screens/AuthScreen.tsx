@@ -4,13 +4,18 @@ import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme, spacing, font, radius } from '../theme';
-import { setServerUrl, setToken, api } from '../api/client';
+import { setServerUrl, setToken, passwordLogin, api } from '../api/client';
 import { Field, PrimaryButton } from '../components/UI';
 
 WebBrowser.maybeCompleteAuthSession();
+
+// Демо-сборка: включает вход по логину/паролю (lena/Lena) и предзаполняет сервер
+const IS_DEMO = Constants.expoConfig?.extra?.isDemo === true;
+const DEMO_SERVER = 'https://semejnyj-budzet-udavkaa.amvera.io';
 
 interface Props {
   onLoginSuccess: (token: string) => void;
@@ -18,9 +23,24 @@ interface Props {
 
 export default function AuthScreen({ onLoginSuccess }: Props) {
   const t = useTheme();
-  const [serverUrl, setServerUrlState] = useState('');
+  const [serverUrl, setServerUrlState] = useState(IS_DEMO ? DEMO_SERVER : '');
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'url' | 'auth'>('url');
+  const [pwLogin, setPwLogin] = useState('lena');
+  const [pwPass, setPwPass] = useState('Lena');
+
+  const handlePasswordLogin = async () => {
+    setLoading(true);
+    try {
+      await setServerUrl((serverUrl || DEMO_SERVER).trim().replace(/\/+$/, ''));
+      const token = await passwordLogin(pwLogin.trim(), pwPass);
+      onLoginSuccess(token);
+    } catch (e) {
+      Alert.alert('Не удалось войти', 'Проверьте логин и пароль');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleServerUrl = async () => {
     const url = serverUrl.trim().replace(/\/+$/, '');
@@ -71,12 +91,33 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
         <View style={styles.inner}>
           <Text style={[styles.logo, { color: t.text }]}>💰</Text>
-          <Text style={[styles.title, { color: t.text }]}>Семейный бюджет</Text>
+          <Text style={[styles.title, { color: t.text }]}>{IS_DEMO ? 'Бюджет · Демо' : 'Семейный бюджет'}</Text>
           <Text style={[styles.sub, { color: t.textMuted }]}>
-            {step === 'url' ? 'Введите адрес вашего сервера' : 'Выберите способ входа'}
+            {IS_DEMO ? 'Демо-режим: вход по паролю' : (step === 'url' ? 'Введите адрес вашего сервера' : 'Выберите способ входа')}
           </Text>
 
-          {step === 'url' ? (
+          {IS_DEMO ? (
+            <>
+              <Field
+                style={{ marginBottom: spacing.md }}
+                value={pwLogin}
+                onChangeText={setPwLogin}
+                placeholder="Логин"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Field
+                style={{ marginBottom: spacing.md }}
+                value={pwPass}
+                onChangeText={setPwPass}
+                placeholder="Пароль"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <PrimaryButton title="Войти" onPress={handlePasswordLogin} loading={loading} />
+            </>
+          ) : step === 'url' ? (
             <>
               <Field
                 style={{ marginBottom: spacing.md }}

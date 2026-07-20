@@ -10,13 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: 'Build type: standalone = testable APK (debug-signed, JS embedded), store = signed with release keystore'
+        description: 'standalone = test APK; store = signed AAB+APK; demo = separate demo app (lena/Lena)'
         required: true
         default: 'standalone'
         type: choice
         options:
           - standalone
           - store
+          - demo
 
 jobs:
   build:
@@ -84,6 +85,8 @@ jobs:
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_TELEMETRY: 1
+          # demo → app.config.js подставляет package .demo, имя «Демо», isDemo
+          APP_VARIANT: ${{ env.BT == 'demo' && 'demo' || '' }}
 
       # ── Gradle build ─────────────────────────────────────────────────────────
       - name: Make gradlew executable
@@ -167,6 +170,12 @@ jobs:
             echo "- \`bundle/release/app-release.aab\` — для Google Play (или RuStore, если загрузить ключ подписи)" >> $GITHUB_STEP_SUMMARY
             echo "- \`apk/release/app-release.apk\` — подписан релизным ключом, **для RuStore заливай его** (ключ отдельно не нужен)" >> $GITHUB_STEP_SUMMARY
             echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ env.BT }}" = "demo" ]; then
+            echo "## ✅ Демо-APK собран (\`Бюджет · Демо\`)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Отдельный package \`com.familybudget.app.demo\` — ставится **рядом** с основным." >> $GITHUB_STEP_SUMMARY
+            echo "Вход: логин \`lena\` / пароль \`Lena\` (сервер уже прописан)." >> $GITHUB_STEP_SUMMARY
+            echo "Скачать: Artifacts → \`family-budget-demo-${{ github.run_number }}\` → \`app-release.apk\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "## ✅ APK собран" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
