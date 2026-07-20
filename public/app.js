@@ -4031,19 +4031,30 @@ function initPullToRefresh() {
   const content = document.querySelector('.main-content');
   const indicator = document.getElementById('ptr-indicator');
   const THRESHOLD = 64;
-  let startY = 0;
-  let pulling = false;
+  let startY = 0, startX = 0;
+  let pulling = false, decided = false;
 
   content.addEventListener('touchstart', (e) => {
     if (content.scrollTop === 0) {
       startY = e.touches[0].clientY;
+      startX = e.touches[0].clientX;
       pulling = true;
+      decided = false;
     }
   }, { passive: true });
 
   content.addEventListener('touchmove', (e) => {
     if (!pulling) return;
     const delta = e.touches[0].clientY - startY;
+    const dx = e.touches[0].clientX - startX;
+    // Определяем ось: pull-to-refresh только для вертикально-доминантного жеста,
+    // иначе горизонтальный свайп смены дня и потяг срабатывали одновременно
+    // (экран уезжал по диагонали). Горизонталь — отдаём свайпу.
+    if (!decided) {
+      if (Math.abs(dx) < 8 && Math.abs(delta) < 8) return;
+      if (Math.abs(dx) > Math.abs(delta)) { pulling = false; return; }
+      decided = true;
+    }
     if (delta <= 0) { pulling = false; return; }
     e.preventDefault();
     const pull = Math.min(delta * 0.5, THRESHOLD);
