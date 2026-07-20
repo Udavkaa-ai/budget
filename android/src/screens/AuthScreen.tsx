@@ -13,8 +13,11 @@ import { Field, PrimaryButton } from '../components/UI';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Демо-сборка: включает вход по логину/паролю (lena/Lena) и предзаполняет сервер
-const IS_DEMO = Constants.expoConfig?.extra?.isDemo === true;
+// Демо-сборка: включает вход по логину/паролю (lena/Lena) и предзаполняет сервер.
+// EXPO_PUBLIC_* вшивается в JS-бандл при сборке (надёжнее Constants.extra,
+// который в prebuild-сборке часто пустой). Constants — запасной вариант.
+const IS_DEMO = process.env.EXPO_PUBLIC_APP_VARIANT === 'demo'
+  || Constants.expoConfig?.extra?.isDemo === true;
 const DEMO_SERVER = 'https://semejnyj-budzet-udavkaa.amvera.io';
 
 interface Props {

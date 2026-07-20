@@ -129,6 +129,8 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
+          # demo → Expo вшивает флаг в JS-бандл (включает вход по паролю lena/Lena)
+          EXPO_PUBLIC_APP_VARIANT: ${{ env.BT == 'demo' && 'demo' || '' }}
 
       # Store build: signed .aab (Google Play) AND a signed release .apk (RuStore).
       # RuStore wants the signing key uploaded for an AAB, but accepts a
