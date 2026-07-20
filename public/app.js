@@ -270,9 +270,24 @@ async function showLogin() {
       // No Google — open password login by default
       document.getElementById('password-login-section').setAttribute('open', '');
     }
+
+    // Яндекс / VK — редирект-флоу через сервер (для RuStore-аудитории)
+    if (providers.yandex || providers.vk) {
+      document.getElementById('oauth-buttons').classList.remove('hidden');
+      document.getElementById('btn-yandex').style.display = providers.yandex ? '' : 'none';
+      document.getElementById('btn-vk').style.display = providers.vk ? '' : 'none';
+      document.getElementById('password-login-section').removeAttribute('open');
+    }
+    document.getElementById('btn-yandex').onclick = () => oauthRedirect('yandex');
+    document.getElementById('btn-vk').onclick = () => oauthRedirect('vk');
   } catch {
     document.getElementById('password-login-section').setAttribute('open', '');
   }
+}
+
+// Переход на серверный OAuth: сервер сам вернёт на эту же страницу с ?token=
+function oauthRedirect(provider) {
+  location.href = `/auth/${provider}/mobile?redirect=${encodeURIComponent(location.origin + location.pathname)}`;
 }
 
 async function handleGoogleCredential(response) {
@@ -4092,8 +4107,16 @@ if (savedUser) {
   try { currentUser = JSON.parse(savedUser); } catch {}
 }
 
-if (token && currentUser) {
-  initApp();
+// OAuth-редирект (Google/Яндекс/VK) вернул токен в URL — сохраняем и чистим адрес
+const _oauthToken = new URLSearchParams(location.search).get('token');
+if (_oauthToken) {
+  token = _oauthToken;
+  localStorage.setItem('budget_token', _oauthToken);
+  window.history.replaceState({}, '', location.pathname);
+}
+
+if (_oauthToken || (token && currentUser)) {
+  initApp();   // initApp сам подтянет /api/me, если пользователя ещё нет
 } else {
   showLogin();
   document.getElementById('login-form').addEventListener('submit', loginSubmit);
