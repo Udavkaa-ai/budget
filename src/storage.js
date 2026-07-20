@@ -5,6 +5,7 @@ import { randomInt } from 'crypto';
 import bcrypt from 'bcryptjs';
 import webpush from 'web-push';
 import { config } from './config.js';
+import { DEMO } from './demo-seed.js';
 
 const BCRYPT_RE = /^\$2[aby]\$/;
 const MAX_DESCRIPTION_LEN = 300;
@@ -117,6 +118,8 @@ export async function loadData() {
         migrated = true;
       }
 
+      if (seedDemo()) migrated = true;
+
       if (migrated) {
         console.log('📦 Данные мигрированы в формат multi-family');
         await saveData();
@@ -124,12 +127,38 @@ export async function loadData() {
 
       console.log(`📂 Загружено ${data.expenses.length} записей, ${data.goals.length} целей`);
     } else {
+      seedDemo();
       await saveData();
       console.log('📂 Создан новый файл данных');
     }
   } catch (err) {
     console.error('Ошибка загрузки данных:', err);
   }
+}
+
+// Встроенная демо-семья (famDemo, вход lena/Lena) — для отдельной демо-сборки
+// приложения и скриншотов. Данные изолированы от реальных семей. Идемпотентно.
+function seedDemo() {
+  let changed = false;
+  if (!data.users) data.users = [];
+  if (!data.users.some(u => u.login === 'lena')) {
+    data.users.push({
+      login: 'lena', password: ensureHashed('Lena'), name: 'Лена',
+      family: 'famDemo', isAdmin: false, createdAt: new Date().toISOString(),
+    });
+    changed = true;
+  }
+  if (!data.expenses.some(e => fam(e.family) === 'famDemo')) {
+    for (const e of DEMO.expenses) data.expenses.push({ ...e, id: e.id || generateId(), family: 'famDemo' });
+    if (!data.goals) data.goals = [];
+    for (const g of DEMO.goals) data.goals.push({ ...g, id: g.id || generateId(), family: 'famDemo' });
+    const fs = familySettings('famDemo');
+    fs.budgetPlan = DEMO.budgetPlan;
+    fs.cashflow = DEMO.cashflow;
+    fs.plannedMonthly = DEMO.plannedMonthly;
+    changed = true;
+  }
+  return changed;
 }
 
 /**
