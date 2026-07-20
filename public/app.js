@@ -1796,6 +1796,7 @@ async function loadSettingsScreen() {
     applyCustomCategories();
     renderCustomCategoriesList();
     renderGoogleLinkSection();
+    renderOAuthLinkSection();
     renderBlocksConstructor();
     applyBlockVisibility();
 
@@ -2130,6 +2131,25 @@ async function renderGoogleLinkSection() {
       });
     }
   } catch { /* не критично */ }
+}
+
+// Привязка Яндекс/VK к текущему аккаунту (миграция): редирект-флоу с link-токеном
+async function renderOAuthLinkSection() {
+  const section = document.getElementById('oauth-link-section');
+  if (!section) return;
+  try {
+    const p = await fetch('/api/auth/providers').then(r => r.json());
+    if (!p.yandex && !p.vk) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    document.getElementById('btn-link-yandex').style.display = p.yandex ? '' : 'none';
+    document.getElementById('btn-link-vk').style.display = p.vk ? '' : 'none';
+    const linkOAuth = provider => {
+      const redirect = location.origin + location.pathname;
+      location.href = `/auth/${provider}/mobile?redirect=${encodeURIComponent(redirect)}&link=${encodeURIComponent(token)}`;
+    };
+    document.getElementById('btn-link-yandex').onclick = () => linkOAuth('yandex');
+    document.getElementById('btn-link-vk').onclick = () => linkOAuth('vk');
+  } catch { section.classList.add('hidden'); }
 }
 
 // ─── Конструктор аналитики: блоки вкл/выкл, хранится на устройстве ───────────
@@ -4107,16 +4127,21 @@ if (savedUser) {
   try { currentUser = JSON.parse(savedUser); } catch {}
 }
 
-// OAuth-редирект (Google/Яндекс/VK) вернул токен в URL — сохраняем и чистим адрес
-const _oauthToken = new URLSearchParams(location.search).get('token');
+// OAuth-редирект (Google/Яндекс/VK) вернул токен или результат привязки в URL
+const _params = new URLSearchParams(location.search);
+const _oauthToken = _params.get('token');
+const _linked = _params.get('linked');
 if (_oauthToken) {
   token = _oauthToken;
   localStorage.setItem('budget_token', _oauthToken);
-  window.history.replaceState({}, '', location.pathname);
 }
+if (_oauthToken || _linked) window.history.replaceState({}, '', location.pathname);
 
 if (_oauthToken || (token && currentUser)) {
-  initApp();   // initApp сам подтянет /api/me, если пользователя ещё нет
+  initApp().then(() => {   // initApp сам подтянет /api/me, если пользователя ещё нет
+    if (_linked === '1') showToastSuccess('Способ входа привязан ✓');
+    else if (_linked === '0') showToastError('Не удалось привязать вход');
+  }).catch(() => {});
 } else {
   showLogin();
   document.getElementById('login-form').addEventListener('submit', loginSubmit);

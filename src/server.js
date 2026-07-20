@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import webpush from 'web-push';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
@@ -51,6 +52,7 @@ import {
   createGoogleUser,
   getUserByOAuth,
   createOAuthUser,
+  linkOAuthToUser,
   updateUserFamily,
   createInvite,
   getInvite,
@@ -322,27 +324,56 @@ app.get('/auth/google/mobile/callback', async (req, res) => {
 // профиль, создаём/находим пользователя и редиректим обратно с JWT в query.
 // redirect param: familybudget://auth (приложение) или URL веб-страницы (веб).
 
-function issueOAuthRedirect(res, redirectUri, user) {
+// state кодирует и адрес возврата (r), и — при миграции — токен текущего
+// пользователя (l), чтобы привязать провайдера к существующему аккаунту.
+function packState(redirect, link) {
+  return Buffer.from(JSON.stringify({ r: redirect || 'familybudget://auth', l: link || '' })).toString('base64url');
+}
+function unpackState(state) {
+  try {
+    const s = JSON.parse(Buffer.from(String(state || ''), 'base64url').toString());
+    return { redirect: s.r || 'familybudget://auth', link: s.l || '' };
+  } catch {
+    return { redirect: state ? decodeURIComponent(state) : 'familybudget://auth', link: '' };
+  }
+}
+
+// Единый финал: режим привязки (миграция) или обычный вход.
+async function finishOAuth(res, provider, profile, state) {
+  const { redirect, link } = unpackState(state);
+  const { id, email, name } = profile;
+  if (link) {
+    // Миграция: вешаем провайдера на текущий аккаунт (данные семьи не трогаем)
+    try {
+      const payload = jwt.verify(link, config.jwtSecret);
+      const result = await linkOAuthToUser(payload.login, provider, id, email);
+      return res.redirect(`${redirect}?linked=${result.ok ? '1' : '0'}`);
+    } catch {
+      return res.redirect(`${redirect}?linked=0`);
+    }
+  }
+  let user = getUserByOAuth(provider, id);
+  if (!user) user = await createOAuthUser({ provider, id, email, name });
   const token = jwt.sign(
     { login: user.login, name: user.name, family: user.family, isAdmin: user.isAdmin || false },
     config.jwtSecret, { expiresIn: '90d' },
   );
-  res.redirect(`${redirectUri}?token=${encodeURIComponent(token)}`);
+  res.redirect(`${redirect}?token=${encodeURIComponent(token)}`);
 }
 
-// Яндекс
+// ── Яндекс (oauth.yandex.ru) ──
 app.get('/auth/yandex/mobile', (req, res) => {
   if (!config.yandexClientId) return res.status(503).send('Яндекс OAuth не настроен');
-  const state = encodeURIComponent(req.query.redirect || 'familybudget://auth');
+  const state = packState(req.query.redirect, req.query.link);
   const callbackUrl = `${req.protocol}://${req.headers.host}/auth/yandex/mobile/callback`;
   const url = `https://oauth.yandex.ru/authorize?response_type=code&client_id=${config.yandexClientId}`
-    + `&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${state}`;
+    + `&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(state)}`;
   res.redirect(url);
 });
 
 app.get('/auth/yandex/mobile/callback', async (req, res) => {
   const { code, state } = req.query;
-  const redirectUri = decodeURIComponent(state || 'familybudget://auth');
+  const { redirect } = unpackState(state);
   try {
     const callbackUrl = `${req.protocol}://${req.headers.host}/auth/yandex/mobile/callback`;
     const tokenRes = await fetch('https://oauth.yandex.ru/token', {
@@ -359,55 +390,73 @@ app.get('/auth/yandex/mobile/callback', async (req, res) => {
       headers: { Authorization: `OAuth ${tokens.access_token}` },
     });
     const info = await infoRes.json();
-    const id = String(info.id);
-    const email = info.default_email || (info.emails && info.emails[0]) || '';
-    const name = info.real_name || info.display_name || info.login || '';
-    let user = getUserByOAuth('yandex', id);
-    if (!user) user = await createOAuthUser({ provider: 'yandex', id, email, name });
-    issueOAuthRedirect(res, redirectUri, user);
+    await finishOAuth(res, 'yandex', {
+      id: String(info.id),
+      email: info.default_email || (info.emails && info.emails[0]) || '',
+      name: info.real_name || info.display_name || info.login || '',
+    }, state);
   } catch (err) {
     console.error('Yandex OAuth callback error:', err);
-    res.redirect(`${redirectUri}?error=auth_failed`);
+    res.redirect(`${redirect}?error=auth_failed`);
   }
 });
 
-// VK (legacy OAuth2 code flow — oauth.vk.com)
+// ── VK ID (id.vk.com, OAuth 2.1 + PKCE) ──
+// code_verifier секретен и не может лежать в state — держим его на сервере,
+// ключ = nonce, который и передаём как state (внутри — redirect и link).
+const vkPkce = new Map(); // nonce -> { verifier, state, ts }
+function vkPkceGC() {
+  const now = Date.now();
+  for (const [k, v] of vkPkce) if (now - v.ts > 10 * 60 * 1000) vkPkce.delete(k);
+}
+
 app.get('/auth/vk/mobile', (req, res) => {
   if (!config.vkClientId) return res.status(503).send('VK OAuth не настроен');
-  const state = encodeURIComponent(req.query.redirect || 'familybudget://auth');
+  vkPkceGC();
+  const verifier = crypto.randomBytes(48).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  const nonce = crypto.randomBytes(16).toString('base64url');
+  vkPkce.set(nonce, { verifier, state: packState(req.query.redirect, req.query.link), ts: Date.now() });
   const callbackUrl = `${req.protocol}://${req.headers.host}/auth/vk/mobile/callback`;
-  const url = `https://oauth.vk.com/authorize?client_id=${config.vkClientId}`
-    + `&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=email&v=5.131&state=${state}`;
+  const url = `https://id.vk.com/authorize?response_type=code&client_id=${config.vkClientId}`
+    + `&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(nonce)}`
+    + `&code_challenge=${challenge}&code_challenge_method=S256&scope=email`;
   res.redirect(url);
 });
 
 app.get('/auth/vk/mobile/callback', async (req, res) => {
-  const { code, state } = req.query;
-  const redirectUri = decodeURIComponent(state || 'familybudget://auth');
+  const { code, state: nonce, device_id } = req.query;
+  const entry = vkPkce.get(nonce);
+  if (entry) vkPkce.delete(nonce);
+  const { redirect } = unpackState(entry?.state);
   try {
+    if (!entry) throw new Error('pkce state expired');
     const callbackUrl = `${req.protocol}://${req.headers.host}/auth/vk/mobile/callback`;
-    const tokenRes = await fetch('https://oauth.vk.com/access_token?'
-      + new URLSearchParams({
-        client_id: config.vkClientId, client_secret: config.vkClientSecret,
-        redirect_uri: callbackUrl, code,
-      }).toString());
+    const tokenRes = await fetch('https://id.vk.com/oauth2/auth', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code', code, code_verifier: entry.verifier,
+        client_id: config.vkClientId, device_id: device_id || '', redirect_uri: callbackUrl,
+        state: nonce,
+      }),
+    });
     const tokens = await tokenRes.json();
     if (!tokens.access_token) throw new Error('no access_token');
-    const id = String(tokens.user_id);
-    const email = tokens.email || '';
-    let name = '';
-    try {
-      const uRes = await fetch(`https://api.vk.com/method/users.get?user_ids=${id}&access_token=${tokens.access_token}&v=5.131`);
-      const u = await uRes.json();
-      const p = u.response && u.response[0];
-      if (p) name = `${p.first_name || ''} ${p.last_name || ''}`.trim();
-    } catch { /* имя не критично */ }
-    let user = getUserByOAuth('vk', id);
-    if (!user) user = await createOAuthUser({ provider: 'vk', id, email, name });
-    issueOAuthRedirect(res, redirectUri, user);
+    const infoRes = await fetch('https://id.vk.com/oauth2/user_info', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ access_token: tokens.access_token, client_id: String(config.vkClientId) }),
+    });
+    const info = await infoRes.json();
+    const u = info.user || {};
+    const id = String(u.user_id || tokens.user_id || '');
+    if (!id) throw new Error('no user_id');
+    await finishOAuth(res, 'vk', {
+      id, email: u.email || '',
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+    }, entry.state);
   } catch (err) {
-    console.error('VK OAuth callback error:', err);
-    res.redirect(`${redirectUri}?error=auth_failed`);
+    console.error('VK ID callback error:', err);
+    res.redirect(`${redirect}?error=auth_failed`);
   }
 });
 
