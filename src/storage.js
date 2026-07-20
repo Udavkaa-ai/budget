@@ -1000,6 +1000,33 @@ export async function createGoogleUser({ googleId, email, name, picture }) {
   return user;
 }
 
+// ─── OAuth-провайдеры (обобщённо: google/yandex/vk) ──────────────────────────
+// Пользователь идентифицируется полем `${provider}Id` (googleId/yandexId/vkId).
+
+export function getUserByOAuth(provider, id) {
+  const field = `${provider}Id`;
+  return (data.users || []).find(u => u[field] === id) || null;
+}
+
+export async function createOAuthUser({ provider, id, email, name, picture }) {
+  if (!data.users) data.users = [];
+  const familyId = 'fam_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const prefix = provider[0]; // g / y / v
+  const user = {
+    login: `${prefix}_${id}`,
+    [`${provider}Id`]: id,
+    email: email || '',
+    name: name || (email ? email.split('@')[0] : `user_${id}`),
+    picture: picture || '',
+    family: familyId,
+    isAdmin: false,
+    createdAt: new Date().toISOString(),
+  };
+  data.users.push(user);
+  debouncedSave();
+  return user;
+}
+
 export async function updateUserFamily(login, familyId) {
   const user = (data.users || []).find(u => u.login === login);
   if (!user) return null;
