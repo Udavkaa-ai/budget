@@ -723,6 +723,39 @@ export async function linkGoogleToUser(login, { googleId, email }) {
   return { ok: true, moved, mergedDuplicate: !!(dup && dup.login !== me.login) };
 }
 
+// Обобщённая привязка провайдера (yandex/vk/google) к существующему аккаунту.
+// Данные семьи НЕ трогаются: если под этим провайдером уже был автосозданный
+// пустой дубликат — его расходы переносятся на целевого юзера, дубликат удаляется,
+// и на целевого вешается `${provider}Id`. Так вход через новый провайдер ведёт
+// в тот же аккаунт с той же семьёй — миграция без потери записей.
+export async function linkOAuthToUser(login, provider, id, email) {
+  const me = (data.users || []).find(u => u.login === login);
+  if (!me) return { ok: false, error: 'Пользователь не найден' };
+
+  const dup = getUserByOAuth(provider, id);
+  let moved = 0;
+  if (dup && dup.login !== me.login) {
+    for (const e of data.expenses) {
+      if (fam(e.family) === fam(dup.family) && e.user === dup.name) {
+        e.user = me.name;
+        e.family = fam(me.family);
+        moved++;
+      }
+    }
+    for (const g of data.goals || []) {
+      for (const c of g.contributions || []) {
+        if (c.user === dup.name) c.user = me.name;
+      }
+    }
+    data.users = data.users.filter(u => u.login !== dup.login);
+  }
+
+  me[`${provider}Id`] = id;
+  if (email && !me.email) me.email = email;
+  debouncedSave();
+  return { ok: true, moved, mergedDuplicate: !!(dup && dup.login !== me.login) };
+}
+
 // ─── E2E-синхронизация: сервер хранит только шифроблобы ─────────────────────
 
 // Записи: { id, family, blob, ver, seq, deleted }

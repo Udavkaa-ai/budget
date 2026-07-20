@@ -94,8 +94,8 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
               <PrimaryButton title="Войти через Яндекс" onPress={() => handleOAuth('yandex')} loading={loading} />
               <View style={{ height: spacing.md }} />
               <PrimaryButton title="Войти через VK" onPress={() => handleOAuth('vk')} loading={loading} />
-              <View style={{ height: spacing.md }} />
-              <PrimaryButton title="Войти через Google" onPress={() => handleOAuth('google')} loading={loading} />
+              {/* Google-кнопку в RuStore-сборке не показываем. Существующие
+                  Google-аккаунты переносятся привязкой Яндекс/VK в веб-версии. */}
               <TouchableOpacity onPress={() => setStep('url')} style={{ marginTop: spacing.lg }}>
                 <Text style={{ color: t.textMuted, textAlign: 'center' }}>‹ Изменить сервер</Text>
               </TouchableOpacity>
