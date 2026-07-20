@@ -420,7 +420,7 @@ app.get('/auth/vk/mobile', (req, res) => {
   const callbackUrl = `${req.protocol}://${req.headers.host}/auth/vk/mobile/callback`;
   const url = `https://id.vk.com/authorize?response_type=code&client_id=${config.vkClientId}`
     + `&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(nonce)}`
-    + `&code_challenge=${challenge}&code_challenge_method=S256&scope=email`;
+    + `&code_challenge=${challenge}&code_challenge_method=S256`;  // scope пустой — как в SDK-конфиге VK; email не требуется
   res.redirect(url);
 });
 
