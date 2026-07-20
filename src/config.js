@@ -53,6 +53,11 @@ export const config = {
   port: parseInt(process.env.PORT) || 3000,
   jwtSecret: resolveJwtSecret(),
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  // Яндекс ID / VK ID — для RuStore-аудитории (oauth.yandex.ru, id.vk.com)
+  yandexClientId: process.env.YANDEX_CLIENT_ID || '',
+  yandexClientSecret: process.env.YANDEX_CLIENT_SECRET || '',
+  vkClientId: process.env.VK_CLIENT_ID || '',
+  vkClientSecret: process.env.VK_CLIENT_SECRET || '',
   // Пользователи веб-приложения. Поле family определяет, чьи данные видит пользователь.
   // Пользователи с одинаковым family видят общий бюджет; с разными — полностью изолированы.
   webUsers: [
