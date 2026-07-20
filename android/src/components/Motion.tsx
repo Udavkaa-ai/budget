@@ -1,6 +1,6 @@
 import React from 'react';
 import Animated, {
-  FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withSpring,
+  FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withSpring, withTiming,
   runOnJS, useReducedMotion,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -92,11 +92,11 @@ export function SwipePager({
 }) {
   const reduce = useReducedMotion();
   const tx = useSharedValue(0);
+  const op = useSharedValue(1);
   const committing = useSharedValue(0); // 1 пока идёт анимация перехода — не сбрасываем
   const width = Dimensions.get('window').width;
 
   const OUT = { damping: 22, stiffness: 210, mass: 0.6 };
-  const IN = { damping: 24, stiffness: 210, mass: 0.6 };
   const BACK = { damping: 20, stiffness: 300, mass: 0.5 };
 
   // Жёстко разводим оси, чтобы горизонтальный свайп и вертикальный pull-to-refresh
@@ -106,6 +106,13 @@ export function SwipePager({
   const pan = Gesture.Pan()
     .activeOffsetX([-24, 24])
     .failOffsetY([-12, 12])
+    // Новое касание всегда возвращает чистое видимое состояние — если предыдущий
+    // переход ещё доигрывал, перехватываем его без «залипания».
+    .onBegin(() => {
+      'worklet';
+      committing.value = 0;
+      op.value = 1;
+    })
     .onUpdate(e => {
       'worklet';
       // Дополнительная страховка: если жест всё же вертикально-доминантный — не тянем вбок.
@@ -119,17 +126,29 @@ export function SwipePager({
       const projected = e.translationX + project(e.velocityX);
       const th = width * 0.26;
       const horizontal = Math.abs(e.translationX) > Math.abs(e.translationY);
+      // Старый контент уезжает по направлению свайпа, затем контейнер мгновенно
+      // возвращается в центр СКРЫТЫМ (opacity 0) и новый день/месяц ПРОЯВЛЯЕТСЯ на
+      // месте. Так мы не вдвигаем чужой (ещё не обновлённый) контент — данные
+      // меняются асинхронно, и fade маскирует подмену.
       if (horizontal && canNext && projected < -th) {
         committing.value = 1;
         if (onCommit) runOnJS(onCommit)();
         tx.value = withSpring(-width, { ...OUT, velocity: e.velocityX }, fin => {
-          if (fin) { runOnJS(onNext)(); tx.value = width; tx.value = withSpring(0, IN, () => { committing.value = 0; }); }
+          if (fin) {
+            runOnJS(onNext)();
+            tx.value = 0; op.value = 0;
+            op.value = withTiming(1, { duration: 240 }, () => { committing.value = 0; });
+          }
         });
       } else if (horizontal && canPrev && projected > th) {
         committing.value = 1;
         if (onCommit) runOnJS(onCommit)();
         tx.value = withSpring(width, { ...OUT, velocity: e.velocityX }, fin => {
-          if (fin) { runOnJS(onPrev)(); tx.value = -width; tx.value = withSpring(0, IN, () => { committing.value = 0; }); }
+          if (fin) {
+            runOnJS(onPrev)();
+            tx.value = 0; op.value = 0;
+            op.value = withTiming(1, { duration: 240 }, () => { committing.value = 0; });
+          }
         });
       } else {
         tx.value = withSpring(0, { ...BACK, velocity: e.velocityX });
@@ -138,10 +157,10 @@ export function SwipePager({
     // Любое прерывание/отмена жеста возвращает экран на место — не «залипает» вбок.
     .onFinalize(() => {
       'worklet';
-      if (committing.value === 0) tx.value = withSpring(0, BACK);
+      if (committing.value === 0) { tx.value = withSpring(0, BACK); op.value = 1; }
     });
 
-  const aStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
+  const aStyle = useAnimatedStyle(() => ({ opacity: op.value, transform: [{ translateX: tx.value }] }));
 
   // Под reduce-motion жест-слайд отключаем — навигация остаётся по кнопкам-стрелкам.
   if (reduce) {
