@@ -39,14 +39,14 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleOAuth = async (provider: 'google' | 'yandex' | 'vk') => {
     setLoading(true);
     try {
-      // Open the server's Google OAuth page in a browser session
-      // The server redirects back with a token in the URL fragment or query
+      // Открываем OAuth-страницу сервера в браузер-сессии; сервер редиректит
+      // обратно с токеном в query (?token=). Один флоу на всех провайдеров.
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'familybudget' });
       const result = await WebBrowser.openAuthSessionAsync(
-        `${serverUrl.trim().replace(/\/+$/, '')}/auth/google/mobile?redirect=${encodeURIComponent(redirectUri)}`,
+        `${serverUrl.trim().replace(/\/+$/, '')}/auth/${provider}/mobile?redirect=${encodeURIComponent(redirectUri)}`,
         redirectUri,
       );
       if (result.type === 'success' && result.url) {
@@ -73,7 +73,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
           <Text style={[styles.logo, { color: t.text }]}>💰</Text>
           <Text style={[styles.title, { color: t.text }]}>Семейный бюджет</Text>
           <Text style={[styles.sub, { color: t.textMuted }]}>
-            {step === 'url' ? 'Введите адрес вашего сервера' : 'Войдите через Google'}
+            {step === 'url' ? 'Введите адрес вашего сервера' : 'Выберите способ входа'}
           </Text>
 
           {step === 'url' ? (
@@ -91,7 +91,11 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
             </>
           ) : (
             <>
-              <PrimaryButton title="🔐 Войти через Google" onPress={handleGoogleLogin} loading={loading} />
+              <PrimaryButton title="Войти через Яндекс" onPress={() => handleOAuth('yandex')} loading={loading} />
+              <View style={{ height: spacing.md }} />
+              <PrimaryButton title="Войти через VK" onPress={() => handleOAuth('vk')} loading={loading} />
+              <View style={{ height: spacing.md }} />
+              <PrimaryButton title="Войти через Google" onPress={() => handleOAuth('google')} loading={loading} />
               <TouchableOpacity onPress={() => setStep('url')} style={{ marginTop: spacing.lg }}>
                 <Text style={{ color: t.textMuted, textAlign: 'center' }}>‹ Изменить сервер</Text>
               </TouchableOpacity>
