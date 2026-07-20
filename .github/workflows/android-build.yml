@@ -127,10 +127,10 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
 
-      # Store build for Google Play: a signed Android App Bundle (.aab).
-      # Play requires AAB, not APK, for new apps. Signed with the upload key
-      # (Play App Signing re-signs on Google's side).
-      - name: Build store AAB
+      # Store build: signed .aab (Google Play) AND a signed release .apk (RuStore).
+      # RuStore wants the signing key uploaded for an AAB, but accepts a
+      # fully-signed APK as-is — so we ship both and let you pick.
+      - name: Build store AAB + signed APK
         if: ${{ env.BT == 'store' }}
         working-directory: android/android
         run: |
@@ -140,7 +140,7 @@ jobs:
           # and Groovy would parse it as apply(...).apply(...) → NPE.
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
           printf '\napply from: "../../release-signing.gradle"\n' >> app/build.gradle
-          ./gradlew bundleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace --init-script /tmp/ci-init.gradle
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
           KEYSTORE_PATH: release.jks
@@ -149,25 +149,24 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       # ── Upload build ──────────────────────────────────────────────────────────
-      # store → signed .aab for Google Play; standalone → installable .apk
+      # store → signed .aab (Play) + signed .apk (RuStore); standalone → test .apk
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
           name: family-budget-${{ env.BT }}-${{ github.run_number }}
-          path: ${{ env.BT == 'store' && 'android/android/app/build/outputs/bundle/release/app-release.aab' || 'android/android/app/build/outputs/apk/release/app-release.apk' }}
+          path: ${{ env.BT == 'store' && 'android/android/app/build/outputs/*/release/app-release.*' || 'android/android/app/build/outputs/apk/release/app-release.apk' }}
           retention-days: 30
 
       # ── Print download instructions ───────────────────────────────────────────
       - name: Build summary
         run: |
           if [ "${{ env.BT }}" = "store" ]; then
-            echo "## ✅ AAB для Google Play собран" >> $GITHUB_STEP_SUMMARY
+            echo "## ✅ Store-сборка готова (AAB + подписанный APK)" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Тип:** store — подписанный \`app-release.aab\` (upload key)" >> $GITHUB_STEP_SUMMARY
+            echo "Артефакт \`family-budget-store-${{ github.run_number }}\` содержит оба файла:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`bundle/release/app-release.aab\` — для Google Play (или RuStore, если загрузить ключ подписи)" >> $GITHUB_STEP_SUMMARY
+            echo "- \`apk/release/app-release.apk\` — подписан релизным ключом, **для RuStore заливай его** (ключ отдельно не нужен)" >> $GITHUB_STEP_SUMMARY
             echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Скачать: Actions → этот запуск → Artifacts → \`family-budget-store-*\`" >> $GITHUB_STEP_SUMMARY
-            echo "Загрузить в Play Console → Testing → Closed testing → Create release → Upload." >> $GITHUB_STEP_SUMMARY
           else
             echo "## ✅ APK собран" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
