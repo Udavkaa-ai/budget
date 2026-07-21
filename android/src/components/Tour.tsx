@@ -219,12 +219,12 @@ export function Tour() {
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {i > 0 && (
-              <TouchableOpacity onPress={back} style={[styles.navBtn, { backgroundColor: t.surface2 }]}>
-                <Text numberOfLines={1} style={{ color: t.text, fontWeight: '600' }}>Назад</Text>
+              <TouchableOpacity onPress={back} style={[styles.navBtn, styles.navArrow, { backgroundColor: t.surface2 }]}>
+                <Text style={{ color: t.text, fontWeight: '700', fontSize: font.lg }}>‹</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={next} style={[styles.navBtn, { backgroundColor: t.primary }]}>
-              <Text numberOfLines={1} style={{ color: '#fff', fontWeight: '700' }}>{isLast ? 'Готово' : 'Далее'}</Text>
+            <TouchableOpacity onPress={next} style={[styles.navBtn, isLast ? null : styles.navArrow, { backgroundColor: t.primary }]}>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: isLast ? font.md : font.lg }}>{isLast ? 'Готово' : '›'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -246,5 +246,6 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6, justifyContent: 'center', marginTop: spacing.lg, flexWrap: 'wrap' },
   dot: { width: 7, height: 7, borderRadius: 4 },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
-  navBtn: { borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, minWidth: 88, alignItems: 'center' },
+  navBtn: { borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, minWidth: 80, alignItems: 'center', justifyContent: 'center' },
+  navArrow: { minWidth: 52, paddingHorizontal: spacing.md },
 });
