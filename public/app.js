@@ -3090,9 +3090,15 @@ function setupEventListeners() {
   // Export button — download with auth
   document.getElementById('btn-export').addEventListener('click', async (e) => {
     e.preventDefault();
-    const res = await api('GET', '/api/export');
-    if (!res.ok) { showToastError('Ошибка экспорта'); return; }
-    const blob = await res.blob();
+    let text;
+    if (E2E.active()) {
+      text = E2E.exportCsv();   // в E2E считаем из локальных данных, сервер пуст
+    } else {
+      const res = await api('GET', '/api/export');
+      if (!res.ok) { showToastError('Ошибка экспорта'); return; }
+      text = await res.text();
+    }
+    const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

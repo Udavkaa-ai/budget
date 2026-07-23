@@ -756,3 +756,17 @@ export async function init({ getToken, userName }) {
 }
 
 export function setUserName(name) { _userName = name || ''; }
+
+// CSV из локальных расходов (в E2E сервер пуст, /api/export отдаёт только заголовок)
+export function exportCsv() {
+  const field = v => {
+    let s = String(v ?? '');
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    if (/[";\n]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const header = 'Дата;Категория;Описание;Сумма;Кто;Постоянный;Создано';
+  const rows = allLocalExpenses().map(e =>
+    [e.date, e.category, e.description, e.amount, e.user, 'нет', e.createdAt].map(field).join(';'));
+  return header + '\n' + rows.join('\n');
+}
