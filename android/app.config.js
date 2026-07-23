@@ -5,7 +5,16 @@
 const base = require('./app.json').expo;
 
 module.exports = () => {
-  if (process.env.APP_VARIANT !== 'demo') return { expo: base };
+  // versionCode берём из CI (APP_VERSION_CODE = github.run_number, монотонно растёт),
+  // иначе из app.json. Так каждая сборка получает уникальный, всегда больший код —
+  // RuStore/Play не ругаются на «Version Code меньше предыдущего».
+  const versionCode = process.env.APP_VERSION_CODE
+    ? parseInt(process.env.APP_VERSION_CODE, 10)
+    : base.android.versionCode;
+
+  if (process.env.APP_VARIANT !== 'demo') {
+    return { expo: { ...base, android: { ...base.android, versionCode } } };
+  }
 
   // Для демо-пакета убираем googleServicesFile (он привязан к основному package
   // com.familybudget.app и иначе валится на несоответствии). Пуш в демо не нужен.
@@ -19,6 +28,7 @@ module.exports = () => {
       android: {
         ...androidRest,
         package: 'com.familybudget.app.demo',
+        versionCode,
       },
       extra: { ...(base.extra || {}), isDemo: true },
     },

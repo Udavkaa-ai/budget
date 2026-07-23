@@ -87,6 +87,10 @@ jobs:
           EXPO_NO_TELEMETRY: 1
           # demo → app.config.js подставляет package .demo, имя «Демо», isDemo
           APP_VARIANT: ${{ env.BT == 'demo' && 'demo' || '' }}
+          # versionCode = номер запуска CI (монотонно растёт) → всегда больше
+          # предыдущего, RuStore/Play не отклоняют сборку. Прошивается в манифест
+          # на этапе prebuild через app.config.js.
+          APP_VERSION_CODE: ${{ github.run_number }}
 
       # ── Gradle build ─────────────────────────────────────────────────────────
       - name: Make gradlew executable
