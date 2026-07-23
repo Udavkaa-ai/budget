@@ -166,3 +166,22 @@ export async function wipeLocal(): Promise<void> {
   await d.execAsync('DELETE FROM exp; DELETE FROM doc; DELETE FROM meta;');
   notify();
 }
+
+// Все кэшфлоу-документы → { ym: value } (для снапшота бэкапа)
+export async function allCashflowDocs(): Promise<Record<string, unknown>> {
+  const d = await db();
+  const rows = await d.getAllAsync<{ key: string; json: string }>("SELECT key, json FROM doc WHERE key LIKE 'cf:%'");
+  const out: Record<string, unknown> = {};
+  for (const r of rows) {
+    try { out[r.key.slice(3)] = JSON.parse(r.json); } catch { /* пропускаем битые */ }
+  }
+  return out;
+}
+
+// Помечаем все расходы удалёнными (tombstone, dirty) — для восстановления из копии:
+// старые записи уедут на сервер как удаления, чтобы не «воскресли» при следующем pull.
+export async function tombstoneAllExpenses(): Promise<void> {
+  const d = await db();
+  await d.runAsync('UPDATE exp SET deleted=1, dirty=1, ver=?', [now()]);
+  notify();
+}

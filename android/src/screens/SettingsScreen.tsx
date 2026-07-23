@@ -22,8 +22,9 @@ import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import { openHelp } from '../help';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
-import { useE2E } from '../e2e';
+import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
+import * as e2eData from '../e2e/compute';
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -183,7 +184,8 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       await ensureKey();
-      const snap = await backupsApi.snapshot();
+      // В E2E данные лежат локально (сервер пуст) — снапшот берём с устройства
+      const snap = isE2E() ? await e2eData.localSnapshot() : await backupsApi.snapshot();
       const blob = await encryptJson(snap);
       await backupsApi.create(blob);
       refreshBackups();
@@ -208,8 +210,14 @@ export default function SettingsScreen() {
             try {
               const { blob } = await backupsApi.get(b.id);
               const snap = await decryptJson<Record<string, unknown>>(blob);
-              const r = await backupsApi.restore(snap);
-              Alert.alert('Готово', `Восстановлено расходов: ${r.expenses}`);
+              if (isE2E()) {
+                // Восстанавливаем в локальное хранилище, а не на (пустой) сервер
+                await e2eData.restoreLocalSnapshot(snap);
+                Alert.alert('Готово', `Восстановлено расходов: ${(snap as any).expenses?.length ?? 0}`);
+              } else {
+                const r = await backupsApi.restore(snap);
+                Alert.alert('Готово', `Восстановлено расходов: ${r.expenses}`);
+              }
             } catch (e) {
               Alert.alert('Ошибка', 'Не удалось расшифровать или восстановить: ' + String(e));
             } finally {
@@ -380,7 +388,8 @@ export default function SettingsScreen() {
   const exportCsv = async () => {
     setBusy(true);
     try {
-      const text = await csv.export();
+      // В E2E экспорт считаем из локальных данных (сервер пуст)
+      const text = isE2E() ? await e2eData.exportCsv() : await csv.export();
       // Отдаём настоящий .csv файл, а не текст в сообщении
       const stamp = new Date().toISOString().slice(0, 10);
       const uri = `${FileSystem.cacheDirectory}expenses-${stamp}.csv`;
@@ -748,7 +757,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.19.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.20.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

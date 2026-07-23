@@ -3,7 +3,7 @@ import type {
 } from '../api/client';
 import {
   allLocalExpenses, addLocalExpense, updateLocalExpense, deleteLocalExpense,
-  getLocalDoc, setLocalDoc,
+  getLocalDoc, setLocalDoc, allCashflowDocs, tombstoneAllExpenses,
 } from './store';
 import { syncNow } from './sync';
 
@@ -181,4 +181,53 @@ export async function buildAiReport(month: number, year: number): Promise<string
   lines.push('Участники:');
   for (const [u, ud] of Object.entries(s.byUser)) lines.push(`- ${u}: ${Math.round(ud.total)} ₽`);
   return lines.join('\n');
+}
+
+// ─── Бэкап / восстановление / экспорт по ЛОКАЛЬНЫМ данным (в E2E сервер пуст) ──
+
+// Снапшот той же формы, что GET /api/snapshot — но из локального хранилища.
+export async function localSnapshot(): Promise<Record<string, unknown>> {
+  return {
+    version: 1,
+    createdAt: nowStr(),
+    expenses: await allLocalExpenses(),
+    goals: (await getLocalDoc<unknown[]>('goals'))?.value ?? [],
+    budgetPlan: (await getLocalDoc<BudgetPlan>('plan'))?.value ?? { categoryBudgets: {}, incomes: {} },
+    cashflow: await allCashflowDocs(),
+    plannedMonthly: await getPlannedMonthly(),
+  };
+}
+
+// Восстановление в локальное хранилище (не на сервер): старые расходы —
+// в tombstone (уедут удалениями), затем заливаем расходы/документы из снапшота.
+export async function restoreLocalSnapshot(snap: any): Promise<void> {
+  await tombstoneAllExpenses();
+  for (const e of snap.expenses ?? []) {
+    await addLocalExpense({
+      date: e.date, category: e.category, amount: e.amount,
+      description: e.description ?? '', user: e.user ?? '', createdAt: e.createdAt ?? nowStr(),
+    });
+  }
+  if (snap.budgetPlan) await setLocalDoc('plan', { categoryBudgets: snap.budgetPlan.categoryBudgets ?? {}, incomes: snap.budgetPlan.incomes ?? {} }, { dirty: true });
+  if (snap.goals) await setLocalDoc('goals', snap.goals, { dirty: true });
+  for (const [ym, cf] of Object.entries(snap.cashflow ?? {})) await setLocalDoc(`cf:${ym}`, cf, { dirty: true });
+  if (snap.plannedMonthly) {
+    const cur = (await getLocalDoc<Record<string, unknown>>('meta'))?.value ?? {};
+    await setLocalDoc('meta', { ...cur, plannedMonthly: snap.plannedMonthly }, { dirty: true });
+  }
+  await syncNow();
+}
+
+// CSV из локальных расходов (тот же формат, что серверный /api/export).
+export async function exportCsv(): Promise<string> {
+  const csvField = (v: unknown) => {
+    let s = String(v ?? '');
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    if (/[";\n]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const header = 'Дата;Категория;Описание;Сумма;Кто;Постоянный;Создано';
+  const rows = (await allLocalExpenses()).map(e =>
+    [e.date, e.category, e.description, e.amount, e.user, 'нет', e.createdAt].map(csvField).join(';'));
+  return header + '\n' + rows.join('\n');
 }
