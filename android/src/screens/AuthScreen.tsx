@@ -18,7 +18,9 @@ WebBrowser.maybeCompleteAuthSession();
 // который в prebuild-сборке часто пустой). Constants — запасной вариант.
 const IS_DEMO = process.env.EXPO_PUBLIC_APP_VARIANT === 'demo'
   || Constants.expoConfig?.extra?.isDemo === true;
-const DEMO_SERVER = 'https://semejnyj-budzet-udavkaa.amvera.io';
+// Адрес сервера по умолчанию — чтобы новый пользователь не гадал, что вводить.
+// Продвинутые могут сменить через «Изменить сервер».
+const DEFAULT_SERVER = 'https://semejnyj-budzet-udavkaa.amvera.io';
 
 interface Props {
   onLoginSuccess: (token: string) => void;
@@ -26,16 +28,17 @@ interface Props {
 
 export default function AuthScreen({ onLoginSuccess }: Props) {
   const t = useTheme();
-  const [serverUrl, setServerUrlState] = useState(IS_DEMO ? DEMO_SERVER : '');
+  const [serverUrl, setServerUrlState] = useState(DEFAULT_SERVER);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'url' | 'auth'>('url');
+  // Сразу показываем экран входа (сервер уже прописан), а не ввод адреса
+  const [step, setStep] = useState<'url' | 'auth'>('auth');
   const [pwLogin, setPwLogin] = useState('lena');
   const [pwPass, setPwPass] = useState('Lena');
 
   const handlePasswordLogin = async () => {
     setLoading(true);
     try {
-      await setServerUrl((serverUrl || DEMO_SERVER).trim().replace(/\/+$/, ''));
+      await setServerUrl((serverUrl || DEFAULT_SERVER).trim().replace(/\/+$/, ''));
       const token = await passwordLogin(pwLogin.trim(), pwPass);
       onLoginSuccess(token);
     } catch (e) {
@@ -65,11 +68,14 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
   const handleOAuth = async (provider: 'google' | 'yandex' | 'vk') => {
     setLoading(true);
     try {
+      // Сохраняем адрес сервера (шаг ввода URL пропущен) — нужен для api-вызовов
+      const srv = (serverUrl || DEFAULT_SERVER).trim().replace(/\/+$/, '');
+      await setServerUrl(srv);
       // Открываем OAuth-страницу сервера в браузер-сессии; сервер редиректит
       // обратно с токеном в query (?token=). Один флоу на всех провайдеров.
       const redirectUri = AuthSession.makeRedirectUri({ scheme: 'familybudget' });
       const result = await WebBrowser.openAuthSessionAsync(
-        `${serverUrl.trim().replace(/\/+$/, '')}/auth/${provider}/mobile?redirect=${encodeURIComponent(redirectUri)}`,
+        `${srv}/auth/${provider}/mobile?redirect=${encodeURIComponent(redirectUri)}`,
         redirectUri,
       );
       if (result.type === 'success' && result.url) {
