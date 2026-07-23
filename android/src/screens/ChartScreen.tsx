@@ -4,6 +4,7 @@ import {
   ActivityIndicator, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Svg, { Rect, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { useTheme, spacing, font, radius } from '../theme';
@@ -14,6 +15,7 @@ import {
 import { Card } from '../components/Card';
 import { useAuth } from '../hooks/useAuth';
 import { useBlocks } from '../blocks';
+import { useSocket } from '../hooks/useSocket';
 import { MonthPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { haptics } from '../haptics';
@@ -112,7 +114,13 @@ export default function ChartScreen() {
     }
   }, [month, year, user?.name]);
 
-  useEffect(() => { load(); }, []);
+  // Грузим при входе на вкладку и возврате на неё. Без этого экран оставался
+  // на данных момента монтирования: кэшфлоу/доход, изменённые в вебе или на
+  // другом устройстве, не появлялись, пока не перезапустишь приложение
+  // (в таб-навигаторе экран не размонтируется). Ровно как в HomeScreen.
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+  // Real-time: чужое изменение (в т.ч. E2E-синк по 'sync:changed') → перезагрузка
+  useSocket(useCallback(() => { load(); }, [load]));
   useEffect(() => { fetchLast6Months().then(setMonths6); }, []);
 
   const nav = (dir: -1 | 1) => {
