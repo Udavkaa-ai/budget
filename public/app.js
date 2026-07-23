@@ -1061,14 +1061,9 @@ async function loadHeatMap() {
   let dailyTotals = Array(daysInMonth).fill(0);
   let memberCount = 1;
   try {
-    const abort = new AbortController();
-    setTimeout(() => abort.abort(), 8000);
-    const res = await fetch(`/api/unified-chart-data/${ym}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
-      signal: abort.signal,
-    });
-    if (res.ok) {
-      const data = await res.json();
+    // через apiJson — в E2E считается локально (иначе сервер отдаёт пусто)
+    const data = await apiJson('GET', `/api/unified-chart-data/${ym}`);
+    if (data && data.userExpenses) {
       const allExpenses = data.userExpenses || {};
       memberCount = Math.max(Object.keys(allExpenses).length, 1);
       const filteredExpenses = summaryUserFilter
@@ -3738,21 +3733,11 @@ async function _renderSpeedChart(m, y, isCurrent, todayDay) {
   container.innerHTML = '<div class="loading">Загрузка...</div>';
   try {
     const ym = `${y}-${String(m).padStart(2, '0')}`;
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 10000);
+    // через apiJson — в E2E считается локально (иначе сервер отдаёт пусто)
     let chartData;
-    try {
-      const res = await fetch(`/api/unified-chart-data/${ym}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-        signal: abort.signal,
-      });
-      clearTimeout(timer);
-      chartData = res.ok ? await res.json() : {};
-    } catch {
-      clearTimeout(timer);
-      chartData = {};
-    }
-    const userExpenses = chartData.userExpenses || {};
+    try { chartData = await apiJson('GET', `/api/unified-chart-data/${ym}`); }
+    catch { chartData = {}; }
+    const userExpenses = (chartData && chartData.userExpenses) || {};
     const daysInMonth = new Date(y, m, 0).getDate();
     const lastDay = isCurrent ? todayDay : daysInMonth;
 
