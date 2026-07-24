@@ -73,6 +73,7 @@ import {
   putSyncDoc,
   getSyncDoc,
   listSyncDocs,
+  getEncryptedRecordCounts,
   getFamilyE2E,
   enableFamilyE2E,
   linkGoogleToUser,
@@ -989,12 +990,17 @@ app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
   const families = [...new Set(stats.map(u => u.family))];
 
   const familyIncome = {};
+  const familyE2E = {};
+  const encCounts = getEncryptedRecordCounts();
   for (const famId of families) {
     const cf = getCashflow(ym, famId);
     familyIncome[famId] = incomeDayTotal(cf.incomeDays);
+    // E2E-семьи: плейнтекст на сервере вычищен, показываем что данные
+    // зашифрованы, и сколько живых шифроблобов хранится (не «0 зап.»).
+    familyE2E[famId] = { enabled: getFamilyE2E(famId).enabled, encryptedRecords: encCounts[famId] || 0 };
   }
 
-  res.json({ totalFamilies: families.length, totalUsers: stats.length, users: stats, familyIncome, month, year });
+  res.json({ totalFamilies: families.length, totalUsers: stats.length, users: stats, familyIncome, familyE2E, month, year });
 });
 
 // Бюджетные настройки конкретной группы (семьи)

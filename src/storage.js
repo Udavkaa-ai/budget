@@ -859,6 +859,19 @@ export function listSyncDocs(familyId) {
   return syncState().docs[f] || {};
 }
 
+// Число зашифрованных (E2E) записей по семьям: { familyId: count }.
+// Сервер не может расшифровать блобы, но живые (не удалённые) — считает.
+// Нужно для админки: у E2E-семей плейнтекст-расходов нет, и «0 зап.»
+// выглядит как потеря данных, хотя данные целы (в шифроблобах).
+export function getEncryptedRecordCounts() {
+  const out = {};
+  for (const r of syncState().records || []) {
+    if (r.deleted) continue;
+    out[r.family] = (out[r.family] || 0) + 1;
+  }
+  return out;
+}
+
 // Включение E2E: сохраняем отпечаток ключа и вычищаем плейнтекст семьи
 export function getFamilyE2E(familyId) {
   const fs = familySettings(familyId);
