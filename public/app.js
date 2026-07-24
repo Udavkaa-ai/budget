@@ -2009,6 +2009,18 @@ async function openAdminPanel(month, year) {
     nameHeader.className = 'admin-family-header';
     renderFamilyNameView(nameHeader, famId, currentName);
     block.appendChild(nameHeader);
+
+    // E2E-семья: плейнтекст на сервере вычищен (потому «0 зап.» у всех).
+    // Показываем, что данные зашифрованы и сколько шифроблобов хранится —
+    // иначе выглядит как потеря данных, хотя они целы на устройствах.
+    const e2e = stats.familyE2E?.[famId];
+    if (e2e?.enabled) {
+      const badge = document.createElement('div');
+      badge.className = 'admin-family-e2e';
+      badge.style.cssText = 'margin:2px 0 8px;font-size:13px;color:var(--primary);font-weight:600';
+      badge.textContent = `🔒 E2E — данные зашифрованы · ${e2e.encryptedRecords} записей на сервере`;
+      block.appendChild(badge);
+    }
     for (const u of members) {
       const row = document.createElement('div');
       row.className = 'admin-user-row';
@@ -2017,7 +2029,7 @@ async function openAdminPanel(month, year) {
           <div class="admin-user-name">${esc(u.name)} ${u.isGoogle ? '<span class="admin-badge-google">G</span>' : ''} ${u.isAdmin ? '<span class="admin-badge-admin">admin</span>' : ''}</div>
           <div class="admin-user-meta">${esc(u.login)}${u.lastDate ? ` · последний ${u.lastDate}` : ''}</div>
         </div>
-        <span class="admin-stat-entries">${u.expenseCount} зап.</span>
+        <span class="admin-stat-entries">${e2e?.enabled ? '🔒' : `${u.expenseCount} зап.`}</span>
         <button class="admin-user-del" title="Удалить"
           ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
       `;
