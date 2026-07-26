@@ -73,7 +73,7 @@ export default function ChartScreen() {
 
   // Кэшфлоу-редактор
   const [members, setMembers] = useState<Record<string, CashflowMember>>({});
-  const [incomeDays, setIncomeDays] = useState<Array<{ day: string; amount: string }>>([]);
+  const [incomeDays, setIncomeDays] = useState<Array<{ day: string; amount: string; user: string }>>([]);
   const [savingCf, setSavingCf] = useState(false);
   const [selDay, setSelDay] = useState<number | null>(null);   // выбранный/наведённый день
   const [selBal, setSelBal] = useState<number | null>(null);   // выбранный столбик баланса
@@ -108,7 +108,7 @@ export default function ChartScreen() {
       for (const n of names) if (!mem[n]) mem[n] = { debit: 0, credit: 0, savings: 0 };
       setMembers(mem);
       const inc = Array.isArray(cf.incomeDays) ? cf.incomeDays : [];
-      setIncomeDays(inc.map(e => ({ day: String(e.day), amount: String(e.amount) })));
+      setIncomeDays(inc.map(e => ({ day: String(e.day), amount: String(e.amount), user: e.user || '' })));
     } finally {
       setLoading(false);
     }
@@ -138,7 +138,7 @@ export default function ChartScreen() {
       const body: Cashflow = {
         members,
         incomeDays: incomeDays
-          .map(e => ({ day: parseInt(e.day) || 0, amount: parseInt(e.amount) || 0 }))
+          .map(e => ({ day: parseInt(e.day) || 0, amount: parseInt(e.amount) || 0, user: e.user || '' }))
           .filter(e => e.day >= 1 && e.day <= 31 && e.amount > 0),
       };
       await cfApi.save(ym, body);
@@ -156,6 +156,25 @@ export default function ChartScreen() {
     const n = parseInt(v.replace(/[^-\d]/g, '')) || 0;
     setMembers(m => ({ ...m, [name]: { ...m[name], [field]: n } }));
   };
+
+  // Список участников семьи для выбора «чей доход» (как select в вебе)
+  const memberNames = Object.keys(members);
+  const pickIncomeUser = (i: number) => {
+    if (memberNames.length <= 1) return;
+    haptics.select();
+    Alert.alert('Чей доход?', undefined, [
+      ...memberNames.map(n => ({ text: n, onPress: () => setIncomeDays(d => d.map((x, xi) => xi === i ? { ...x, user: n } : x)) })),
+      { text: 'Отмена', style: 'cancel' as const },
+    ]);
+  };
+  const addIncomeDay = () => {
+    haptics.light();
+    setIncomeDays(d => [...d, { day: '', amount: '', user: user?.name || memberNames[0] || '' }]);
+  };
+
+  // Живые итоги (пересчёт при вводе), как в вебе
+  const cfStartTotal = Object.values(members).reduce((s, m) => s + (m.debit || 0) + (m.credit || 0) + (m.savings || 0), 0);
+  const cfIncomeTotal = incomeDays.reduce((s, e) => s + (parseInt(e.amount) || 0), 0);
 
   const userNames = Object.keys(unified?.userExpenses ?? {});
   const dayCount = unified?.labels.length ?? 0;
@@ -416,37 +435,66 @@ export default function ChartScreen() {
               </View>
             ))}
 
-            <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700', marginTop: spacing.sm }}>
+            {/* Итог стартового баланса на 1-е число (как в вебе) */}
+            <View style={styles.cfStartRow}>
+              <Text style={{ color: t.textMuted, fontSize: font.sm }}>Итого на 1-е число</Text>
+              <Text style={{ color: t.primary, fontSize: font.lg, fontWeight: '800' }}>{fmt(cfStartTotal)}</Text>
+            </View>
+
+            <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700', marginTop: spacing.md }}>
               💵 Поступления по дням
             </Text>
             <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
-              Укажите день месяца и сумму зачисления
+              Кто, в какой день месяца и сколько зачислено
             </Text>
             {incomeDays.map((e, i) => (
-              <View key={i} style={[styles.cfRow, { marginBottom: spacing.xs }]}>
+              <View key={i} style={[styles.cfDayRow, { marginBottom: spacing.xs }]}>
+                <TouchableOpacity
+                  onPress={() => pickIncomeUser(i)}
+                  style={[styles.cfUserPill, { backgroundColor: t.surface2, borderColor: t.border }]}
+                >
+                  <Text style={{ color: t.primary, fontWeight: '600', fontSize: font.xs }} numberOfLines={1}>
+                    {e.user || memberNames[0] || '—'}
+                  </Text>
+                  {memberNames.length > 1 && <Text style={{ color: t.textMuted, fontSize: 9 }}> ▾</Text>}
+                </TouchableOpacity>
+                <Text style={{ color: t.textMuted, fontSize: font.xs }}>д.</Text>
                 <TextInput
-                  style={[styles.cfInput, { flex: 1, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+                  style={[styles.cfInputSm, { width: 42, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
                   value={e.day}
                   onChangeText={v => setIncomeDays(d => d.map((x, xi) => xi === i ? { ...x, day: v } : x))}
-                  placeholder="День"
+                  placeholder="1"
                   placeholderTextColor={t.textMuted}
                   keyboardType="number-pad"
                 />
                 <TextInput
-                  style={[styles.cfInput, { flex: 2, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+                  style={[styles.cfInputSm, { flex: 1, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
                   value={e.amount}
                   onChangeText={v => setIncomeDays(d => d.map((x, xi) => xi === i ? { ...x, amount: v } : x))}
-                  placeholder="Сумма"
+                  placeholder="0"
                   placeholderTextColor={t.textMuted}
                   keyboardType="number-pad"
                 />
-                <TouchableOpacity onPress={() => setIncomeDays(d => d.filter((_, xi) => xi !== i))} style={{ padding: spacing.sm }}>
+                <Text style={{ color: t.textMuted, fontSize: font.sm }}>₽</Text>
+                <TouchableOpacity onPress={() => setIncomeDays(d => d.filter((_, xi) => xi !== i))} style={{ paddingHorizontal: spacing.xs, paddingVertical: spacing.sm }}>
                   <Text style={{ color: t.danger, fontSize: font.lg }}>×</Text>
                 </TouchableOpacity>
               </View>
             ))}
-            <TouchableOpacity onPress={() => setIncomeDays(d => [...d, { day: '', amount: '' }])}>
-              <Text style={{ color: t.primary, marginBottom: spacing.md }}>+ Добавить поступление</Text>
+
+            {/* Итог доходов за месяц — зелёная плашка (как в вебе) */}
+            {cfIncomeTotal > 0 && (
+              <View style={[styles.cfIncomeTotal, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
+                <Text style={{ color: t.textMuted, fontSize: font.sm }}>Итого доходов за месяц</Text>
+                <Text style={{ color: t.success, fontSize: font.lg, fontWeight: '800' }}>{fmt(cfIncomeTotal)}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={addIncomeDay}
+              style={[styles.cfAddBtn, { borderColor: t.primary }]}
+            >
+              <Text style={{ color: t.primary, fontWeight: '700', fontSize: font.md }}>+ Добавить день дохода</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -515,6 +563,11 @@ const styles = StyleSheet.create({
   cfRow:        { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   cfInput:      { borderRadius: radius.sm, borderWidth: 1, padding: spacing.sm, fontSize: font.sm, textAlign: 'center' },
   cfInputSm:    { borderRadius: radius.sm, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 6, fontSize: font.sm, textAlign: 'center' },
+  cfStartRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(128,128,128,0.25)' },
+  cfDayRow:     { flexDirection: 'row', gap: 4, alignItems: 'center' },
+  cfUserPill:   { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: radius.sm, paddingVertical: 7, paddingHorizontal: 8, maxWidth: 96, minWidth: 62 },
+  cfIncomeTotal:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.sm },
+  cfAddBtn:     { borderRadius: radius.md, borderWidth: 1.5, borderStyle: 'dashed', paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.md },
   saveBtn:      { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   chart6:       { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, height: 110 },
   barCol:       { flex: 1, alignItems: 'center' },
