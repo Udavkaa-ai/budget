@@ -125,6 +125,46 @@ export async function applyRemoteExpense(id: string, ver: number, deleted: boole
 
 export async function afterPull(): Promise<void> { notify(); }
 
+// Вставить/обновить расход по КОНКРЕТНОМУ id (идемпотентно) — для восстановления
+// из бэкапа без создания дублей: если такой id уже есть, обновляем, а не плодим
+// новый. Помечаем dirty, чтобы уехало в синхрон.
+export async function upsertLocalExpenseById(id: string, e: Omit<Expense, 'id'>): Promise<void> {
+  const d = await db();
+  const row = await d.getFirstAsync<{ id: string }>('SELECT id FROM exp WHERE id=?', [id]);
+  if (row) {
+    await d.runAsync(
+      `UPDATE exp SET ver=?, deleted=0, dirty=1, date=?, category=?, amount=?, description=?, "user"=?, createdAt=? WHERE id=?`,
+      [now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt, id],
+    );
+  } else {
+    await d.runAsync(
+      `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt)
+       VALUES (?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
+      [id, now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt],
+    );
+  }
+  notify();
+}
+
+// Удаление точных дубликатов: одинаковые дата/категория/сумма/описание/юзер/
+// createdAt — оставляем по одному. createdAt берётся из исходника при
+// восстановлении, поэтому реальные разные записи (с разным createdAt) не тронем.
+// Возвращает число помеченных удалёнными (томбстоуны уедут в синхрон).
+export async function dedupeLocalExpenses(): Promise<number> {
+  const d = await db();
+  const rows = await d.getAllAsync<any>('SELECT * FROM exp WHERE deleted=0 ORDER BY rowid');
+  const seen = new Set<string>();
+  const dups: string[] = [];
+  for (const r of rows) {
+    const sig = [r.date, r.category, r.amount, r.description, r.user, r.createdAt].join('||');
+    if (seen.has(sig)) dups.push(r.id); else seen.add(sig);
+  }
+  const ts = now();
+  for (const id of dups) await d.runAsync('UPDATE exp SET deleted=1, dirty=1, ver=? WHERE id=?', [ts, id]);
+  if (dups.length) notify();
+  return dups.length;
+}
+
 // ─── Курсор синхронизации + документы (план/кэшфлоу/цели) ─────────────────────
 
 export async function getCursor(): Promise<number> {

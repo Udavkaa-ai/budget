@@ -424,6 +424,32 @@ export default function SettingsScreen() {
     }
   };
 
+  // Убрать задвоенные расходы (последствие старого бага восстановления).
+  // Достаточно нажать на ОДНОМ устройстве — удаления разъедутся на остальные.
+  const dedupe = () => {
+    if (!isE2E()) { Alert.alert('Недоступно', 'Убрать дубликаты можно только при включённом шифровании.'); return; }
+    Alert.alert(
+      'Убрать дубликаты?',
+      'Удалит повторяющиеся расходы (одинаковые дата, сумма, описание и время создания), оставив по одному. Изменения синхронизируются на все устройства семьи.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Убрать', style: 'destructive', onPress: async () => {
+            setBusy(true);
+            try {
+              const n = await e2eData.dedupeExpenses();
+              Alert.alert(n ? 'Готово' : 'Дубликатов нет', n ? `Удалено дубликатов: ${n}. Обновление уедет на другие устройства.` : 'Повторов не найдено.');
+            } catch (e) {
+              Alert.alert('Ошибка', String(e));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // Импорт: выбор CSV-файла напрямую (вставка текста — запасной вариант)
   const importCsvFile = async () => {
     try {
@@ -715,6 +741,12 @@ export default function SettingsScreen() {
             <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
+          {isE2E() && (
+            <TouchableOpacity style={styles.row} onPress={dedupe} disabled={busy}>
+              <Text style={{ color: t.text }}>🧹 Убрать дубликаты расходов</Text>
+              <Text style={{ color: t.textMuted }}>›</Text>
+            </TouchableOpacity>
+          )}
         </Card>
 
         {/* Encrypted backups */}

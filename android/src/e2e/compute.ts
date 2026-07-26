@@ -4,6 +4,7 @@ import type {
 import {
   allLocalExpenses, addLocalExpense, updateLocalExpense, deleteLocalExpense,
   getLocalDoc, setLocalDoc, allCashflowDocs, tombstoneAllExpenses,
+  upsertLocalExpenseById, dedupeLocalExpenses,
 } from './store';
 import { syncNow } from './sync';
 
@@ -198,15 +199,27 @@ export async function localSnapshot(): Promise<Record<string, unknown>> {
   };
 }
 
-// Восстановление в локальное хранилище (не на сервер): старые расходы —
-// в tombstone (уедут удалениями), затем заливаем расходы/документы из снапшота.
+// Восстановление в локальное хранилище (не на сервер). Идемпотентно: расходы
+// с id заливаем ПО id (upsert), поэтому повторное восстановление не плодит
+// дубли. Старые бэкапы без id — как раньше (tombstone-all + новые записи).
 export async function restoreLocalSnapshot(snap: any): Promise<void> {
-  await tombstoneAllExpenses();
-  for (const e of snap.expenses ?? []) {
-    await addLocalExpense({
-      date: e.date, category: e.category, amount: e.amount,
-      description: e.description ?? '', user: e.user ?? '', createdAt: e.createdAt ?? nowStr(),
-    });
+  const exps = (snap.expenses ?? []) as Array<any>;
+  const allHaveIds = exps.length > 0 && exps.every(e => e.id);
+  if (allHaveIds) {
+    for (const e of exps) {
+      await upsertLocalExpenseById(String(e.id), {
+        date: e.date, category: e.category, amount: e.amount,
+        description: e.description ?? '', user: e.user ?? '', createdAt: e.createdAt ?? nowStr(),
+      });
+    }
+  } else {
+    await tombstoneAllExpenses();
+    for (const e of exps) {
+      await addLocalExpense({
+        date: e.date, category: e.category, amount: e.amount,
+        description: e.description ?? '', user: e.user ?? '', createdAt: e.createdAt ?? nowStr(),
+      });
+    }
   }
   if (snap.budgetPlan) await setLocalDoc('plan', { categoryBudgets: snap.budgetPlan.categoryBudgets ?? {}, incomes: snap.budgetPlan.incomes ?? {} }, { dirty: true });
   if (snap.goals) await setLocalDoc('goals', snap.goals, { dirty: true });
@@ -216,6 +229,14 @@ export async function restoreLocalSnapshot(snap: any): Promise<void> {
     await setLocalDoc('meta', { ...cur, plannedMonthly: snap.plannedMonthly }, { dirty: true });
   }
   await syncNow();
+}
+
+// Убрать задвоенные расходы (последствие старого бага восстановления) и
+// разослать удаления другим устройствам. Возвращает число удалённых.
+export async function dedupeExpenses(): Promise<number> {
+  const n = await dedupeLocalExpenses();
+  if (n) await syncNow();
+  return n;
 }
 
 // CSV из локальных расходов (тот же формат, что серверный /api/export).
