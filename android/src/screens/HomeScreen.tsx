@@ -17,7 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
-import { SwipePager } from '../components/Motion';
+import PagerView from 'react-native-pager-view';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
@@ -89,7 +89,11 @@ export default function HomeScreen() {
   const addSheetRef = useRef<BottomSheet>(null);
 
   const [date, setDate] = useState(todayStr());
-  const [list, setList] = useState<Expense[]>([]);
+  // Данные по дням (день → расходы). Одна карта на все страницы пейджера,
+  // поэтому и центральный, и соседние дни берут данные отсюда — при листании
+  // новый день уже готов (без мелькания и пустых соседей).
+  const [days, setDays] = useState<Record<string, (Expense & { pending?: boolean })[]>>({});
+  const pagerRef = useRef<PagerView>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [userFilter, setUserFilter] = useState<'all' | 'me' | 'partner'>('all');
@@ -97,19 +101,15 @@ export default function HomeScreen() {
   const fabTarget = useTourTarget('home.fab');
   const filterTarget = useTourTarget('home.filter');
 
-  // Кэш дней: чтобы при свайпе новый день показывался МГНОВЕННО, без мелькания
-  // старого. Соседние дни подгружаются заранее; смена дня берёт данные из кэша
-  // синхронно, а фоновый load() затем обновляет их.
-  const cacheRef = useRef<Map<string, Expense[]>>(new Map());
-
-  const fetchDay = useCallback(async (d: string): Promise<Expense[]> => {
+  // Загрузка одного дня в карту (server + офлайн-очередь с меткой pending).
+  const fetchDay = useCallback(async (d: string) => {
     flushOutbox().catch(() => {});
     let server: Expense[] = [];
     try {
       const res = await expApi.forDay(d);
       server = res.expenses ?? [];
     } catch { /* офлайн — покажем хотя бы очередь */ }
-    let pending: Expense[] = [];
+    let pending: (Expense & { pending: boolean })[] = [];
     try {
       pending = (await getOutbox())
         .filter(o => o.date === d)
@@ -120,54 +120,54 @@ export default function HomeScreen() {
           pending: true,
         } as Expense & { pending: boolean }));
     } catch { /* ignore */ }
-    const combined = [...pending, ...server];
-    cacheRef.current.set(d, combined);
-    return combined;
+    setDays(prev => ({ ...prev, [d]: [...pending, ...server] }));
   }, [user?.name]);
 
-  // Тихо подгружаем вчера/завтра в кэш (не блокируя экран)
-  const preloadNeighbors = useCallback((d: string) => {
-    for (const nd of [shiftDay(d, -1), shiftDay(d, 1)]) {
-      if (!isFutureDay(nd) && !cacheRef.current.has(nd)) fetchDay(nd).catch(() => {});
-    }
-  }, [fetchDay]);
+  // Грузим окно из трёх дней: текущий + соседи (чтобы страницы пейджера были
+  // готовы заранее — без пустых соседей и без мелькания при листании).
+  const loadWindow = useCallback((center = date) => {
+    fetchDay(center);
+    fetchDay(shiftDay(center, -1));
+    const nd = shiftDay(center, 1);
+    if (!isFutureDay(nd)) fetchDay(nd);
+  }, [fetchDay, date]);
 
-  const load = useCallback(async (d = date) => {
-    setList(await fetchDay(d));
-    preloadNeighbors(d);
-  }, [date, fetchDay, preloadNeighbors]);
+  // Грузим при входе на вкладку и при смене дня (смена date пересоздаёт
+  // loadWindow → эффект перезапускается). Покрывает и первый показ «Сегодня».
+  useFocusEffect(useCallback(() => { loadWindow(); }, [loadWindow]));
 
-  // Загружаем день при входе на вкладку и при возврате на неё. Это же
-  // покрывает первый показ «Сегодня»: раньше начальной загрузки не было —
-  // список оставался пустым, пока не перелистнёшь день или не обновишь вручную.
-  // Смена даты пересоздаёт load → эффект перезапускается с новой датой.
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  // Real-time sync + обновление при изменении офлайн-очереди. Чужие/локальные
-  // изменения могли затронуть любой день — сбрасываем кэш, чтобы соседи
-  // перечитались свежими.
-  useSocket(useCallback(() => { cacheRef.current.clear(); load(); }, [load]));
-  React.useEffect(() => onOutboxChange(() => { cacheRef.current.clear(); load(); }), [load]);
+  // Real-time sync + офлайн-очередь: любое изменение могло затронуть любой день —
+  // перечитываем всё окно свежим.
+  useSocket(useCallback(() => { loadWindow(); }, [loadWindow]));
+  React.useEffect(() => onOutboxChange(() => { loadWindow(); }), [loadWindow]);
 
   const onRefresh = async () => {
     haptics.light();
     setRefreshing(true);
-    await load();
+    await fetchDay(date);
     setRefreshing(false);
   };
 
-  // Переход на другой день: сразу показываем его из кэша (если есть) —
-  // так в момент свайпа виден УЖЕ нужный день, без мелькания предыдущего.
-  // Затем смена date триггерит load() (useFocusEffect) и обновляет данные.
-  const goToDay = (nd: string) => {
-    setDate(nd);
-    const cached = cacheRef.current.get(nd);
-    if (cached) setList(cached);
-    haptics.light();
-  };
+  const goToDay = (nd: string) => { setDate(nd); haptics.light(); };
+  const prevDay = () => { goToDay(shiftDay(date, -1)); pagerRef.current?.setPageWithoutAnimation(1); };
+  const nextDay = () => { if (!isFutureDay(shiftDay(date, 1))) { goToDay(shiftDay(date, 1)); pagerRef.current?.setPageWithoutAnimation(1); } };
 
-  const prevDay = () => goToDay(shiftDay(date, -1));
-  const nextDay = () => { if (!isFutureDay(shiftDay(date, 1))) goToDay(shiftDay(date, 1)); };
+  // Свайп пейджера завершён: позиция 0 — предыдущий день, 2 — следующий.
+  // Меняем дату и МГНОВЕННО (без анимации) возвращаем пейджер в центр —
+  // окно из трёх дней пересобирается вокруг нового дня без «прыжка».
+  const onPageSelected = (e: { nativeEvent: { position: number } }) => {
+    const pos = e.nativeEvent.position;
+    if (pos === 1) return;
+    if (pos === 2) {
+      const nd = shiftDay(date, 1);
+      if (isFutureDay(nd)) { pagerRef.current?.setPageWithoutAnimation(1); return; }
+      setDate(nd);
+    } else {
+      setDate(shiftDay(date, -1));
+    }
+    haptics.light();
+    pagerRef.current?.setPageWithoutAnimation(1);
+  };
 
   const deleteExpense = (id: string) => {
     Alert.alert('Удалить расход?', undefined, [
@@ -182,8 +182,7 @@ export default function HomeScreen() {
           }
           haptics.warning();
           setEditing(null);
-          cacheRef.current.delete(date);
-          setList(prev => prev.filter(e => e.id !== id));
+          setDays(prev => ({ ...prev, [date]: (prev[date] ?? []).filter(e => e.id !== id) }));
         },
       },
     ]);
@@ -216,7 +215,7 @@ export default function HomeScreen() {
         date: editing.date,
       });
       setEditing(null);
-      load();
+      fetchDay(date);
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally {
@@ -224,10 +223,6 @@ export default function HomeScreen() {
     }
   };
 
-  const total = list.reduce((s, e) => s + e.amount, 0);
-  const myTotal = list.filter(e => e.user === user?.name).reduce((s, e) => s + e.amount, 0);
-  const partnerTotal = total - myTotal;
-  const rows = buildRows(list as (Expense & { pending?: boolean })[], userFilter, user?.name);
   const isToday = date === todayStr();
 
   // Одна строка ленты (расход или заголовок группы) — используется и центральным
@@ -267,19 +262,51 @@ export default function HomeScreen() {
     );
   };
 
-  // Статичная страница соседнего дня для карусели (данные из кэша предзагрузки).
-  const renderNeighborPage = (d: string) => {
-    const nrows = buildRows((cacheRef.current.get(d) ?? []) as (Expense & { pending?: boolean })[], userFilter, user?.name);
+  // Полная страница дня для пейджера: фильтр-«таблетки» + итог + список.
+  // Ключ по ПОЗИЦИИ (p0/p1/p2), а не по дате — так пейджер переиспользует
+  // страницы и обновляет содержимое на месте (нужно для бесшовного рецикла).
+  const renderDayPage = (d: string, pageKey: string, isCenter: boolean) => {
+    const exps = days[d] ?? [];
+    const dTotal = exps.reduce((s, e) => s + e.amount, 0);
+    const dMy = exps.filter(e => e.user === user?.name).reduce((s, e) => s + e.amount, 0);
+    const dPartner = dTotal - dMy;
+    const dRows = buildRows(exps, userFilter, user?.name);
+    const shown = userFilter === 'all' ? dTotal : userFilter === 'me' ? dMy : dPartner;
     return (
-      <ScrollView
-        contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
-        scrollEnabled={false}
-        showsVerticalScrollIndicator={false}
-      >
-        {nrows.length === 0
-          ? <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
-          : nrows.map(item => <React.Fragment key={item.id}>{renderRowContent(item)}</React.Fragment>)}
-      </ScrollView>
+      <View key={pageKey} style={{ flex: 1 }} collapsable={false}>
+        <View ref={isCenter ? filterTarget : undefined} collapsable={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
+            {([['all', 'Все', dTotal], ['me', 'Я', dMy], ['partner', 'Партнёр', dPartner]] as const).map(([fk, lbl, sum]) => (
+              <TouchableOpacity
+                key={fk}
+                style={[styles.filterChip, {
+                  backgroundColor: userFilter === fk ? t.surface2 : t.surface,
+                  borderColor: userFilter === fk ? t.primary : t.border,
+                }]}
+                onPress={() => { haptics.select(); setUserFilter(fk); }}
+              >
+                <Text numberOfLines={1} style={{ color: userFilter === fk ? t.primary : t.textMuted, fontSize: font.sm, fontWeight: '600' }}>
+                  {lbl}{sum > 0 ? ` · ${fmt(sum)}` : ''}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={[styles.totalCard, { backgroundColor: t.surface }]}>
+          <Text style={[styles.totalLabel, { color: t.textMuted }]}>Итого за день</Text>
+          <Text style={[styles.totalAmt, { color: t.primary }]}>{fmt(shown)}</Text>
+        </View>
+
+        <FlatList
+          data={dRows}
+          keyExtractor={e => e.id}
+          refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
+          ListEmptyComponent={<Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>}
+          renderItem={({ item }) => renderRowContent(item)}
+        />
+      </View>
     );
   };
 
@@ -313,60 +340,26 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Фильтр Все / Я / Партнёр с суммами — стиль веб-чипов, скролл вместо обрезки */}
-        <View ref={filterTarget} collapsable={false}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.filterRow}>
-          {([['all', 'Все', total], ['me', 'Я', myTotal], ['partner', 'Партнёр', partnerTotal]] as const).map(([k, lbl, sum]) => (
-            <TouchableOpacity
-              key={k}
-              style={[styles.filterChip, {
-                backgroundColor: userFilter === k ? t.surface2 : t.surface,
-                borderColor: userFilter === k ? t.primary : t.border,
-              }]}
-              onPress={() => { haptics.select(); setUserFilter(k); }}
-            >
-              <Text numberOfLines={1} style={{ color: userFilter === k ? t.primary : t.textMuted, fontSize: font.sm, fontWeight: '600' }}>
-                {lbl}{sum > 0 ? ` · ${fmt(sum)}` : ''}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        </View>
-
-        {/* Итого за день */}
-        <View style={[styles.totalCard, { backgroundColor: t.surface }]}>
-          <Text style={[styles.totalLabel, { color: t.textMuted }]}>Итого за день</Text>
-          <Text style={[styles.totalAmt, { color: t.primary }]}>
-            {fmt(userFilter === 'all' ? total : userFilter === 'me' ? myTotal : partnerTotal)}
-          </Text>
-        </View>
-
-        {/* Expense list — свайп влево/вправо меняет день (1:1, инерция, резинка) */}
-        <SwipePager
-          canNext={!isToday}
-          onPrev={prevDay}
-          onNext={nextDay}
-          onCommit={() => haptics.light()}
-          prev={renderNeighborPage(shiftDay(date, -1))}
-          next={isToday ? null : renderNeighborPage(shiftDay(date, 1))}
+        {/* День = страница пейджера (нативная карусель): фильтр-«таблетки», итог
+            и список листаются вместе. Три страницы (вчера/сегодня/завтра); после
+            свайпа окно мгновенно пересобирается вокруг нового дня. */}
+        <PagerView
+          ref={pagerRef}
+          style={{ flex: 1 }}
+          initialPage={1}
+          offscreenPageLimit={1}
+          onPageSelected={onPageSelected}
         >
-        <FlatList
-          data={rows}
-          keyExtractor={e => e.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
-          ListEmptyComponent={
-            <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
-          }
-          renderItem={({ item }) => renderRowContent(item)}
-        />
-        </SwipePager>
+          {renderDayPage(shiftDay(date, -1), 'p0', false)}
+          {renderDayPage(date, 'p1', true)}
+          {renderDayPage(shiftDay(date, 1), 'p2', false)}
+        </PagerView>
 
         <DayPickerModal
           visible={pickerVisible}
           date={date}
           onClose={() => setPickerVisible(false)}
-          onPick={d => { setDate(d); }}
+          onPick={d => { setDate(d); pagerRef.current?.setPageWithoutAnimation(1); }}
         />
 
         {/* Edit expense modal */}
@@ -443,7 +436,7 @@ export default function HomeScreen() {
           <AddExpenseSheet
             ref={addSheetRef}
             user={user}
-            onAdded={() => { setAddedFlash(n => n + 1); load(); }}
+            onAdded={() => { setAddedFlash(n => n + 1); loadWindow(); }}
           />
         )}
     </SafeAreaView>
