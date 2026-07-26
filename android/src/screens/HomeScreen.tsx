@@ -17,7 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
-import { FadeInItem, SwipePager } from '../components/Motion';
+import { SwipePager } from '../components/Motion';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
@@ -53,6 +53,33 @@ function dayTitle(date: string): string {
   if (diff === 0) return `Сегодня, ${date}`;
   if (diff === 1) return `Вчера, ${date}`;
   return date;
+}
+
+// Строка ленты: расход или заголовок-подытог участника (группировка «Все»).
+type Row = (Expense & { pending?: boolean }) | { hdr: true; id: string; user: string; sum: number };
+
+// Готовит строки ленты за день (фильтр по участнику + группировка с подытогами,
+// как в вебе). Вынесено, чтобы карусель могла строить и соседние дни.
+function buildRows(expenses: (Expense & { pending?: boolean })[], userFilter: 'all' | 'me' | 'partner', userName?: string): Row[] {
+  const filtered = userFilter === 'all' ? expenses
+    : userFilter === 'me' ? expenses.filter(e => e.user === userName)
+    : expenses.filter(e => e.user !== userName);
+  const rows: Row[] = [];
+  if (userFilter === 'all') {
+    const byUser = new Map<string, (Expense & { pending?: boolean })[]>();
+    for (const e of filtered) {
+      const k = e.user || '—';
+      if (!byUser.has(k)) byUser.set(k, []);
+      byUser.get(k)!.push(e);
+    }
+    for (const [u, items] of byUser) {
+      if (byUser.size > 1) rows.push({ hdr: true, id: `hdr_${u}`, user: u, sum: items.reduce((s, e) => s + e.amount, 0) });
+      rows.push(...items);
+    }
+  } else {
+    rows.push(...filtered);
+  }
+  return rows;
 }
 
 export default function HomeScreen() {
@@ -200,27 +227,61 @@ export default function HomeScreen() {
   const total = list.reduce((s, e) => s + e.amount, 0);
   const myTotal = list.filter(e => e.user === user?.name).reduce((s, e) => s + e.amount, 0);
   const partnerTotal = total - myTotal;
-  const filtered = userFilter === 'all' ? list
-    : userFilter === 'me' ? list.filter(e => e.user === user?.name)
-    : list.filter(e => e.user !== user?.name);
-  // Группировка по участнику с подытогами — как в вебе
-  type Row = (Expense & { pending?: boolean }) | { hdr: true; id: string; user: string; sum: number };
-  const rows: Row[] = [];
-  if (userFilter === 'all') {
-    const byUser = new Map<string, (Expense & { pending?: boolean })[]>();
-    for (const e of filtered) {
-      const k = e.user || '—';
-      if (!byUser.has(k)) byUser.set(k, []);
-      byUser.get(k)!.push(e as Expense & { pending?: boolean });
-    }
-    for (const [u, items] of byUser) {
-      if (byUser.size > 1) rows.push({ hdr: true, id: `hdr_${u}`, user: u, sum: items.reduce((s2, e) => s2 + e.amount, 0) });
-      rows.push(...items);
-    }
-  } else {
-    rows.push(...(filtered as (Expense & { pending?: boolean })[]));
-  }
+  const rows = buildRows(list as (Expense & { pending?: boolean })[], userFilter, user?.name);
   const isToday = date === todayStr();
+
+  // Одна строка ленты (расход или заголовок группы) — используется и центральным
+  // списком, и статичными соседними страницами карусели (без каскад-анимации,
+  // чтобы при листании не «перемигивало»).
+  const renderRowContent = (item: Row) => {
+    if ('hdr' in item) {
+      return (
+        <View style={styles.groupHdr}>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 1, fontWeight: '700' }}>
+            {item.user.toUpperCase()}
+          </Text>
+          <Text style={{ color: t.primary, fontWeight: '700', fontSize: font.sm }}>{fmt(item.sum)}</Text>
+        </View>
+      );
+    }
+    const e = item;
+    const pending = (e as Expense & { pending?: boolean }).pending;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.7}
+        style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
+        onLongPress={() => {
+          if (pending) { deleteExpense(e.id); }
+          else if (e.user === user?.name) { haptics.select(); openEdit(e); }
+        }}
+      >
+        <Text style={{ fontSize: 24 }}>{catIcon2(e.category)}</Text>
+        <View style={styles.itemMid}>
+          <Text style={[styles.itemDesc, { color: t.text }]}>{e.description}</Text>
+          <Text style={[styles.itemMeta, { color: t.textMuted }]}>
+            {pending ? '⏳ ожидает синхронизации · ' : ''}{e.category} · {e.user}
+          </Text>
+        </View>
+        <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  // Статичная страница соседнего дня для карусели (данные из кэша предзагрузки).
+  const renderNeighborPage = (d: string) => {
+    const nrows = buildRows((cacheRef.current.get(d) ?? []) as (Expense & { pending?: boolean })[], userFilter, user?.name);
+    return (
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
+        scrollEnabled={false}
+        showsVerticalScrollIndicator={false}
+      >
+        {nrows.length === 0
+          ? <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
+          : nrows.map(item => <React.Fragment key={item.id}>{renderRowContent(item)}</React.Fragment>)}
+      </ScrollView>
+    );
+  };
 
   // Горизонтальный свайп листает дни. Pan с активацией только по X и провалом
   // по Y — вертикальный скролл ленты не перехватывается, а тап по строке не
@@ -286,6 +347,8 @@ export default function HomeScreen() {
           onPrev={prevDay}
           onNext={nextDay}
           onCommit={() => haptics.light()}
+          prev={renderNeighborPage(shiftDay(date, -1))}
+          next={isToday ? null : renderNeighborPage(shiftDay(date, 1))}
         >
         <FlatList
           data={rows}
@@ -295,43 +358,7 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>
           }
-          renderItem={({ item, index }) => {
-            if ('hdr' in item) {
-              return (
-                <View style={styles.groupHdr}>
-                  <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 1, fontWeight: '700' }}>
-                    {item.user.toUpperCase()}
-                  </Text>
-                  <Text style={{ color: t.primary, fontWeight: '700', fontSize: font.sm }}>{fmt(item.sum)}</Text>
-                </View>
-              );
-            }
-            const e = item;
-            const pending = (e as Expense & { pending?: boolean }).pending;
-            return (
-            <FadeInItem index={index}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
-              // Долгое нажатие: свои — редактировать (внутри есть удаление),
-              // офлайн-очередь — сразу предложить удаление. Свайпам не мешает.
-              onLongPress={() => {
-                if (pending) { deleteExpense(e.id); }
-                else if (e.user === user?.name) { haptics.select(); openEdit(e); }
-              }}
-            >
-              <Text style={{ fontSize: 24 }}>{catIcon2(e.category)}</Text>
-              <View style={styles.itemMid}>
-                <Text style={[styles.itemDesc, { color: t.text }]}>{e.description}</Text>
-                <Text style={[styles.itemMeta, { color: t.textMuted }]}>
-                  {pending ? '⏳ ожидает синхронизации · ' : ''}{e.category} · {e.user}
-                </Text>
-              </View>
-              <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
-            </TouchableOpacity>
-            </FadeInItem>
-            );
-          }}
+          renderItem={({ item }) => renderRowContent(item)}
         />
         </SwipePager>
 

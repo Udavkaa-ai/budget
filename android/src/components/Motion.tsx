@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Animated, {
   FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withSpring, withTiming,
   runOnJS, useReducedMotion, Easing,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Pressable, Dimensions, type ViewStyle, type StyleProp } from 'react-native';
+import { Pressable, View, Dimensions, type ViewStyle, type StyleProp } from 'react-native';
 
 // Мягкое появление элемента списка: выезжает снизу с лёгкой пружиной.
 // Задержка растёт с индексом, но ограничена, чтобы длинные списки не «ползли».
@@ -80,7 +80,7 @@ function project(v: number, d = 0.998): number {
 }
 
 export function SwipePager({
-  canPrev = true, canNext = true, onPrev, onNext, onCommit, children, style,
+  canPrev = true, canNext = true, onPrev, onNext, onCommit, children, style, prev, next,
 }: {
   canPrev?: boolean;
   canNext?: boolean;
@@ -89,12 +89,18 @@ export function SwipePager({
   onCommit?: () => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  // Соседние страницы (вчера/завтра). Если заданы — включается режим карусели:
+  // во время свайпа виден и текущий, и соседний день одновременно.
+  prev?: React.ReactNode;
+  next?: React.ReactNode;
 }) {
   const reduce = useReducedMotion();
   const tx = useSharedValue(0);
   const op = useSharedValue(1);
   const committing = useSharedValue(0); // 1 пока идёт анимация перехода — не сбрасываем
-  const width = Dimensions.get('window').width;
+  const [w, setW] = useState(Dimensions.get('window').width);
+  const width = w;
+  const peek = prev !== undefined || next !== undefined;
 
   const OUT = { damping: 22, stiffness: 210, mass: 0.6 };
   const BACK = { damping: 20, stiffness: 300, mass: 0.5 };
@@ -127,36 +133,35 @@ export function SwipePager({
       const projected = e.translationX + project(e.velocityX);
       const th = width * 0.26;
       const horizontal = Math.abs(e.translationX) > Math.abs(e.translationY);
-      // Старый контент ускоренно уезжает ПОЛНОСТЬЮ за край по направлению свайпа.
-      // Только ПОСЛЕ этого меняем данные и переносим контейнер за ПРОТИВОПОЛОЖНЫЙ
-      // край (скрытым), откуда новый день ВЪЕЗЖАЕТ с fade. Раньше контейнер
-      // возвращался в ЦЕНТР и проявлялся на месте — из-за асинхронной загрузки
-      // на миг мелькали карточки старого дня, потом резко подменялись. Теперь
-      // подмена происходит за кадром, а движение+fade её маскируют.
-      if (horizontal && canNext && projected < -th) {
-        committing.value = 1;
-        if (onCommit) runOnJS(onCommit)();
-        tx.value = withTiming(-width, { duration: 190, easing: EXIT }, fin => {
+      const goNext = horizontal && canNext && projected < -th;
+      const goPrev = horizontal && canPrev && projected > th;
+      if (!goNext && !goPrev) { tx.value = withSpring(0, { ...BACK, velocity: e.velocityX }); return; }
+      committing.value = 1;
+      if (onCommit) runOnJS(onCommit)();
+      const dir = goNext ? -1 : 1;                 // -1: следующий слева-направо уходит влево
+      const commit = goNext ? onNext : onPrev;
+      if (peek) {
+        // Карусель: соседний день доезжает ДО ЦЕНТРА пружиной (виден по-настоящему),
+        // затем незаметно «пересобираем» — короткий fade маскирует единственный кадр
+        // рекицла (данные соседа уже предзагружены, поэтому подмены не видно).
+        tx.value = withSpring(dir * width, { ...OUT, velocity: e.velocityX }, fin => {
           if (fin) {
-            runOnJS(onNext)();
-            tx.value = width * 0.6; op.value = 0;   // за правым краем, скрыт
-            op.value = withTiming(1, { duration: 240 });
-            tx.value = withSpring(0, { ...OUT, velocity: e.velocityX }, f2 => { if (f2) committing.value = 0; });
-          }
-        });
-      } else if (horizontal && canPrev && projected > th) {
-        committing.value = 1;
-        if (onCommit) runOnJS(onCommit)();
-        tx.value = withTiming(width, { duration: 190, easing: EXIT }, fin => {
-          if (fin) {
-            runOnJS(onPrev)();
-            tx.value = -width * 0.6; op.value = 0;  // за левым краем, скрыт
-            op.value = withTiming(1, { duration: 240 });
-            tx.value = withSpring(0, { ...OUT, velocity: e.velocityX }, f2 => { if (f2) committing.value = 0; });
+            op.value = 0;
+            runOnJS(commit)();
+            tx.value = 0;
+            op.value = withTiming(1, { duration: 120 }, () => { committing.value = 0; });
           }
         });
       } else {
-        tx.value = withSpring(0, { ...BACK, velocity: e.velocityX });
+        // Без соседей (месяц/график): выезд + возврат нового с противоположного края.
+        tx.value = withTiming(dir * width, { duration: 190, easing: EXIT }, fin => {
+          if (fin) {
+            runOnJS(commit)();
+            tx.value = -dir * width * 0.6; op.value = 0;
+            op.value = withTiming(1, { duration: 240 });
+            tx.value = withSpring(0, { ...OUT, velocity: e.velocityX }, f2 => { if (f2) committing.value = 0; });
+          }
+        });
       }
     })
     // Любое прерывание/отмена жеста возвращает экран на место — не «залипает» вбок.
@@ -170,6 +175,31 @@ export function SwipePager({
   // Под reduce-motion жест-слайд отключаем — навигация остаётся по кнопкам-стрелкам.
   if (reduce) {
     return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
+  }
+
+  // Режим карусели: соседние дни лежат по краям (−w и +w) внутри движущегося
+  // слоя, поэтому во время свайпа виден и текущий, и соседний день. Внешний
+  // контейнер обрезает их за краями в покое. pointerEvents=none — соседи не
+  // перехватывают касания. Ширину меряем по факту (onLayout).
+  if (peek) {
+    return (
+      <GestureDetector gesture={pan}>
+        <Animated.View
+          style={[{ flex: 1, overflow: 'hidden' }, style]}
+          onLayout={ev => { const lw = ev.nativeEvent.layout.width; if (lw && Math.abs(lw - w) > 0.5) setW(lw); }}
+        >
+          <Animated.View style={[{ flex: 1 }, aStyle]}>
+            {prev != null && (
+              <View style={{ position: 'absolute', top: 0, bottom: 0, left: -w, width: w }} pointerEvents="none">{prev}</View>
+            )}
+            {children}
+            {next != null && (
+              <View style={{ position: 'absolute', top: 0, bottom: 0, left: w, width: w }} pointerEvents="none">{next}</View>
+            )}
+          </Animated.View>
+        </Animated.View>
+      </GestureDetector>
+    );
   }
 
   return (
