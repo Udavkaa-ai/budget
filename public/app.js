@@ -1866,18 +1866,31 @@ async function doEnableE2E() {
   }
 }
 
-function showE2EKey(phrase) {
+async function showE2EKey(phrase) {
   const box = document.getElementById('e2e-key-box');
   const text = document.getElementById('e2e-key-text');
   if (!box || !text) return;
-  text.textContent = phrase || E2E.exportKeyHex() || '(ключ недоступен)';
+  const key = phrase || E2E.exportKeyHex() || '';
+  const fp = key ? await E2E.fingerprintOfHex(key) : null;
+  text.textContent = key
+    ? `${key}\n\nОтпечаток: ${fp} (должен совпадать на всех устройствах семьи)`
+    : '(ключ недоступен)';
   box.classList.remove('hidden');
 }
 
 async function doImportE2EKey() {
   const hex = prompt('Вставьте ключ семьи (64 символа), полученный с другого устройства:');
   if (!hex) return;
-  const ok = await E2E.importKeyHex(hex);
+  const clean = (hex || '').trim().toLowerCase().replace(/[^0-9a-f]/g, '');
+  if (clean.length !== 64) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
+  // Сверяем отпечаток с ключом семьи на сервере. Чужой ключ = записи не
+  // расшифруются, и синхронизация молча ломается (раньше проверки не было).
+  const fp = await E2E.fingerprintOfHex(clean);
+  const familyFp = await E2E.familyFingerprint();
+  if (familyFp && fp && familyFp !== fp) {
+    if (!confirm(`⚠️ Ключ не от этой семьи.\n\nОтпечаток введённого ключа (${fp}) не совпадает с ключом семьи (${familyFp}).\n\nЕсли всё равно сохранить — ваши записи не увидят другие участники, а их записи не увидите вы. Скопируйте фразу точь-в-точь с устройства, где данные открываются правильно.\n\nВсё равно сохранить?`)) return;
+  }
+  const ok = await E2E.importKeyHex(clean);
   if (!ok) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
   showToastSuccess('Ключ сохранён. Обновляю данные…');
   try { await E2E.syncNow(); } catch { /* ignore */ }
