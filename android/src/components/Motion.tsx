@@ -1,7 +1,7 @@
 import React from 'react';
 import Animated, {
   FadeInDown, FadeIn, useSharedValue, useAnimatedStyle, withSpring, withTiming,
-  runOnJS, useReducedMotion,
+  runOnJS, useReducedMotion, Easing,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Pressable, Dimensions, type ViewStyle, type StyleProp } from 'react-native';
@@ -98,6 +98,7 @@ export function SwipePager({
 
   const OUT = { damping: 22, stiffness: 210, mass: 0.6 };
   const BACK = { damping: 20, stiffness: 300, mass: 0.5 };
+  const EXIT = Easing.in(Easing.cubic); // ускорение на выход старого контента
 
   // Жёстко разводим оси, чтобы горизонтальный свайп и вертикальный pull-to-refresh
   // НЕ срабатывали одновременно: горизонталь активируется только после 24px и
@@ -126,28 +127,32 @@ export function SwipePager({
       const projected = e.translationX + project(e.velocityX);
       const th = width * 0.26;
       const horizontal = Math.abs(e.translationX) > Math.abs(e.translationY);
-      // Старый контент уезжает по направлению свайпа, затем контейнер мгновенно
-      // возвращается в центр СКРЫТЫМ (opacity 0) и новый день/месяц ПРОЯВЛЯЕТСЯ на
-      // месте. Так мы не вдвигаем чужой (ещё не обновлённый) контент — данные
-      // меняются асинхронно, и fade маскирует подмену.
+      // Старый контент ускоренно уезжает ПОЛНОСТЬЮ за край по направлению свайпа.
+      // Только ПОСЛЕ этого меняем данные и переносим контейнер за ПРОТИВОПОЛОЖНЫЙ
+      // край (скрытым), откуда новый день ВЪЕЗЖАЕТ с fade. Раньше контейнер
+      // возвращался в ЦЕНТР и проявлялся на месте — из-за асинхронной загрузки
+      // на миг мелькали карточки старого дня, потом резко подменялись. Теперь
+      // подмена происходит за кадром, а движение+fade её маскируют.
       if (horizontal && canNext && projected < -th) {
         committing.value = 1;
         if (onCommit) runOnJS(onCommit)();
-        tx.value = withSpring(-width, { ...OUT, velocity: e.velocityX }, fin => {
+        tx.value = withTiming(-width, { duration: 190, easing: EXIT }, fin => {
           if (fin) {
             runOnJS(onNext)();
-            tx.value = 0; op.value = 0;
-            op.value = withTiming(1, { duration: 240 }, () => { committing.value = 0; });
+            tx.value = width * 0.6; op.value = 0;   // за правым краем, скрыт
+            op.value = withTiming(1, { duration: 240 });
+            tx.value = withSpring(0, { ...OUT, velocity: e.velocityX }, f2 => { if (f2) committing.value = 0; });
           }
         });
       } else if (horizontal && canPrev && projected > th) {
         committing.value = 1;
         if (onCommit) runOnJS(onCommit)();
-        tx.value = withSpring(width, { ...OUT, velocity: e.velocityX }, fin => {
+        tx.value = withTiming(width, { duration: 190, easing: EXIT }, fin => {
           if (fin) {
             runOnJS(onPrev)();
-            tx.value = 0; op.value = 0;
-            op.value = withTiming(1, { duration: 240 }, () => { committing.value = 0; });
+            tx.value = -width * 0.6; op.value = 0;  // за левым краем, скрыт
+            op.value = withTiming(1, { duration: 240 });
+            tx.value = withSpring(0, { ...OUT, velocity: e.velocityX }, f2 => { if (f2) committing.value = 0; });
           }
         });
       } else {
