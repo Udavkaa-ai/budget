@@ -32,6 +32,19 @@ function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
 }
 
+function shiftDay(date: string, delta: number): string {
+  const [d, m, y] = date.split('.').map(Number);
+  const dt = new Date(y, m - 1, d + delta);
+  return `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
+}
+
+function isFutureDay(date: string): boolean {
+  const [d, m, y] = date.split('.').map(Number);
+  const dt = new Date(y, m - 1, d); dt.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return dt > today;
+}
+
 function dayTitle(date: string): string {
   const [d, m, y] = date.split('.').map(Number);
   const dt = new Date(y, m - 1, d); dt.setHours(0, 0, 0, 0);
@@ -57,17 +70,21 @@ export default function HomeScreen() {
   const fabTarget = useTourTarget('home.fab');
   const filterTarget = useTourTarget('home.filter');
 
-  const load = useCallback(async (d = date) => {
-    // Сначала пробуем дослать офлайн-очередь
+  // Кэш дней: чтобы при свайпе новый день показывался МГНОВЕННО, без мелькания
+  // старого. Соседние дни подгружаются заранее; смена дня берёт данные из кэша
+  // синхронно, а фоновый load() затем обновляет их.
+  const cacheRef = useRef<Map<string, Expense[]>>(new Map());
+
+  const fetchDay = useCallback(async (d: string): Promise<Expense[]> => {
     flushOutbox().catch(() => {});
     let server: Expense[] = [];
     try {
       const res = await expApi.forDay(d);
       server = res.expenses ?? [];
     } catch { /* офлайн — покажем хотя бы очередь */ }
-    // Офлайн-записи этого дня с меткой pending
+    let pending: Expense[] = [];
     try {
-      const pending = (await getOutbox())
+      pending = (await getOutbox())
         .filter(o => o.date === d)
         .map(o => ({
           id: `off_${o.outboxId}`,
@@ -75,11 +92,23 @@ export default function HomeScreen() {
           description: o.description, user: user?.name ?? '', createdAt: o.createdAt,
           pending: true,
         } as Expense & { pending: boolean }));
-      setList([...pending, ...server]);
-    } catch {
-      setList(server);
+    } catch { /* ignore */ }
+    const combined = [...pending, ...server];
+    cacheRef.current.set(d, combined);
+    return combined;
+  }, [user?.name]);
+
+  // Тихо подгружаем вчера/завтра в кэш (не блокируя экран)
+  const preloadNeighbors = useCallback((d: string) => {
+    for (const nd of [shiftDay(d, -1), shiftDay(d, 1)]) {
+      if (!isFutureDay(nd) && !cacheRef.current.has(nd)) fetchDay(nd).catch(() => {});
     }
-  }, [date, user?.name]);
+  }, [fetchDay]);
+
+  const load = useCallback(async (d = date) => {
+    setList(await fetchDay(d));
+    preloadNeighbors(d);
+  }, [date, fetchDay, preloadNeighbors]);
 
   // Загружаем день при входе на вкладку и при возврате на неё. Это же
   // покрывает первый показ «Сегодня»: раньше начальной загрузки не было —
@@ -87,9 +116,11 @@ export default function HomeScreen() {
   // Смена даты пересоздаёт load → эффект перезапускается с новой датой.
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // Real-time sync + обновление при изменении офлайн-очереди
-  useSocket(useCallback(() => { load(); }, [load]));
-  React.useEffect(() => onOutboxChange(() => { load(); }), [load]);
+  // Real-time sync + обновление при изменении офлайн-очереди. Чужие/локальные
+  // изменения могли затронуть любой день — сбрасываем кэш, чтобы соседи
+  // перечитались свежими.
+  useSocket(useCallback(() => { cacheRef.current.clear(); load(); }, [load]));
+  React.useEffect(() => onOutboxChange(() => { cacheRef.current.clear(); load(); }), [load]);
 
   const onRefresh = async () => {
     haptics.light();
@@ -98,23 +129,18 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const prevDay = () => {
-    const [d, m, y] = date.split('.').map(Number);
-    const dt = new Date(y, m - 1, d - 1);
-    const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
+  // Переход на другой день: сразу показываем его из кэша (если есть) —
+  // так в момент свайпа виден УЖЕ нужный день, без мелькания предыдущего.
+  // Затем смена date триггерит load() (useFocusEffect) и обновляет данные.
+  const goToDay = (nd: string) => {
     setDate(nd);
+    const cached = cacheRef.current.get(nd);
+    if (cached) setList(cached);
     haptics.light();
   };
 
-  const nextDay = () => {
-    const [d, m, y] = date.split('.').map(Number);
-    const today = new Date(); today.setHours(0,0,0,0);
-    const dt = new Date(y, m - 1, d + 1);
-    if (dt > today) return;
-    const nd = `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}.${dt.getFullYear()}`;
-    setDate(nd);
-    haptics.light();
-  };
+  const prevDay = () => goToDay(shiftDay(date, -1));
+  const nextDay = () => { if (!isFutureDay(shiftDay(date, 1))) goToDay(shiftDay(date, 1)); };
 
   const deleteExpense = (id: string) => {
     Alert.alert('Удалить расход?', undefined, [
@@ -129,6 +155,7 @@ export default function HomeScreen() {
           }
           haptics.warning();
           setEditing(null);
+          cacheRef.current.delete(date);
           setList(prev => prev.filter(e => e.id !== id));
         },
       },
