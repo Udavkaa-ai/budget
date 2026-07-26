@@ -55,6 +55,14 @@ export async function keyFingerprint(): Promise<string | null> {
   return bytesToHex(sha256(k)).slice(0, 16);
 }
 
+// Отпечаток произвольной hex-фразы (не трогая сохранённый ключ) — для проверки
+// вводимого ключа на совпадение с семьёй ещё ДО импорта.
+export function fingerprintOfHex(hex: string): string | null {
+  const clean = hex.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
+  if (clean.length !== 64) return null;
+  return bytesToHex(sha256(hexToBytes(clean))).slice(0, 16);
+}
+
 // Pure-JS UTF-8 ↔ bytes. Hermes (движок RN) поставляет TextEncoder, но НЕ
 // TextDecoder — из-за чего расшифровка/восстановление падали
 // «ReferenceError: Property 'TextDecoder' doesn't exist», а pull чужих блобов

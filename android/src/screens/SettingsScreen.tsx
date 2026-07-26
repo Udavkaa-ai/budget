@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
-import { invites, csv, pushSettings, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
+import { api, invites, csv, pushSettings, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
@@ -17,7 +17,7 @@ import { useCategories, refreshCategories } from '../categories';
 import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate, useHasPin, setPin, clearPin } from '../applock';
 import { PinPad } from '../components/PinPad';
 import { Field, PrimaryButton } from '../components/UI';
-import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson } from '../crypto';
+import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import { openHelp } from '../help';
@@ -242,6 +242,23 @@ export default function SettingsScreen() {
       setKeyInput('');
       Alert.alert('Готово', 'Ключ сохранён — теперь копии семьи можно восстанавливать на этом устройстве.');
     };
+    // Сверяем отпечаток вводимого ключа с зарегистрированным у семьи на сервере.
+    // Если не совпал — ключ ЧУЖОЙ: записи не расшифруются, и всё, что внесёшь,
+    // не увидят остальные (а ты — их). Раньше это молча ломало синхронизацию.
+    const fp = fingerprintOfHex(clean);
+    let familyFp: string | null = null;
+    try { familyFp = (await api.get<{ enabled: boolean; keyFingerprint: string | null }>('/api/family/e2e')).keyFingerprint; } catch { /* оффлайн — пропускаем проверку */ }
+    if (familyFp && fp && familyFp !== fp) {
+      Alert.alert(
+        '⚠️ Ключ не от этой семьи',
+        `Отпечаток введённого ключа (${fp}) не совпадает с ключом семьи (${familyFp}).\n\nЕсли всё равно сохранить — твои записи не увидят другие участники, а их записи не увидишь ты. Скопируй фразу точь-в-точь с устройства, где данные открываются правильно (там: 🔑 «Показать ключ шифрования»).`,
+        [
+          { text: 'Отмена', style: 'cancel' },
+          { text: 'Всё равно сохранить', style: 'destructive', onPress: finish },
+        ],
+      );
+      return;
+    }
     const existing = await exportKeyHex();
     if (existing && existing !== clean) {
       Alert.alert(
@@ -260,7 +277,8 @@ export default function SettingsScreen() {
   const showKey = async () => {
     const phrase = await exportKeyHex();
     if (!phrase) { Alert.alert('Ключа ещё нет', 'Он создастся при первом бэкапе'); return; }
-    Alert.alert('🔑 Ключ шифрования', phrase, [
+    const fp = fingerprintOfHex(phrase);
+    Alert.alert('🔑 Ключ шифрования', `${phrase}\n\nОтпечаток: ${fp}\n(должен совпадать на всех устройствах семьи)`, [
       { text: '📋 Поделиться', onPress: () => Share.share({ message: phrase }) },
       { text: 'Закрыть' },
     ]);
