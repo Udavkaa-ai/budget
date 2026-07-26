@@ -98,6 +98,21 @@ export async function keyFingerprint() {
   return bytesToHex(new Uint8Array(digest)).slice(0, 16);
 }
 
+// Отпечаток произвольной hex-фразы (не трогая сохранённый ключ) — для проверки
+// вводимого ключа на совпадение с семьёй ДО импорта.
+export async function fingerprintOfHex(hex) {
+  const clean = (hex || '').trim().toLowerCase().replace(/[^0-9a-f]/g, '');
+  if (clean.length !== 64) return null;
+  const digest = await crypto.subtle.digest('SHA-256', hexToBytes(clean));
+  return bytesToHex(new Uint8Array(digest)).slice(0, 16);
+}
+
+// Отпечаток ключа семьи, зарегистрированный на сервере (для сверки при импорте).
+export async function familyFingerprint() {
+  try { return (await rawFetch('GET', '/api/family/e2e')).keyFingerprint || null; }
+  catch { return null; }
+}
+
 async function encryptJson(obj) {
   const key = await loadKey();
   if (!key) throw new Error('Нет ключа шифрования');
