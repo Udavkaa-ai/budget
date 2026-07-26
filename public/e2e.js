@@ -785,3 +785,22 @@ export function exportCsv() {
     [e.date, e.category, e.description, e.amount, e.user, 'нет', e.createdAt].map(field).join(';'));
   return header + '\n' + rows.join('\n');
 }
+
+// Убрать точные дубли расходов (последствие бага восстановления в приложении):
+// одинаковые дата|категория|сумма|описание|юзер|createdAt — оставляем один.
+// createdAt берётся из исходника, поэтому реально разные записи не тронем.
+// Томбстоуны уедут в синхрон на все устройства. Возвращает число удалённых.
+export async function dedupeExpenses() {
+  const s = loadStore();
+  const seen = new Set();
+  const dups = [];
+  for (const [id, r] of Object.entries(s.exp)) {
+    if (r.deleted) continue;
+    const sig = [r.date, r.category, r.amount, r.description, r.user, r.createdAt].join('||');
+    if (seen.has(sig)) dups.push(id); else seen.add(sig);
+  }
+  const ts = nowMs();
+  for (const id of dups) { s.exp[id].deleted = true; s.exp[id].dirty = true; s.exp[id].ver = ts; }
+  if (dups.length) { saveStore(); try { await syncNow(); } catch { /* повторим позже */ } }
+  return dups.length;
+}

@@ -3084,6 +3084,15 @@ function setupEventListeners() {
     const t = document.getElementById('e2e-key-text')?.textContent || '';
     navigator.clipboard?.writeText(t).then(() => showToastSuccess('Ключ скопирован')).catch(() => {});
   });
+  document.getElementById('btn-e2e-dedupe')?.addEventListener('click', async () => {
+    if (!E2E.active()) { showToastError('Доступно только при включённом шифровании'); return; }
+    if (!confirm('Убрать задвоенные расходы (оставив по одному)? Изменения синхронизируются на все устройства семьи.')) return;
+    try {
+      const n = await E2E.dedupeExpenses();
+      showToastSuccess(n ? `Удалено дубликатов: ${n}` : 'Дубликатов не найдено');
+      refreshCurrentScreen();
+    } catch { showToastError('Не удалось убрать дубликаты'); }
+  });
 
   // Push notifications toggle
   const pushToggle = document.getElementById('push-toggle');
