@@ -149,24 +149,23 @@ export default function HomeScreen() {
   };
 
   const goToDay = (nd: string) => { setDate(nd); haptics.light(); };
-  const prevDay = () => { goToDay(shiftDay(date, -1)); pagerRef.current?.setPageWithoutAnimation(1); };
-  const nextDay = () => { if (!isFutureDay(shiftDay(date, 1))) { goToDay(shiftDay(date, 1)); pagerRef.current?.setPageWithoutAnimation(1); } };
+  const prevDay = () => goToDay(shiftDay(date, -1));
+  const nextDay = () => { if (!isFutureDay(shiftDay(date, 1))) goToDay(shiftDay(date, 1)); };
 
-  // Свайп пейджера завершён: позиция 0 — предыдущий день, 2 — следующий.
-  // Меняем дату и МГНОВЕННО (без анимации) возвращаем пейджер в центр —
-  // окно из трёх дней пересобирается вокруг нового дня без «прыжка».
+  // Свайп завершён: позиция 0 — предыдущий день, 2 — следующий. Меняем дату —
+  // пейджер пересоздаётся (key={date}) уже с новым днём в центре, поэтому НИ
+  // ОДИН кадр не показывает «лишний» день: и старая крайняя страница, и новая
+  // центральная содержат один и тот же нужный день. Будущее — отбой на место.
   const onPageSelected = (e: { nativeEvent: { position: number } }) => {
     const pos = e.nativeEvent.position;
     if (pos === 1) return;
     if (pos === 2) {
       const nd = shiftDay(date, 1);
       if (isFutureDay(nd)) { pagerRef.current?.setPageWithoutAnimation(1); return; }
-      setDate(nd);
+      goToDay(nd);
     } else {
-      setDate(shiftDay(date, -1));
+      goToDay(shiftDay(date, -1));
     }
-    haptics.light();
-    pagerRef.current?.setPageWithoutAnimation(1);
   };
 
   const deleteExpense = (id: string) => {
@@ -344,6 +343,7 @@ export default function HomeScreen() {
             и список листаются вместе. Три страницы (вчера/сегодня/завтра); после
             свайпа окно мгновенно пересобирается вокруг нового дня. */}
         <PagerView
+          key={date}
           ref={pagerRef}
           style={{ flex: 1 }}
           initialPage={1}
@@ -352,14 +352,16 @@ export default function HomeScreen() {
         >
           {renderDayPage(shiftDay(date, -1), 'p0', false)}
           {renderDayPage(date, 'p1', true)}
-          {renderDayPage(shiftDay(date, 1), 'p2', false)}
+          {/* Завтра ещё не наступило → показываем сегодня (свайп вперёд упрётся
+              и отскочит), чтобы не мелькала пустая «будущая» страница. */}
+          {renderDayPage(isToday ? date : shiftDay(date, 1), 'p2', false)}
         </PagerView>
 
         <DayPickerModal
           visible={pickerVisible}
           date={date}
           onClose={() => setPickerVisible(false)}
-          onPick={d => { setDate(d); pagerRef.current?.setPageWithoutAnimation(1); }}
+          onPick={d => { setDate(d); }}
         />
 
         {/* Edit expense modal */}
