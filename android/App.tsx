@@ -4,7 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View, AppState } from 'react-native';
+import { ActivityIndicator, View, AppState, Linking } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
 import { refreshCategories } from './src/categories';
@@ -19,7 +19,8 @@ import { initAchievements } from './src/achievements';
 import { initE2E, isE2E } from './src/e2e';
 import { syncNow } from './src/e2e/sync';
 
-import { AppNavigator, navigationRef } from './src/navigation';
+import { AppNavigator, navigationRef, goToTab } from './src/navigation';
+import { requestQuickAdd } from './src/quickAdd';
 import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { initClassifier } from './src/classifier';
@@ -127,6 +128,24 @@ function Root() {
     const timer = setInterval(() => { flushOutbox().catch(() => {}); }, 30_000);
     return () => { sub.remove(); clearInterval(timer); };
   }, [user]);
+
+  // Виджет на домашнем экране: familybudget://add открывает форму добавления.
+  // (Не мешаем familybudget://auth — там host 'auth', обрабатывается отдельно.)
+  useEffect(() => {
+    const isAddLink = (url: string | null) => {
+      if (!url) return false;
+      const m = url.match(/^[a-z]+:\/\/\/?([^/?#]*)/i);
+      return (m?.[1] || '').toLowerCase() === 'add';
+    };
+    const handle = (url: string | null) => {
+      if (!isAddLink(url)) return;
+      goToTab('Home');
+      requestQuickAdd();
+    };
+    Linking.getInitialURL().then(handle).catch(() => {});
+    const sub = Linking.addEventListener('url', e => handle(e.url));
+    return () => sub.remove();
+  }, []);
 
   if (loading) {
     return (

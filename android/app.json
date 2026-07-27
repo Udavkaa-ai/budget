@@ -50,6 +50,24 @@
           "color": "#5947E0",
           "sounds": []
         }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "AddExpense",
+              "label": "Быстрый расход",
+              "description": "Добавить расход в семейный бюджет",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 1,
+              "resizeMode": "none",
+              "updatePeriodMillis": 0
+            }
+          ]
+        }
       ]
     ],
     "runtimeVersion": {

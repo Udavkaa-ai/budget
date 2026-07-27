@@ -21,6 +21,7 @@ import PagerView from 'react-native-pager-view';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
+import { onQuickAdd, consumeQuickAdd } from '../quickAdd';
 import { openHelp } from '../help';
 
 function todayStr() {
@@ -139,6 +140,14 @@ export default function HomeScreen() {
   // перечитываем всё окно свежим.
   useSocket(useCallback(() => { loadWindow(); }, [loadWindow]));
   React.useEffect(() => onOutboxChange(() => { loadWindow(); }), [loadWindow]);
+
+  // Виджет «Добавить расход»: открываем шторку добавления. Холодный старт —
+  // забираем отложенный запрос; работающее приложение — по событию.
+  React.useEffect(() => {
+    const open = () => setTimeout(() => addSheetRef.current?.expand(), 250);
+    if (consumeQuickAdd()) open();
+    return onQuickAdd(open);
+  }, []);
 
   const onRefresh = async () => {
     haptics.light();
