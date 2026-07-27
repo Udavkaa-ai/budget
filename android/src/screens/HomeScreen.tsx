@@ -18,7 +18,6 @@ import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../off
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
 import PagerView from 'react-native-pager-view';
-import { FadeInItem } from '../components/Motion';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
@@ -152,12 +151,20 @@ export default function HomeScreen() {
   const prevDay = () => goToDay(shiftDay(date, -1));
   const nextDay = () => { if (!isFutureDay(shiftDay(date, 1))) goToDay(shiftDay(date, 1)); };
 
-  // Свайп завершён: позиция 0 — предыдущий день, 2 — следующий. Меняем дату —
-  // пейджер пересоздаётся (key={date}) уже с новым днём в центре, поэтому НИ
-  // ОДИН кадр не показывает «лишний» день. На «сегодня» третьей страницы нет
-  // (см. рендер), поэтому вперёд свайп упирается в край — как надо.
+  // Куда пейджер выбрал доехать (0 — вчера, 2 — завтра). Саму дату НЕ меняем
+  // здесь: onPageSelected срабатывает в СЕРЕДИНЕ доводки, и если пересобрать
+  // страницу сейчас — нативная «докрутка» (с учётом скорости и длины свайпа)
+  // прервётся и будет рвано. Запоминаем цель и ждём конца анимации.
+  const pendingPos = useRef(1);
   const onPageSelected = (e: { nativeEvent: { position: number } }) => {
-    const pos = e.nativeEvent.position;
+    pendingPos.current = e.nativeEvent.position;
+  };
+  // Доводка завершилась (idle) — теперь применяем день. Пейджер пересоздаётся
+  // (key={date}) уже с нужным днём в центре, бесшовно и без «лишних» кадров.
+  const onPageScrollStateChanged = (e: { nativeEvent: { pageScrollState: string } }) => {
+    if (e.nativeEvent.pageScrollState !== 'idle') return;
+    const pos = pendingPos.current;
+    pendingPos.current = 1;
     if (pos === 1) return;
     goToDay(shiftDay(date, pos === 0 ? -1 : 1));
   };
@@ -221,7 +228,7 @@ export default function HomeScreen() {
   // Одна строка ленты (расход или заголовок группы) — используется и центральным
   // списком, и статичными соседними страницами карусели (без каскад-анимации,
   // чтобы при листании не «перемигивало»).
-  const renderRowContent = (item: Row, index: number, animate: boolean) => {
+  const renderRowContent = (item: Row) => {
     if ('hdr' in item) {
       return (
         <View style={styles.groupHdr}>
@@ -234,7 +241,7 @@ export default function HomeScreen() {
     }
     const e = item;
     const pending = (e as Expense & { pending?: boolean }).pending;
-    const card = (
+    return (
       <TouchableOpacity
         activeOpacity={0.7}
         style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
@@ -253,8 +260,6 @@ export default function HomeScreen() {
         <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
       </TouchableOpacity>
     );
-    // «Доезд» карточек пружиной — только на центральной (видимой) странице.
-    return animate ? <FadeInItem index={index}>{card}</FadeInItem> : card;
   };
 
   // Полная страница дня для пейджера: фильтр-«таблетки» + итог + список.
@@ -299,7 +304,7 @@ export default function HomeScreen() {
           refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
           ListEmptyComponent={<Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>}
-          renderItem={({ item, index }) => renderRowContent(item, index, isCenter)}
+          renderItem={({ item }) => renderRowContent(item)}
         />
       </View>
     );
@@ -344,6 +349,7 @@ export default function HomeScreen() {
           initialPage={1}
           offscreenPageLimit={1}
           onPageSelected={onPageSelected}
+          onPageScrollStateChanged={onPageScrollStateChanged}
         >
           {/* Только элементы, без false/null: PagerView клонирует каждого ребёнка
               (React.cloneElement) и падает на булевом значении → белый экран.
