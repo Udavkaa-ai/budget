@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+import PagerView from 'react-native-pager-view';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
@@ -17,7 +18,6 @@ import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { BudgetGauge } from '../components/BudgetGauge';
-import { SwipePager, FadeInItem } from '../components/Motion';
 import { haptics } from '../haptics';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
@@ -79,6 +79,8 @@ function MdText({ text, color, accent }: { text: string; color: string; accent: 
   );
 }
 
+type MonthBundle = { data: SummaryData | null; monthExp: Expense[]; prevExp: Expense[] };
+
 export default function SummaryScreen() {
   const t = useTheme();
   const premium = usePremium();
@@ -88,9 +90,23 @@ export default function SummaryScreen() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
-  const [data, setData] = useState<SummaryData | null>(null);
+
+  const ymKey = (m: number, y: number) => `${y}-${String(m).padStart(2, '0')}`;
+  const shiftMonth = (m: number, y: number, delta: number) => {
+    const d = new Date(y, m - 1 + delta, 1);
+    return { m: d.getMonth() + 1, y: d.getFullYear() };
+  };
+  const isFutureMonth = (m: number, y: number) => {
+    const cur = new Date(); cur.setDate(1); cur.setHours(0, 0, 0, 0);
+    return new Date(y, m - 1, 1) > cur;
+  };
+
+  // Данные по месяцам (ключ YYYY-MM) — одна карта на все страницы пейджера,
+  // соседние месяцы подгружаются заранее. plan/plannedMonthly общие на семью.
+  const [monthData, setMonthData] = useState<Record<string, MonthBundle>>({});
   const [plan, setPlan] = useState<BudgetPlan | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [plannedMonthly, setPlannedMonthly] = useState(0);
+  const pendingPos = React.useRef(1);
 
   // Budget plan editing
   const [planVisible, setPlanVisible] = useState(false);
@@ -103,16 +119,18 @@ export default function SummaryScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState('');
 
-  // Сравнение с прошлым месяцем
+  // Сравнение с прошлым месяцем (общие переключатели)
   const [compare, setCompare] = useState(false);
-  const [prevExp, setPrevExp] = useState<Expense[]>([]);
-  // Режим сравнения: 'date' — до того же числа, 'full' — весь прошлый месяц
   const [cmpMode, setCmpMode] = useState<'date' | 'full'>('date');
 
-  // Фильтр категорий по участнику
+  // Фильтры (общие) + drill
   const [selUser, setSelUser] = useState<string | null>(null);
-  // Фильтр тепловой карты по участнику
   const [heatUser, setHeatUser] = useState<string | null>(null);
+  const [drillCat, setDrillCat] = useState<string | null>(null);
+  const [drillList, setDrillList] = useState<Expense[]>([]);
+  const [drillUser, setDrillUser] = useState<string | null>(null);
+  const [drillDay, setDrillDay] = useState<number | null>(null);
+
   const gaugeTarget = useTourTarget('summary.gauge');
   const totalTarget = useTourTarget('summary.total');
   const scrollRef = React.useRef<ScrollView>(null);
@@ -123,37 +141,63 @@ export default function SummaryScreen() {
   const tOffset = (id: string) => (e: any) => setTargetOffset(id, e.nativeEvent.layout.y);
   const [monthPicker, setMonthPicker] = useState(false);
 
-  // Heatmap + drill-down + planned budget
-  const [monthExp, setMonthExp] = useState<Expense[]>([]);
-  const [plannedMonthly, setPlannedMonthly] = useState(0);
-  const [drillCat, setDrillCat] = useState<string | null>(null);
-  const [drillList, setDrillList] = useState<Expense[]>([]);
-  const [drillUser, setDrillUser] = useState<string | null>(null);
-  const [drillDay, setDrillDay] = useState<number | null>(null);
+  // ─── Загрузка данных ────────────────────────────────────────────────────────
+  const fetchMonth = useCallback(async (m: number, y: number) => {
+    const [s, me] = await Promise.all([
+      summaryApi.get(m, y).catch(() => null),
+      expApi.forMonth(m, y).catch(() => [] as Expense[]),
+    ]);
+    const pd = shiftMonth(m, y, -1);
+    const pe = await expApi.forMonth(pd.m, pd.y).catch(() => [] as Expense[]);
+    setMonthData(prev => ({
+      ...prev,
+      [ymKey(m, y)]: {
+        data: s,
+        monthExp: Array.isArray(me) ? me : [],
+        prevExp: Array.isArray(pe) ? pe : [],
+      },
+    }));
+  }, []);
 
-  const load = useCallback(async (m = month, y = year) => {
-    setLoading(true);
-    try {
-      const [s, p, me, st] = await Promise.all([
-        summaryApi.get(m, y),
-        budgetPlan.get(),
-        expApi.forMonth(m, y).catch(() => [] as Expense[]),
-        settingsApi.get().catch(() => ({} as { plannedMonthly?: number })),
-      ]);
-      setData(s);
-      setPlan(p);
-      setMonthExp(Array.isArray(me) ? me : []);
-      setPlannedMonthly(st.plannedMonthly ?? 0);
-      // Прошлый месяц для сравнения — берём расходы по дням, чтобы можно было
-      // сравнивать как с полным месяцем, так и до того же числа
-      const pd = new Date(y, m - 2, 1);
-      expApi.forMonth(pd.getMonth() + 1, pd.getFullYear())
-        .then(r => setPrevExp(Array.isArray(r) ? r : []))
-        .catch(() => setPrevExp([]));
-    } catch { /* ignore */ } finally {
-      setLoading(false);
-    }
-  }, [month, year]);
+  const loadGlobals = useCallback(async () => {
+    const [p, st] = await Promise.all([
+      budgetPlan.get().catch(() => null),
+      settingsApi.get().catch(() => ({} as { plannedMonthly?: number })),
+    ]);
+    if (p) setPlan(p);
+    setPlannedMonthly(st.plannedMonthly ?? 0);
+  }, []);
+
+  // Грузим окно из трёх месяцев (текущий + соседи) — страницы пейджера готовы заранее.
+  const loadWindow = useCallback((m: number, y: number) => {
+    loadGlobals();
+    fetchMonth(m, y);
+    const pm = shiftMonth(m, y, -1); fetchMonth(pm.m, pm.y);
+    const nm = shiftMonth(m, y, 1); if (!isFutureMonth(nm.m, nm.y)) fetchMonth(nm.m, nm.y);
+  }, [fetchMonth, loadGlobals]);
+
+  useEffect(() => { loadWindow(month, year); }, [month, year, loadWindow]);
+
+  const goToMonth = (m: number, y: number) => {
+    setMonth(m); setYear(y); setDrillDay(null); haptics.light();
+  };
+  const prev = () => { const d = shiftMonth(month, year, -1); goToMonth(d.m, d.y); };
+  const next = () => { const d = shiftMonth(month, year, 1); if (!isFutureMonth(d.m, d.y)) goToMonth(d.m, d.y); };
+  const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
+
+  // Как в дне: цель фиксируем в onPageSelected, а применяем на idle — чтобы
+  // нативная доводка (учёт скорости/длины свайпа) доигралась до конца.
+  const onPageSelected = (e: { nativeEvent: { position: number } }) => {
+    pendingPos.current = e.nativeEvent.position;
+  };
+  const onPageScrollStateChanged = (e: { nativeEvent: { pageScrollState: string } }) => {
+    if (e.nativeEvent.pageScrollState !== 'idle') return;
+    const pos = pendingPos.current;
+    pendingPos.current = 1;
+    if (pos === 1) return;
+    const d = shiftMonth(month, year, pos === 0 ? -1 : 1);
+    goToMonth(d.m, d.y);
+  };
 
   const openDrill = async (cat: string) => {
     setDrillCat(cat);
@@ -165,30 +209,15 @@ export default function SummaryScreen() {
     } catch { /* ignore */ }
   };
 
-  useEffect(() => { load(); }, []);
-
-  const prev = () => {
-    const d = new Date(year, month - 2, 1);
-    haptics.light();
-    setMonth(d.getMonth() + 1); setYear(d.getFullYear());
-    load(d.getMonth() + 1, d.getFullYear());
-  };
-
-  const next = () => {
-    const cur = new Date(); cur.setDate(1);
-    const d = new Date(year, month, 1);
-    if (d > cur) return;
-    haptics.light();
-    setMonth(d.getMonth() + 1); setYear(d.getFullYear());
-    load(d.getMonth() + 1, d.getFullYear());
-  };
+  // Данные текущего (центрального) месяца — для обработчиков и модалок.
+  const center = monthData[ymKey(month, year)];
+  const data = center?.data ?? null;
 
   const openPlanEditor = () => {
     const budgets = plan?.categoryBudgets ?? {};
     const incomes = plan?.incomes ?? {};
     const ld: Record<string, string> = {};
     for (const c of allCats) ld[c] = budgets[c] ? String(budgets[c]) : '';
-    // Income rows: existing keys + family members from summary + current user
     const names = new Set<string>([
       ...Object.keys(incomes),
       ...Object.keys(data?.byUser ?? {}),
@@ -214,10 +243,9 @@ export default function SummaryScreen() {
         const n = parseFloat(v.replace(',', '.'));
         if (!isNaN(n) && n > 0) incomes[name] = n;
       }
-      // Preserve any other plan fields the web version may store
       await budgetPlan.save({ ...(plan ?? {}), categoryBudgets, incomes } as BudgetPlan);
       setPlanVisible(false);
-      load();
+      loadWindow(month, year);
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally {
@@ -239,88 +267,68 @@ export default function SummaryScreen() {
     }
   };
 
-  const catSource = selUser && data?.byUser[selUser]
-    ? data.byUser[selUser].byCategory
-    : data?.byCategory ?? {};
-  const cats = Object.entries(catSource)
-    .filter(([, v]) => v > 0)
-    .sort(([, a], [, b]) => b - a);
+  // ─── Полная страница месяца ──────────────────────────────────────────────────
+  const renderMonthPage = (m: number, y: number, pageKey: string, isCenter: boolean) => {
+    const bundle = monthData[ymKey(m, y)];
+    const data = bundle?.data ?? null;
+    const monthExp = bundle?.monthExp ?? [];
+    const prevExp = bundle?.prevExp ?? [];
 
-  const maxCat = cats[0]?.[1] ?? 1;
-  const memberNames = Object.keys(data?.byUser ?? {});
-  const budgets = plan?.categoryBudgets ?? {};
-  const incomes = plan?.incomes ?? {};
-  const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
+    const catSource = selUser && data?.byUser[selUser]
+      ? data.byUser[selUser].byCategory
+      : data?.byCategory ?? {};
+    const cats = Object.entries(catSource)
+      .filter(([, v]) => v > 0)
+      .sort(([, a], [, b]) => b - a);
 
-  // Барометр бюджета: факт против плана, пропорционально прошедшим дням
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
-  const daysPassed = isCurrentMonth ? now.getDate() : daysInMonth;
-  const planToDate = plannedMonthly > 0 ? plannedMonthly * daysPassed / daysInMonth : 0;
-  const gaugePct = planToDate > 0 ? Math.round((data?.total ?? 0) / planToDate * 100) : null;
+    const maxCat = cats[0]?.[1] ?? 1;
+    const memberNames = Object.keys(data?.byUser ?? {});
+    const budgets = plan?.categoryBudgets ?? {};
+    const incomes = plan?.incomes ?? {};
+    const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
 
-  // Агрегат прошлого месяца для сравнения: до того же числа ('date') или весь ('full')
-  const prevCutoff = cmpMode === 'full' ? 31 : daysPassed;
-  const prevAgg = { total: 0, byCategory: {} as Record<string, number> };
-  for (const e of prevExp) {
-    const d = parseInt(e.date?.split('.')[0] ?? '');
-    if (!isNaN(d) && d <= prevCutoff) {
-      prevAgg.total += e.amount;
-      prevAgg.byCategory[e.category] = (prevAgg.byCategory[e.category] ?? 0) + e.amount;
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const isCur = m === now.getMonth() + 1 && y === now.getFullYear();
+    const daysPassed = isCur ? now.getDate() : daysInMonth;
+    const planToDate = plannedMonthly > 0 ? plannedMonthly * daysPassed / daysInMonth : 0;
+    const gaugePct = planToDate > 0 ? Math.round((data?.total ?? 0) / planToDate * 100) : null;
+
+    const prevCutoff = cmpMode === 'full' ? 31 : daysPassed;
+    const prevAgg = { total: 0, byCategory: {} as Record<string, number> };
+    for (const e of prevExp) {
+      const d = parseInt(e.date?.split('.')[0] ?? '');
+      if (!isNaN(d) && d <= prevCutoff) {
+        prevAgg.total += e.amount;
+        prevAgg.byCategory[e.category] = (prevAgg.byCategory[e.category] ?? 0) + e.amount;
+      }
     }
-  }
-  const hasPrev = prevExp.length > 0;
+    const hasPrev = prevExp.length > 0;
 
-  // Heatmap: суммы по дням месяца (с учётом фильтра по участнику)
-  const dayTotals: Record<number, number> = {};
-  for (const e of monthExp) {
-    if (heatUser && e.user !== heatUser) continue;
-    const d = parseInt(e.date?.split('.')[0] ?? '');
-    if (!isNaN(d)) dayTotals[d] = (dayTotals[d] ?? 0) + e.amount;
-  }
-  const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Пн=0
-  // При фильтре по участнику пороги цветов — его доля: 1/число участников семьи
-  const memberCount = Math.max(memberNames.length, Object.keys(incomes).length, 1);
-  const heatScale = heatUser ? 1 / memberCount : 1;
-  const heatColor = (v: number) =>
-    v === 0 ? t.surface2
-    : v < 2000 * heatScale ? '#bbf7d0'
-    : v < 5000 * heatScale ? '#22c55e'
-    : v < 10000 * heatScale ? '#f59e0b'
-    : v < 20000 * heatScale ? '#f97316'
-    : '#ef4444';
-  const heatText = (v: number) => (v === 0 ? t.textMuted : '#1e293b');
-  const dailyPlanShare = plannedMonthly > 0 ? Math.round(plannedMonthly / daysInMonth * heatScale) : 0;
+    const dayTotals: Record<number, number> = {};
+    for (const e of monthExp) {
+      if (heatUser && e.user !== heatUser) continue;
+      const d = parseInt(e.date?.split('.')[0] ?? '');
+      if (!isNaN(d)) dayTotals[d] = (dayTotals[d] ?? 0) + e.amount;
+    }
+    const firstWeekday = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+    const memberCount = Math.max(memberNames.length, Object.keys(incomes).length, 1);
+    const heatScale = heatUser ? 1 / memberCount : 1;
+    const heatColor = (v: number) =>
+      v === 0 ? t.surface2
+      : v < 2000 * heatScale ? '#bbf7d0'
+      : v < 5000 * heatScale ? '#22c55e'
+      : v < 10000 * heatScale ? '#f59e0b'
+      : v < 20000 * heatScale ? '#f97316'
+      : '#ef4444';
+    const heatText = (v: number) => (v === 0 ? t.textMuted : '#1e293b');
+    const dailyPlanShare = plannedMonthly > 0 ? Math.round(plannedMonthly / daysInMonth * heatScale) : 0;
 
-  return (
-    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
-      <ScreenGradient tint="summary" />
-      {/* Nav */}
-      <View style={[styles.nav, { borderBottomColor: t.border }]}>
-        <TouchableOpacity onPress={prev} style={styles.navBtn}>
-          <Text style={{ color: t.primary, fontSize: font.xl }}>‹</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setMonthPicker(true)}>
-          <Text style={[styles.navLabel, { color: t.text }]}>{getMonthName(month, year)} ▾</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={next} style={styles.navBtn}>
-          <Text style={{ color: t.primary, fontSize: font.xl }}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
-      ) : (
-        <SwipePager
-          canNext={!isCurrentMonth}
-          onPrev={prev}
-          onNext={next}
-          onCommit={() => haptics.light()}
-        >
+    return (
+      <View key={pageKey} style={{ flex: 1 }} collapsable={false}>
         <ScrollView
-          ref={scrollRef}
+          ref={isCenter ? scrollRef : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+          refreshControl={isCenter ? <RefreshControl refreshing={false} onRefresh={() => loadWindow(m, y)} /> : undefined}
         >
           {/* Сравнить */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
@@ -332,7 +340,7 @@ export default function SummaryScreen() {
                 ⚖️ Сравнить с прошлым месяцем
               </Text>
             </TouchableOpacity>
-            {compare && isCurrentMonth && (
+            {compare && isCur && (
               <>
                 <TouchableOpacity
                   style={[styles.cmpModeChip, { backgroundColor: cmpMode === 'date' ? t.surface2 : t.surface, borderColor: cmpMode === 'date' ? t.primary : t.border }]}
@@ -351,14 +359,13 @@ export default function SummaryScreen() {
           </View>
 
           {/* Total card */}
-          <FadeInItem index={0}>
-          <View ref={totalTarget} collapsable={false} onLayout={tOffset('summary.total')}>
+          <View ref={isCenter ? totalTarget : undefined} collapsable={false} onLayout={isCenter ? tOffset('summary.total') : undefined}>
           <Card>
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
             {compare && hasPrev && (
               <Text style={{ fontSize: font.sm, marginTop: 2, color: (data?.total ?? 0) > prevAgg.total ? '#ef4444' : '#22c55e' }}>
-                Прошлый месяц{cmpMode === 'date' && isCurrentMonth ? ` (до ${daysPassed}-го)` : ''}: {fmt(prevAgg.total)}
+                Прошлый месяц{cmpMode === 'date' && isCur ? ` (до ${daysPassed}-го)` : ''}: {fmt(prevAgg.total)}
                 {prevAgg.total > 0 ? ` (${(data?.total ?? 0) > prevAgg.total ? '▲' : '▼'}${Math.abs(Math.round(((data?.total ?? 0) - prevAgg.total) / prevAgg.total * 100))}%)` : ''}
               </Text>
             )}
@@ -374,12 +381,10 @@ export default function SummaryScreen() {
             )}
           </Card>
           </View>
-          </FadeInItem>
 
-          {/* Барометр бюджета — спидометр как в вебе */}
+          {/* Барометр бюджета */}
           {blocks.gauge && gaugePct !== null && (
-            <FadeInItem index={1}>
-            <View ref={gaugeTarget} collapsable={false} onLayout={tOffset('summary.gauge')}>
+            <View ref={isCenter ? gaugeTarget : undefined} collapsable={false} onLayout={isCenter ? tOffset('summary.gauge') : undefined}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Барометр бюджета</Text>
               <BudgetGauge pct={gaugePct} />
@@ -399,10 +404,9 @@ export default function SummaryScreen() {
               </View>
             </Card>
             </View>
-            </FadeInItem>
           )}
 
-          {/* Скорость трат: линия % факт/план нарастающим итогом, как в вебе */}
+          {/* Скорость трат */}
           {blocks.speed && plannedMonthly > 0 && monthExp.length > 0 && (() => {
             const pts: Array<{ x: number; y: number; pct: number; d: number }> = [];
             const W = 300, H = 120, MAX = 250;
@@ -412,17 +416,14 @@ export default function SummaryScreen() {
               const planCum = plannedMonthly * d / daysInMonth;
               const pct = planCum > 0 ? Math.round(cum / planCum * 100) : 0;
               const x = daysPassed > 1 ? (d - 1) / (daysPassed - 1) * (W - 44) + 34 : W / 2;
-              const y = H - Math.min(pct, MAX) / MAX * (H - 15);
-              pts.push({ x, y, pct, d });
+              const yy = H - Math.min(pct, MAX) / MAX * (H - 15);
+              pts.push({ x, y: yy, pct, d });
             }
-            const y100 = H - 100 / MAX * (H - 15);
             const dotColor = (p: number) => p > 100 ? '#ef4444' : p > 80 ? '#f59e0b' : '#22c55e';
             return (
-              <FadeInItem index={2}>
               <Card>
                 <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
                 <Svg width="100%" height={H + 20} viewBox={`0 0 ${W} ${H + 20}`}>
-                  {/* Сетка и ось Y в процентах — как в вебе */}
                   {[0, 50, 100, 150, 200, 250].map(pv => {
                     const gy = H - Math.min(pv, MAX) / MAX * (H - 15);
                     return (
@@ -441,7 +442,6 @@ export default function SummaryScreen() {
                   {pts.map(p => (
                     <Circle key={p.d} cx={p.x} cy={p.y} r={3.5} fill={dotColor(p.pct)} />
                   ))}
-                  {/* Значения на каждой 3-й точке и последней */}
                   {pts.filter((p, i) => i === pts.length - 1 || p.d % 3 === 0 || p.d === 1).map(p => (
                     <SvgText key={`v${p.d}`} x={p.x} y={p.y - 7} fontSize={8.5} fill={t.text} textAnchor="middle" fontWeight="bold">
                       {p.pct}%
@@ -452,13 +452,11 @@ export default function SummaryScreen() {
                   ))}
                 </Svg>
               </Card>
-              </FadeInItem>
             );
           })()}
 
           {/* Heatmap по дням */}
           {blocks.heatmap && monthExp.length > 0 && (
-            <FadeInItem index={3}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>📅 Расходы по дням</Text>
               {memberNames.length > 1 && (
@@ -512,12 +510,11 @@ export default function SummaryScreen() {
                   );
                 })}
               </View>
-              {/* Расходы выбранного дня — фиксированная высота, скролл внутри */}
               {drillDay !== null && (
                 <View style={{ marginTop: spacing.md, borderTopWidth: 1, borderTopColor: t.border, paddingTop: spacing.md, height: 220 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm }}>
                     <Text style={{ color: t.text, fontWeight: '700', flex: 1 }} numberOfLines={1}>
-                      {drillDay} {getMonthName(month, year).toLowerCase()}{heatUser ? ` · ${heatUser}` : ''} · {fmt(dayTotals[drillDay] ?? 0)}
+                      {drillDay} {getMonthName(m, y).toLowerCase()}{heatUser ? ` · ${heatUser}` : ''} · {fmt(dayTotals[drillDay] ?? 0)}
                       {monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length > 4
                         ? `  (${monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ▾)` : ''}
                     </Text>
@@ -543,7 +540,6 @@ export default function SummaryScreen() {
                 </View>
               )}
             </Card>
-            </FadeInItem>
           )}
 
           {/* AI analysis (premium) */}
@@ -564,7 +560,6 @@ export default function SummaryScreen() {
 
           {/* By user */}
           {blocks.byUser && data && Object.keys(data.byUser).length > 1 && (
-            <FadeInItem index={4}>
             <Card>
               <Text style={[styles.sectionTitle, { color: t.text }]}>По участникам</Text>
               {Object.entries(data.byUser).map(([name, ud]) => {
@@ -587,11 +582,9 @@ export default function SummaryScreen() {
                 );
               })}
             </Card>
-            </FadeInItem>
           )}
 
-          {/* Categories — карточки как в вебе */}
-          <FadeInItem index={5}>
+          {/* Categories */}
           <Card>
             <View style={styles.catHeader}>
               <Text style={[styles.sectionTitle, { color: t.text, marginBottom: 0 }]}>Категории</Text>
@@ -627,16 +620,14 @@ export default function SummaryScreen() {
               <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Нет расходов за месяц</Text>
             )}
           </Card>
-          </FadeInItem>
 
-          {cats.map(([cat, amt], ci) => {
+          {cats.map(([cat, amt]) => {
             const limit = selUser ? 0 : budgets[cat] ?? 0;
             const over = limit > 0 && amt > limit;
             const fillPct = limit > 0 ? Math.min(amt / limit, 1) : amt / maxCat;
             const prevAmt = compare && hasPrev ? prevAgg.byCategory[cat] ?? 0 : null;
             return (
-              <FadeInItem key={cat} index={6 + ci}>
-              <TouchableOpacity onPress={() => openDrill(cat)} activeOpacity={0.7}>
+              <TouchableOpacity key={cat} onPress={() => openDrill(cat)} activeOpacity={0.7}>
                 <Card>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                     <Text style={{ fontSize: 32 }}>{catIcon2(cat)}</Text>
@@ -645,7 +636,6 @@ export default function SummaryScreen() {
                         <Text style={{ flex: 1, color: t.text, fontSize: font.lg, fontWeight: '700', marginRight: spacing.sm }} numberOfLines={1}>{cat}</Text>
                         <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '800' }}>{fmt(amt)}</Text>
                       </View>
-                      {/* Градиентный прогрессбар как в вебе */}
                       <View style={[styles.gradBarBg, { backgroundColor: t.surface2 }]}>
                         <LinearGradient
                           colors={over ? ['#FF5C87', '#FF7AB3'] : ['#8A6BFF', '#FF7AB3']}
@@ -653,7 +643,6 @@ export default function SummaryScreen() {
                           style={[styles.gradBarFill, { width: `${fillPct * 100}%` }]}
                         />
                       </View>
-                      {/* При фильтре по участнику строку лимита не показываем — лимиты общие на семью */}
                       {(limit > 0 || !selUser) && (
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: spacing.sm }}>
                           {limit > 0 ? (
@@ -675,11 +664,48 @@ export default function SummaryScreen() {
                   </View>
                 </Card>
               </TouchableOpacity>
-              </FadeInItem>
             );
           })}
         </ScrollView>
-        </SwipePager>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
+      <ScreenGradient tint="summary" />
+      {/* Nav */}
+      <View style={[styles.nav, { borderBottomColor: t.border }]}>
+        <TouchableOpacity onPress={prev} style={styles.navBtn}>
+          <Text style={{ color: t.primary, fontSize: font.xl }}>‹</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setMonthPicker(true)}>
+          <Text style={[styles.navLabel, { color: t.text }]}>{getMonthName(month, year)} ▾</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={next} style={styles.navBtn} disabled={isCurrentMonth}>
+          <Text style={{ color: isCurrentMonth ? t.textMuted : t.primary, fontSize: font.xl }}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {!center ? (
+        <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
+      ) : (
+        <PagerView
+          key={ymKey(month, year)}
+          style={{ flex: 1 }}
+          initialPage={1}
+          offscreenPageLimit={1}
+          onPageSelected={onPageSelected}
+          onPageScrollStateChanged={onPageScrollStateChanged}
+        >
+          {/* Только элементы, без false/null (PagerView клонирует детей).
+              На текущем месяце третьей страницы нет — вперёд свайп упирается. */}
+          {[
+            (() => { const d = shiftMonth(month, year, -1); return renderMonthPage(d.m, d.y, 'p0', false); })(),
+            renderMonthPage(month, year, 'p1', true),
+            ...(isCurrentMonth ? [] : [(() => { const d = shiftMonth(month, year, 1); return renderMonthPage(d.m, d.y, 'p2', false); })()]),
+          ]}
+        </PagerView>
       )}
 
       <MonthPickerModal
@@ -687,7 +713,7 @@ export default function SummaryScreen() {
         month={month}
         year={year}
         onClose={() => setMonthPicker(false)}
-        onPick={(m, y) => { setMonth(m); setYear(y); load(m, y); }}
+        onPick={(m, y) => { goToMonth(m, y); }}
       />
 
       {/* Budget plan editor */}
@@ -749,7 +775,6 @@ export default function SummaryScreen() {
             </Text>
             <View style={{ width: 56 }} />
           </View>
-          {/* Фильтр по пользователю */}
           {(() => {
             const users = [...new Set(drillList.map(e => e.user))];
             return users.length > 1 ? (
