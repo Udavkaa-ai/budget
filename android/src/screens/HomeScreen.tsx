@@ -18,6 +18,7 @@ import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../off
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
 import PagerView from 'react-native-pager-view';
+import { FadeInItem } from '../components/Motion';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
@@ -93,7 +94,6 @@ export default function HomeScreen() {
   // поэтому и центральный, и соседние дни берут данные отсюда — при листании
   // новый день уже готов (без мелькания и пустых соседей).
   const [days, setDays] = useState<Record<string, (Expense & { pending?: boolean })[]>>({});
-  const pagerRef = useRef<PagerView>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [userFilter, setUserFilter] = useState<'all' | 'me' | 'partner'>('all');
@@ -154,18 +154,12 @@ export default function HomeScreen() {
 
   // Свайп завершён: позиция 0 — предыдущий день, 2 — следующий. Меняем дату —
   // пейджер пересоздаётся (key={date}) уже с новым днём в центре, поэтому НИ
-  // ОДИН кадр не показывает «лишний» день: и старая крайняя страница, и новая
-  // центральная содержат один и тот же нужный день. Будущее — отбой на место.
+  // ОДИН кадр не показывает «лишний» день. На «сегодня» третьей страницы нет
+  // (см. рендер), поэтому вперёд свайп упирается в край — как надо.
   const onPageSelected = (e: { nativeEvent: { position: number } }) => {
     const pos = e.nativeEvent.position;
     if (pos === 1) return;
-    if (pos === 2) {
-      const nd = shiftDay(date, 1);
-      if (isFutureDay(nd)) { pagerRef.current?.setPageWithoutAnimation(1); return; }
-      goToDay(nd);
-    } else {
-      goToDay(shiftDay(date, -1));
-    }
+    goToDay(shiftDay(date, pos === 0 ? -1 : 1));
   };
 
   const deleteExpense = (id: string) => {
@@ -227,7 +221,7 @@ export default function HomeScreen() {
   // Одна строка ленты (расход или заголовок группы) — используется и центральным
   // списком, и статичными соседними страницами карусели (без каскад-анимации,
   // чтобы при листании не «перемигивало»).
-  const renderRowContent = (item: Row) => {
+  const renderRowContent = (item: Row, index: number, animate: boolean) => {
     if ('hdr' in item) {
       return (
         <View style={styles.groupHdr}>
@@ -240,7 +234,7 @@ export default function HomeScreen() {
     }
     const e = item;
     const pending = (e as Expense & { pending?: boolean }).pending;
-    return (
+    const card = (
       <TouchableOpacity
         activeOpacity={0.7}
         style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
@@ -259,6 +253,8 @@ export default function HomeScreen() {
         <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
       </TouchableOpacity>
     );
+    // «Доезд» карточек пружиной — только на центральной (видимой) странице.
+    return animate ? <FadeInItem index={index}>{card}</FadeInItem> : card;
   };
 
   // Полная страница дня для пейджера: фильтр-«таблетки» + итог + список.
@@ -303,7 +299,7 @@ export default function HomeScreen() {
           refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
           ListEmptyComponent={<Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>}
-          renderItem={({ item }) => renderRowContent(item)}
+          renderItem={({ item, index }) => renderRowContent(item, index, isCenter)}
         />
       </View>
     );
@@ -344,7 +340,6 @@ export default function HomeScreen() {
             свайпа окно мгновенно пересобирается вокруг нового дня. */}
         <PagerView
           key={date}
-          ref={pagerRef}
           style={{ flex: 1 }}
           initialPage={1}
           offscreenPageLimit={1}
@@ -352,9 +347,9 @@ export default function HomeScreen() {
         >
           {renderDayPage(shiftDay(date, -1), 'p0', false)}
           {renderDayPage(date, 'p1', true)}
-          {/* Завтра ещё не наступило → показываем сегодня (свайп вперёд упрётся
-              и отскочит), чтобы не мелькала пустая «будущая» страница. */}
-          {renderDayPage(isToday ? date : shiftDay(date, 1), 'p2', false)}
+          {/* На «сегодня» третьей страницы нет — вперёд свайп упирается в край
+              (нельзя в будущее). На прошлых днях третья страница = следующий день. */}
+          {!isToday && renderDayPage(shiftDay(date, 1), 'p2', false)}
         </PagerView>
 
         <DayPickerModal
