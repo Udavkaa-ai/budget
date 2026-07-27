@@ -249,39 +249,45 @@ async function showLogin() {
     window.history.replaceState({}, '', window.location.pathname);
   }
 
-  // Load auth providers
-  try {
-    const providers = await fetch('/api/auth/providers').then(r => r.json());
-    if (providers.google && providers.googleClientId) {
-      document.getElementById('google-signin-section').classList.remove('hidden');
-      // Open password section only if no Google
-      document.getElementById('password-login-section').removeAttribute('open');
+  // Список провайдеров. Оффлайн/ошибка — не падаем, останется вход по паролю.
+  let providers = {};
+  try { providers = await fetch('/api/auth/providers').then(r => r.json()); } catch { /* оффлайн */ }
 
-      google.accounts.id.initialize({
-        client_id: providers.googleClientId,
-        callback: handleGoogleCredential,
-        auto_select: false,
-      });
-      google.accounts.id.renderButton(
-        document.getElementById('google-signin-btn'),
-        { theme: 'outline', size: 'large', text: 'signin_with', locale: 'ru', width: 280 }
-      );
-    } else {
-      // No Google — open password login by default
-      document.getElementById('password-login-section').setAttribute('open', '');
-    }
+  // Яндекс / VK — основной вход (RuStore). Показываем СРАЗУ и НЕЗАВИСИМО от
+  // Google: раньше сбой Google-скрипта (GIS ещё не загрузился) кидал исключение
+  // и пропускал рендер этих кнопок — экран оставался только с паролем.
+  const hasOAuth = !!(providers.yandex || providers.vk);
+  if (hasOAuth) {
+    document.getElementById('oauth-buttons').classList.remove('hidden');
+    document.getElementById('btn-yandex').style.display = providers.yandex ? '' : 'none';
+    document.getElementById('btn-vk').style.display = providers.vk ? '' : 'none';
+  }
+  document.getElementById('btn-yandex').onclick = () => oauthRedirect('yandex');
+  document.getElementById('btn-vk').onclick = () => oauthRedirect('vk');
 
-    // Яндекс / VK — редирект-флоу через сервер (для RuStore-аудитории)
-    if (providers.yandex || providers.vk) {
-      document.getElementById('oauth-buttons').classList.remove('hidden');
-      document.getElementById('btn-yandex').style.display = providers.yandex ? '' : 'none';
-      document.getElementById('btn-vk').style.display = providers.vk ? '' : 'none';
-      document.getElementById('password-login-section').removeAttribute('open');
-    }
-    document.getElementById('btn-yandex').onclick = () => oauthRedirect('yandex');
-    document.getElementById('btn-vk').onclick = () => oauthRedirect('vk');
-  } catch {
-    document.getElementById('password-login-section').setAttribute('open', '');
+  // Пароль раскрываем по умолчанию только если других способов входа нет.
+  const passSection = document.getElementById('password-login-section');
+  if (hasOAuth || (providers.google && providers.googleClientId)) passSection.removeAttribute('open');
+  else passSection.setAttribute('open', '');
+
+  // Google — best-effort. GIS-скрипт грузится асинхронно: ждём его до ~3с и
+  // рендерим отдельно, в своём try — его ошибка не мешает остальному входу.
+  if (providers.google && providers.googleClientId) {
+    try {
+      for (let i = 0; i < 20 && !window.google?.accounts?.id; i++) await new Promise(r => setTimeout(r, 150));
+      if (window.google?.accounts?.id) {
+        google.accounts.id.initialize({
+          client_id: providers.googleClientId,
+          callback: handleGoogleCredential,
+          auto_select: false,
+        });
+        google.accounts.id.renderButton(
+          document.getElementById('google-signin-btn'),
+          { theme: 'outline', size: 'large', text: 'signin_with', locale: 'ru', width: 280 }
+        );
+        document.getElementById('google-signin-section').classList.remove('hidden');
+      }
+    } catch { /* GIS недоступен — просто без кнопки Google */ }
   }
 }
 
@@ -2768,12 +2774,21 @@ function showReminder(body) {
 async function initApp() {
   if (!token) { showLogin(); return; }
 
-  // Get current user
+  // Проверяем сессию. ВАЖНО: разлогиниваем ТОЛЬКО при реально невалидном токене
+  // (401/403). При временной ошибке сети/сервера (Amvera «просыпается», плохая
+  // связь) НЕ трогаем токен — иначе вход слетал «через раз». Токен живёт 30–90
+  // дней, поэтому открываем приложение с последним известным пользователем.
   try {
     const meRes = await api('GET', '/api/me');
-    if (!meRes.ok) { logout(); return; }
+    if (meRes.status === 401 || meRes.status === 403) { logout(); return; }
+    if (!meRes.ok) throw new Error('server-unavailable');
     currentUser = await meRes.json();
-  } catch { logout(); return; }
+    localStorage.setItem('budget_user', JSON.stringify(currentUser));
+  } catch {
+    const cached = localStorage.getItem('budget_user');
+    if (!cached) { showLogin(); return; } // токен НЕ удаляем — войдёт при сети
+    try { currentUser = JSON.parse(cached); } catch { showLogin(); return; }
+  }
 
   document.getElementById('topbar-user').textContent = currentUser.name;
 
