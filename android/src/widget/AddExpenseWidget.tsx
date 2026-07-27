@@ -16,15 +16,15 @@ export function AddExpenseWidget() {
         justifyContent: 'center',
         alignItems: 'center',
         backgroundGradient: { from: '#5947E0', to: '#8A6BFF', orientation: 'TL_BR' },
-        borderRadius: 28,
-        padding: 10,
+        borderRadius: 22,
+        padding: 4,
       }}
     >
-      <TextWidget text="＋" style={{ fontSize: 34, fontWeight: '800', color: '#FFFFFF' }} />
+      <TextWidget text="＋" style={{ fontSize: 30, fontWeight: '800', color: '#FFFFFF' }} />
       <TextWidget
-        text="Добавить расход"
+        text="Расход"
         maxLines={1}
-        style={{ fontSize: 13, fontWeight: '600', color: '#FFFFFF', marginTop: 2, textAlign: 'center' }}
+        style={{ fontSize: 10, fontWeight: '600', color: '#FFFFFF', textAlign: 'center' }}
       />
     </FlexWidget>
   );

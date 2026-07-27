@@ -59,9 +59,9 @@
               "name": "AddExpense",
               "label": "Быстрый расход",
               "description": "Добавить расход в семейный бюджет",
-              "minWidth": "110dp",
-              "minHeight": "110dp",
-              "targetCellWidth": 2,
+              "minWidth": "40dp",
+              "minHeight": "40dp",
+              "targetCellWidth": 1,
               "targetCellHeight": 1,
               "resizeMode": "none",
               "updatePeriodMillis": 0
