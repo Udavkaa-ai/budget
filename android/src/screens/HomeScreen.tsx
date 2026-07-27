@@ -345,11 +345,14 @@ export default function HomeScreen() {
           offscreenPageLimit={1}
           onPageSelected={onPageSelected}
         >
-          {renderDayPage(shiftDay(date, -1), 'p0', false)}
-          {renderDayPage(date, 'p1', true)}
-          {/* На «сегодня» третьей страницы нет — вперёд свайп упирается в край
-              (нельзя в будущее). На прошлых днях третья страница = следующий день. */}
-          {!isToday && renderDayPage(shiftDay(date, 1), 'p2', false)}
+          {/* Только элементы, без false/null: PagerView клонирует каждого ребёнка
+              (React.cloneElement) и падает на булевом значении → белый экран.
+              На «сегодня» третьей страницы нет — свайп вперёд упирается в край. */}
+          {[
+            renderDayPage(shiftDay(date, -1), 'p0', false),
+            renderDayPage(date, 'p1', true),
+            ...(isToday ? [] : [renderDayPage(shiftDay(date, 1), 'p2', false)]),
+          ]}
         </PagerView>
 
         <DayPickerModal
