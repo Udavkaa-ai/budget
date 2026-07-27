@@ -22,18 +22,26 @@ function arc(r: number, from: number, to: number) {
 // Барометр бюджета: ровный контур, зоны с градиентом, анимированные стрелка и число
 export function BudgetGauge({ pct }: { pct: number }) {
   const t = useTheme();
-  const [anim, setAnim] = useState(0);
+  // Старт СРАЗУ со значения — без «раскрутки» с нуля. Иначе при листании
+  // месяцев (пейджер пересоздаёт барометр) стрелка каждый раз прыгала
+  // 0→…→pct. Анимируем только при РЕАЛЬНОЙ смене значения, от предыдущего.
+  const [anim, setAnim] = useState(pct);
+  const animRef = useRef(pct);
   const raf = useRef<number | null>(null);
   const startRef = useRef(0);
 
   useEffect(() => {
+    const from = animRef.current;
     const target = pct;
+    if (Math.abs(from - target) < 0.5) { animRef.current = target; setAnim(target); return; }
     startRef.current = Date.now();
-    const dur = 900;
+    const dur = 500;
     const tick = () => {
       const k = Math.min((Date.now() - startRef.current) / dur, 1);
       const eased = 1 - Math.pow(1 - k, 3); // easeOutCubic
-      setAnim(target * eased);
+      const val = from + (target - from) * eased;
+      animRef.current = val;
+      setAnim(val);
       if (k < 1) raf.current = requestAnimationFrame(tick);
     };
     raf.current = requestAnimationFrame(tick);
