@@ -4112,64 +4112,74 @@ function initGoalsScreen() {
 // ─── RECURRING / РЕГУЛЯРНЫЕ ПЛАТЕЖИ ─────────────────────────────────────────────
 // Логика 1:1 с android/src/recurring.ts — меняешь тут, меняй там.
 const REC_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']; // getDay(): 0 = воскресенье
-const REC_FREQ_LABEL = { daily: 'Каждый день', weekly: 'Каждую неделю', monthly: 'Каждый месяц' };
+const REC_WEEKDAYS_ORDER = [1, 2, 3, 4, 5, 6, 0];               // Пн … Вс
+const REC_FREQ_LABEL = { daily: 'Каждый день', weekly: 'По дням недели', monthly: 'Каждый месяц' };
+const REC_DAY_PRESETS = [
+  { label: 'Будни', days: [1, 2, 3, 4, 5] },
+  { label: 'Выходные', days: [0, 6] },
+  { label: 'Каждый день', days: [1, 2, 3, 4, 5, 6, 0] },
+];
 const recPad = n => String(n).padStart(2, '0');
 const recYmd = d => `${d.getFullYear()}-${recPad(d.getMonth() + 1)}-${recPad(d.getDate())}`;
 const recYm = d => `${d.getFullYear()}-${recPad(d.getMonth() + 1)}`;
 const recFreqOf = i => i.freq || 'monthly';
 const recTimesOf = i => Math.max(1, i.times || 1);
 
-function recMondayOf(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d;
+function recWeekdaysOf(item) {
+  if (item.days && item.days.length) return item.days;
+  if (recFreqOf(item) === 'weekly') return [item.day];
+  return [];
 }
 function recPeriodKey(item, now) {
-  const f = recFreqOf(item);
-  if (f === 'daily') return recYmd(now);
-  if (f === 'weekly') return recYmd(recMondayOf(now));
-  return recYm(now);
+  return recFreqOf(item) === 'monthly' ? recYm(now) : recYmd(now);
+}
+function recDueToday(item, now) {
+  if (recFreqOf(item) === 'weekly') return recWeekdaysOf(item).includes(now.getDay());
+  return true;
 }
 function recPaidInPeriod(item, now) {
   if (item.lastPaid !== recPeriodKey(item, now)) return 0;
   return item.paidCount != null ? item.paidCount : recTimesOf(item);
 }
 function recRemaining(item, now) {
+  if (recFreqOf(item) === 'weekly' && !recDueToday(item, now)) return 0;
   return Math.max(0, recTimesOf(item) - recPaidInPeriod(item, now));
 }
 function recDueDate(item, now) {
-  const f = recFreqOf(item);
   let d;
-  if (f === 'daily') {
-    d = now;
-  } else if (f === 'weekly') {
-    const base = recMondayOf(now);
-    d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + ((item.day + 6) % 7));
-  } else {
+  if (recFreqOf(item) === 'monthly') {
     const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     d = new Date(now.getFullYear(), now.getMonth(), Math.min(Math.max(item.day, 1), dim));
+  } else {
+    d = now;
   }
   return `${recPad(d.getDate())}.${recPad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 function recDaysUntil(item, now) {
-  const f = recFreqOf(item);
-  if (f === 'daily') return 0;
-  if (f === 'weekly') return item.day - now.getDay();
+  if (recFreqOf(item) !== 'monthly') return 0;
   const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   return Math.min(item.day, dim) - now.getDate();
 }
 function recDueLabel(item, now) {
   const rem = recRemaining(item, now);
-  if (recFreqOf(item) === 'daily') return rem > 1 ? `сегодня · осталось ${rem}` : 'сегодня';
+  if (recFreqOf(item) !== 'monthly') return rem > 1 ? `сегодня · осталось ${rem}` : 'сегодня';
   const diff = recDaysUntil(item, now);
   const base = diff === 0 ? 'сегодня' : diff > 0 ? `через ${diff} дн.` : `просрочено ${-diff} дн.`;
   return rem > 1 ? `${base} · осталось ${rem}` : base;
+}
+function recFormatDays(days) {
+  const set = new Set(days);
+  if (set.size >= 7) return 'каждый день';
+  if (set.size === 5 && [1, 2, 3, 4, 5].every(d => set.has(d))) return 'по будням';
+  if (set.size === 2 && set.has(0) && set.has(6)) return 'по выходным';
+  const names = REC_WEEKDAYS_ORDER.filter(d => set.has(d)).map(d => REC_WEEKDAYS[d]);
+  return 'по ' + (names.join(', ') || '—');
 }
 function recScheduleLabel(item) {
   const f = recFreqOf(item), t = recTimesOf(item);
   const times = t > 1 ? ` ×${t}` : '';
   if (f === 'daily') return `каждый день${times}`;
-  if (f === 'weekly') return `по ${REC_WEEKDAYS[((item.day % 7) + 7) % 7]}${times}`;
+  if (f === 'weekly') return `${recFormatDays(recWeekdaysOf(item))}${times}`;
   return `${item.day}-го${times}`;
 }
 
@@ -4259,8 +4269,27 @@ function recDelete(id) {
   renderRecurring();
 }
 
+let recDays = [1, 2, 3, 4, 5];
+
+function recRenderDays() {
+  const presetsEl = document.getElementById('rec-weekday-presets');
+  presetsEl.innerHTML = REC_DAY_PRESETS.map((p, idx) => `<button type="button" class="rec-preset" data-preset="${idx}">${p.label}</button>`).join('');
+  presetsEl.querySelectorAll('[data-preset]').forEach(b =>
+    b.addEventListener('click', () => { recDays = REC_DAY_PRESETS[+b.dataset.preset].days.slice(); recRenderDays(); }));
+
+  const daysEl = document.getElementById('rec-weekday');
+  daysEl.innerHTML = REC_WEEKDAYS_ORDER.map(w =>
+    `<button type="button" class="rec-day${recDays.includes(w) ? ' active' : ''}" data-day="${w}">${REC_WEEKDAYS[w]}</button>`).join('');
+  daysEl.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => {
+    const w = +b.dataset.day;
+    recDays = recDays.includes(w) ? recDays.filter(x => x !== w) : [...recDays, w];
+    recRenderDays();
+  }));
+}
+
 function recSetFreq(f) {
   recFreq = f;
+  if (f === 'weekly' && recDays.length === 0) recDays = [1, 2, 3, 4, 5];
   document.querySelectorAll('#rec-freq button').forEach(b => b.classList.toggle('active', b.dataset.freq === f));
   document.getElementById('rec-weekday-group').classList.toggle('hidden', f !== 'weekly');
   document.getElementById('rec-monthday-group').classList.toggle('hidden', f !== 'monthly');
@@ -4273,15 +4302,13 @@ function openRecModal(id) {
   // Категории
   const catSel = document.getElementById('rec-category');
   catSel.innerHTML = Object.keys(CATEGORY_ICONS).map(c => `<option value="${esc(c)}">${CATEGORY_ICONS[c]} ${esc(c)}</option>`).join('');
-  // Дни недели (Пн..Вс)
-  const wdSel = document.getElementById('rec-weekday');
-  wdSel.innerHTML = [1, 2, 3, 4, 5, 6, 0].map(w => `<option value="${w}">${REC_WEEKDAYS[w]}</option>`).join('');
   // Плательщики
   const members = Array.from(new Set([currentUser && currentUser.name, ...recItems.map(i => i.user)].filter(Boolean)));
   const paySel = document.getElementById('rec-payer');
   paySel.innerHTML = members.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   document.getElementById('rec-payer-group').classList.toggle('hidden', members.length <= 1);
 
+  recDays = item && recFreqOf(item) === 'weekly' ? recWeekdaysOf(item).slice() : [1, 2, 3, 4, 5];
   document.getElementById('rec-modal-title').textContent = item ? 'Изменить платёж' : 'Новый платёж';
   document.getElementById('rec-name').value = item ? item.name : '';
   document.getElementById('rec-amount').value = item ? item.amount : '';
@@ -4291,7 +4318,7 @@ function openRecModal(id) {
   catSel.value = item ? item.category : Object.keys(CATEGORY_ICONS)[0];
   if (members.length) paySel.value = item && item.user ? item.user : (currentUser && currentUser.name) || members[0];
   recSetFreq(item ? recFreqOf(item) : 'monthly');
-  if (item && recFreqOf(item) === 'weekly') wdSel.value = String(item.day);
+  recRenderDays();
 
   document.getElementById('rec-modal-overlay').classList.remove('hidden');
   document.getElementById('rec-modal').classList.add('open');
@@ -4309,13 +4336,15 @@ function recSaveModal() {
   if (!name) { showToastInfo('Введите название'); return; }
   if (amount <= 0) { showToastInfo('Введите сумму'); return; }
 
+  if (recFreq === 'weekly' && recDays.length === 0) { showToastInfo('Выберите хотя бы один день недели'); return; }
+  const days = recFreq === 'weekly' ? REC_WEEKDAYS_ORDER.filter(w => recDays.includes(w)) : [];
   let day;
-  if (recFreq === 'weekly') day = parseInt(document.getElementById('rec-weekday').value);
+  if (recFreq === 'weekly') day = days[0];
   else if (recFreq === 'monthly') day = Math.min(Math.max(parseInt(document.getElementById('rec-monthday').value) || 1, 1), 31);
   else day = 0;
 
   const base = {
-    name, amount, times, freq: recFreq, day,
+    name, amount, times, freq: recFreq, day, days,
     category: document.getElementById('rec-category').value,
     user: document.getElementById('rec-payer').value || (currentUser && currentUser.name) || '',
     active: document.getElementById('rec-active').checked,
