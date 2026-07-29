@@ -2731,3 +2731,16 @@ button, a, .btn, .pill, .nav-btn, .icon-btn, .card, .category-item,
   color: var(--text); font-size: 13px; cursor: pointer;
 }
 .rec-seg button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* Дни недели — мультивыбор */
+.rec-day-presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.rec-preset {
+  border: 1px solid var(--primary); background: transparent; color: var(--primary);
+  border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.rec-day-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.rec-day {
+  border: 1px solid var(--border-soft); background: var(--card); color: var(--text);
+  border-radius: 999px; min-width: 44px; padding: 8px 4px; font-size: 13px; cursor: pointer;
+}
+.rec-day.active { background: var(--primary); color: #fff; border-color: var(--primary); }
