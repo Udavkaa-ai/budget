@@ -14,6 +14,7 @@ import { Card } from '../components/Card';
 import { useCategories } from '../categories';
 import { MonthPickerModal } from '../components/Pickers';
 import { usePremium } from '../premium';
+import { ChatModal } from '../components/ChatModal';
 import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
@@ -118,6 +119,7 @@ export default function SummaryScreen() {
   const [aiVisible, setAiVisible] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Сравнение с прошлым месяцем (общие переключатели)
   const [compare, setCompare] = useState(false);
@@ -543,20 +545,34 @@ export default function SummaryScreen() {
           )}
 
           {/* AI analysis (premium) */}
-          {blocks.ai && <TouchableOpacity
-            style={[styles.aiBtn, { backgroundColor: premium ? '#a855f7' : t.surface, borderColor: '#a855f7' }]}
-            onPress={() => {
-              if (!premium) {
-                Alert.alert('💎 Премиум', 'ИИ-анализ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
-                return;
-              }
-              runAnalysis();
-            }}
-          >
-            <Text style={{ color: premium ? '#fff' : '#a855f7', fontWeight: '700' }}>
-              🤖 ИИ-анализ месяца{premium ? '' : ' · 💎'}
-            </Text>
-          </TouchableOpacity>}
+          {blocks.ai && <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <TouchableOpacity
+              style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? '#a855f7' : t.surface, borderColor: '#a855f7' }]}
+              onPress={() => {
+                if (!premium) {
+                  Alert.alert('💎 Премиум', 'ИИ-анализ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+                  return;
+                }
+                runAnalysis();
+              }}
+            >
+              <Text style={{ color: premium ? '#fff' : '#a855f7', fontWeight: '700' }}>
+                🤖 ИИ-анализ{premium ? '' : ' · 💎'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? t.surface : t.surface, borderColor: '#a855f7' }]}
+              onPress={() => {
+                if (!premium) {
+                  Alert.alert('💎 Премиум', 'ИИ-чат доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+                  return;
+                }
+                setChatOpen(true);
+              }}
+            >
+              <Text style={{ color: '#a855f7', fontWeight: '700' }}>💬 Чат{premium ? '' : ' · 💎'}</Text>
+            </TouchableOpacity>
+          </View>}
 
           {/* By user */}
           {blocks.byUser && data && Object.keys(data.byUser).length > 1 && (
@@ -840,6 +856,14 @@ export default function SummaryScreen() {
           )}
         </SafeAreaView>
       </Modal>
+
+      <ChatModal
+        visible={chatOpen}
+        onClose={() => setChatOpen(false)}
+        month={month}
+        year={year}
+        monthLabel={getMonthName(month, year)}
+      />
     </SafeAreaView>
   );
 }

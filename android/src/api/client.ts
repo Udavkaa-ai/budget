@@ -331,6 +331,23 @@ export const ai = {
     api.post<{ expenses: ParsedExpense[] }>('/api/parse', { text }),
   parseImage: (base64: string, mimeType = 'image/jpeg') =>
     api.post<{ expenses: ParsedExpense[] }>('/api/parse-image', { base64, mimeType }),
+
+  // Обезличенная сводка для ИИ-чата (одинаково для E2E и обычных семей — только агрегаты)
+  chatContext: async (month: number, year: number): Promise<string> => {
+    if (isE2E()) return e2e.buildAiReport(month, year);
+    const s = await summary.get(month, year);
+    const plan = await budgetPlan.get().catch(() => ({ categoryBudgets: {}, incomes: {} } as BudgetPlan));
+    const lines: string[] = [`Месяц: ${String(month).padStart(2, '0')}.${year}`, `Всего потрачено: ${Math.round(s.total)} ₽`, '', 'Категории:'];
+    for (const [c, v] of Object.entries(s.byCategory).sort(([, a], [, b]) => (b as number) - (a as number))) {
+      const lim = plan.categoryBudgets?.[c];
+      lines.push(`- ${c}: ${Math.round(v as number)} ₽${lim ? ` (лимит ${lim} ₽)` : ''}`);
+    }
+    lines.push('', 'Участники:');
+    for (const [u, ud] of Object.entries(s.byUser)) lines.push(`- ${u}: ${Math.round(ud.total)} ₽`);
+    return lines.join('\n');
+  },
+  chat: (context: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+    api.post<{ reply: string; model: string }>('/api/chat', { context, messages }),
 };
 
 // ─── Family invites ──────────────────────────────────────────────────────────
