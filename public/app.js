@@ -834,6 +834,81 @@ async function getFinancialAnalysis() {
   }
 }
 
+// ─── AI CHAT ──────────────────────────────────────────────────────────────────
+
+let chatMessages = [];
+let chatContext = '';
+let chatLoading = false;
+
+async function aiBuildContext(m, y) {
+  const s = await apiJson('GET', `/api/summary?month=${m}&year=${y}`);
+  const plan = await apiJson('GET', '/api/budget-plan').catch(() => ({ categoryBudgets: {} }));
+  const lines = [`Месяц: ${String(m).padStart(2, '0')}.${y}`, `Всего потрачено: ${Math.round(s.total || 0)} ₽`, '', 'Категории:'];
+  for (const [c, v] of Object.entries(s.byCategory || {}).sort((a, b) => b[1] - a[1])) {
+    const lim = plan.categoryBudgets && plan.categoryBudgets[c];
+    lines.push(`- ${c}: ${Math.round(v)} ₽${lim ? ` (лимит ${lim} ₽)` : ''}`);
+  }
+  lines.push('', 'Участники:');
+  for (const [u, ud] of Object.entries(s.byUser || {})) lines.push(`- ${u}: ${Math.round((ud && ud.total) || 0)} ₽`);
+  return lines.join('\n');
+}
+
+function renderChat() {
+  const el = document.getElementById('chat-messages');
+  el.innerHTML = chatMessages.map(m => `<div class="chat-bubble chat-${m.role}">${
+    m.role === 'assistant' ? renderMarkdown(m.content) : esc(m.content)
+  }</div>`).join('') + (chatLoading ? '<div class="chat-bubble chat-assistant chat-typing">●●●</div>' : '');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function openChat() {
+  const m = summaryMonth || (new Date().getMonth() + 1);
+  const y = summaryYear || new Date().getFullYear();
+  chatMessages = [{ role: 'assistant', content: `Привет! Я вижу вашу сводку за ${getMonthName(m, y)}. Спросите что угодно — где перерасход, как сэкономить, стоит ли поднять лимит по категории.` }];
+  chatContext = '';
+  chatLoading = false;
+  document.getElementById('chat-input').value = '';
+  renderChat();
+  document.getElementById('chat-sheet').classList.add('open');
+  document.getElementById('chat-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  aiBuildContext(m, y).then(c => { chatContext = c; }).catch(() => {});
+}
+
+function closeChat() {
+  document.getElementById('chat-sheet').classList.remove('open');
+  document.getElementById('chat-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || chatLoading) return;
+  chatMessages.push({ role: 'user', content: text });
+  input.value = '';
+  chatLoading = true;
+  renderChat();
+  try {
+    const res = await apiJson('POST', '/api/chat', { context: chatContext, messages: chatMessages.slice(-16) });
+    chatMessages.push({ role: 'assistant', content: res && res.reply ? res.reply : (res && res.error) || 'Не удалось получить ответ.' });
+  } catch {
+    chatMessages.push({ role: 'assistant', content: 'Не удалось получить ответ. Попробуйте ещё раз.' });
+  } finally {
+    chatLoading = false;
+    renderChat();
+  }
+}
+
+function initChat() {
+  document.getElementById('btn-ai-chat').addEventListener('click', openChat);
+  document.getElementById('chat-close').addEventListener('click', closeChat);
+  document.getElementById('chat-overlay').addEventListener('click', closeChat);
+  document.getElementById('chat-send').addEventListener('click', sendChat);
+  const input = document.getElementById('chat-input');
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } });
+}
+
 // ─── PDF REPORT ───────────────────────────────────────────────────────────────
 
 async function generatePdfReport() {
@@ -2806,6 +2881,7 @@ async function initApp() {
   setupEventListeners();
   initGoalsScreen();
   initRecurring();
+  initChat();
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background

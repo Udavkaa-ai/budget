@@ -182,6 +182,7 @@
 
       <div class="card analysis-cta-card">
         <button id="btn-get-analysis" class="btn btn-primary btn-full">🤖 Финансовый анализ</button>
+        <button id="btn-ai-chat" class="btn btn-secondary btn-full" style="margin-top:8px">💬 Чат с ИИ-советником</button>
         <button id="btn-pdf-report" class="btn btn-secondary btn-full" style="margin-top:8px">📄 Скачать PDF отчёт</button>
       </div>
     </div>
@@ -479,6 +480,22 @@
       </div>
     </div>
     <div id="analysis-body" class="analysis-body"></div>
+  </div>
+
+  <!-- AI Chat Sheet -->
+  <div id="chat-overlay" class="sheet-overlay hidden"></div>
+  <div id="chat-sheet" class="analysis-sheet chat-sheet">
+    <div class="sheet-handle"></div>
+    <div class="analysis-sheet-header">
+      <span class="sheet-title">💬 Чат с ИИ-советником</span>
+      <button id="chat-close" class="icon-btn">✕</button>
+    </div>
+    <div class="chat-privacy">🔒 ИИ получает только обезличенную сводку (суммы по категориям и участникам), не отдельные покупки.</div>
+    <div id="chat-messages" class="chat-messages"></div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" class="chat-input" rows="1" placeholder="Спросите про бюджет…"></textarea>
+      <button id="chat-send" class="chat-send">↑</button>
+    </div>
   </div>
 
   <!-- Beauty Candidates Sheet -->

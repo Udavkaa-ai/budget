@@ -298,6 +298,71 @@ function formatDate(date) {
   return `${day}.${month}.${year}`;
 }
 
+// ─── ИИ-чат по бюджету ──────────────────────────────────────────────────────
+const CHAT_SYSTEM_PROMPT = `Ты — дружелюбный финансовый советник семьи. Отвечай кратко, по делу, на русском.
+Тебе дают ОБЕЗЛИЧЕННУЮ сводку бюджета семьи — только суммы по категориям и по участникам, без отдельных покупок и дат.
+Опирайся на эти цифры, давай конкретные практичные советы. Если для ответа данных не хватает — честно скажи и задай уточняющий вопрос.
+Не выдумывай отдельные траты, которых нет в сводке. Форматируй ответ простым markdown, без гигантских простыней.`;
+
+// messages: [{ role: 'user'|'assistant', content }]; context — обезличенная сводка (строка) или ''
+export async function chatFinances(context, messages) {
+  if (!config.openRouterKey) {
+    return { reply: null, error: 'Нет API ключа' };
+  }
+
+  const chatModels = [
+    'google/gemini-2.5-flash-preview',
+    'google/gemini-2.0-flash-001',
+    ...config.aiModels,
+  ].filter((m, i, arr) => arr.indexOf(m) === i);
+
+  const conversation = [
+    { role: 'system', content: CHAT_SYSTEM_PROMPT },
+    ...(context ? [{ role: 'system', content: `Сводка бюджета семьи:\n${context}` }] : []),
+    ...messages,
+  ];
+
+  for (const model of chatModels) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/budget-bot',
+          'X-Title': 'Budget Tracker Bot',
+        },
+        body: JSON.stringify({
+          model,
+          messages: conversation,
+          temperature: 0.5,
+          max_tokens: 1200,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const txt = await response.text();
+        console.warn(`Chat ${model}: HTTP ${response.status}: ${txt.slice(0, 200)}`);
+        continue;
+      }
+      const data = await response.json();
+      if (data.error) { console.warn(`Chat ${model}: ${data.error.message}`); continue; }
+      const content = data.choices?.[0]?.message?.content?.trim();
+      if (!content) continue;
+      console.log(`✅ Chat via ${model}`);
+      return { reply: sanitizeArrows(content), model };
+    } catch (e) {
+      clearTimeout(timeout);
+      console.warn(`Chat ${model}: ${e.message}`);
+    }
+  }
+
+  return { reply: null, error: 'Не удалось получить ответ' };
+}
+
 export { CATEGORIES };
 
 /**
