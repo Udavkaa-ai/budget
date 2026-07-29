@@ -304,6 +304,12 @@
           <button id="btn-save-planned" class="btn btn-primary btn-full">Сохранить</button>
         </div>
 
+        <div class="settings-section">
+          <div class="settings-title">Планирование</div>
+          <button id="btn-open-recurring" class="btn btn-full" style="text-align:left">🔁 Регулярные платежи ›</button>
+          <div class="settings-hint">Подписки, аренда, проездной и всё, что повторяется каждый день, неделю или месяц.</div>
+        </div>
+
         <div class="settings-section" id="push-settings-section">
           <div class="settings-title">Уведомления</div>
           <label class="toggle-row">
@@ -415,6 +421,17 @@
         </div>
 
       </div>
+    </div>
+
+    <!-- ── RECURRING / РЕГУЛЯРНЫЕ ПЛАТЕЖИ ──────────────────────────────── -->
+    <div id="screen-recurring" class="screen">
+      <div class="rec-head">
+        <button id="rec-back" class="btn btn-sm">‹ Назад</button>
+        <span class="settings-title" style="margin:0">Регулярные платежи</span>
+        <button id="rec-add" class="btn btn-primary btn-sm">+ Новый</button>
+      </div>
+      <div id="rec-upcoming"></div>
+      <div id="rec-list"></div>
     </div>
 
   </main>
@@ -574,6 +591,64 @@
         </div>
         <button id="btn-goal-contribute" class="btn btn-primary btn-full">Пополнить</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Recurring payment form (add / edit) -->
+  <div id="rec-modal-overlay" class="sheet-overlay hidden"></div>
+  <div id="rec-modal" class="bottom-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span id="rec-modal-title" class="sheet-title">Новый платёж</span>
+      <button id="rec-modal-close" class="icon-btn">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label>Название</label>
+        <input type="text" id="rec-name" placeholder="Напр. Маршрутка" />
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="form-group" style="flex:2">
+          <label>Сумма, ₽</label>
+          <input type="number" id="rec-amount" inputmode="numeric" placeholder="0" />
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>Раз за период</label>
+          <input type="number" id="rec-times" inputmode="numeric" value="1" min="1" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Как часто</label>
+        <div id="rec-freq" class="rec-seg">
+          <button type="button" data-freq="daily">Каждый день</button>
+          <button type="button" data-freq="weekly">Каждую неделю</button>
+          <button type="button" data-freq="monthly">Каждый месяц</button>
+        </div>
+      </div>
+      <div class="form-group hidden" id="rec-weekday-group">
+        <label>День недели</label>
+        <select id="rec-weekday" class="form-control"></select>
+      </div>
+      <div class="form-group hidden" id="rec-monthday-group">
+        <label>День месяца</label>
+        <input type="number" id="rec-monthday" inputmode="numeric" min="1" max="31" value="1" />
+      </div>
+      <div class="form-group">
+        <label>Категория</label>
+        <select id="rec-category" class="form-control"></select>
+      </div>
+      <div class="form-group hidden" id="rec-payer-group">
+        <label>Кто платит</label>
+        <select id="rec-payer" class="form-control"></select>
+      </div>
+      <label class="toggle-row">
+        <span class="toggle-label">Активен</span>
+        <span class="toggle-wrap">
+          <input type="checkbox" id="rec-active" checked />
+          <span class="toggle-slider"></span>
+        </span>
+      </label>
+      <button id="rec-save" class="btn btn-primary btn-full" style="margin-top:8px">Сохранить</button>
     </div>
   </div>
 
