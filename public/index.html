@@ -304,11 +304,14 @@
           <button id="btn-save-planned" class="btn btn-primary btn-full">Сохранить</button>
         </div>
 
-        <div class="settings-section">
-          <div class="settings-title">Планирование</div>
-          <button id="btn-open-recurring" class="btn btn-full" style="text-align:left">🔁 Регулярные платежи ›</button>
-          <div class="settings-hint">Подписки, аренда, проездной и всё, что повторяется каждый день, неделю или месяц.</div>
-        </div>
+        <button id="btn-open-recurring" class="rec-entry">
+          <span class="rec-entry-ico">🔁</span>
+          <span class="rec-entry-text">
+            <span class="rec-entry-title">Регулярные платежи</span>
+            <span class="rec-entry-sub">Подписки, аренда, проездной · автопоиск в истории</span>
+          </span>
+          <span class="rec-entry-chev">›</span>
+        </button>
 
         <div class="settings-section" id="push-settings-section">
           <div class="settings-title">Уведомления</div>
@@ -430,6 +433,7 @@
         <span class="settings-title" style="margin:0">Регулярные платежи</span>
         <button id="rec-add" class="btn btn-primary btn-sm">+ Новый</button>
       </div>
+      <div id="rec-suggestions"></div>
       <div id="rec-upcoming"></div>
       <div id="rec-list"></div>
     </div>
