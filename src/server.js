@@ -86,7 +86,7 @@ import {
   getBackup,
   deleteBackup,
 } from './storage.js';
-import { parseExpenses, parseImageExpenses, analyzeFinances, CATEGORIES } from './parser.js';
+import { parseExpenses, parseImageExpenses, analyzeFinances, chatFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -892,6 +892,39 @@ app.post('/api/analyze-raw', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('analyze-raw error:', err);
     res.status(500).json({ error: 'Ошибка ИИ-анализа' });
+  }
+});
+
+// ИИ-чат по бюджету: клиент присылает обезличенную сводку (context) + историю
+// сообщений. Для E2E-семей сырые данные не покидают устройство — только агрегаты.
+app.post('/api/chat', authMiddleware, async (req, res) => {
+  if (!config.openRouterKey) {
+    return res.status(503).json({ error: 'ИИ-чат недоступен (нет API ключа)' });
+  }
+  const { context, messages } = req.body || {};
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 20) {
+    return res.status(400).json({ error: 'Некорректный запрос' });
+  }
+  const ctx = typeof context === 'string' ? context.slice(0, 20000) : '';
+  let total = ctx.length;
+  const clean = [];
+  for (const m of messages) {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string' || !m.content.trim()) {
+      return res.status(400).json({ error: 'Некорректное сообщение' });
+    }
+    total += m.content.length;
+    clean.push({ role: m.role, content: m.content.slice(0, 4000) });
+  }
+  if (total > 24000) {
+    return res.status(400).json({ error: 'Слишком длинный диалог' });
+  }
+  try {
+    const result = await chatFinances(ctx, clean);
+    if (result.error) return res.status(502).json({ error: result.error });
+    res.json({ reply: result.reply, model: result.model });
+  } catch (err) {
+    console.error('chat error:', err);
+    res.status(500).json({ error: 'Ошибка ИИ-чата' });
   }
 });
 
