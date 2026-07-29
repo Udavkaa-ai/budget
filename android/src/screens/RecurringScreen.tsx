@@ -13,7 +13,8 @@ import { Field, PrimaryButton } from '../components/UI';
 import { haptics } from '../haptics';
 import {
   remaining, dueDate, dueLabel, daysUntil, scheduleLabel, periodKey, paidInPeriod,
-  weekdaysOf, FREQ_LABEL, WEEKDAYS_SHORT, WEEKDAYS_ORDER,
+  weekdaysOf, detectRecurring, FREQ_LABEL, WEEKDAYS_SHORT, WEEKDAYS_ORDER,
+  type RecurringSuggestion,
 } from '../recurring';
 
 function fmt(n: number) {
@@ -43,6 +44,10 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState(false);
+  const [suggestions, setSuggestions] = useState<RecurringSuggestion[]>([]);
+  const [dismissed, setDismissed] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,6 +125,36 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
     setDraft(null);
   };
 
+  const scan = async () => {
+    setScanning(true);
+    try {
+      const base = new Date();
+      const months = [0, 1, 2].map(k => {
+        const d = new Date(base.getFullYear(), base.getMonth() - k, 1);
+        return { m: d.getMonth() + 1, y: d.getFullYear() };
+      });
+      const lists = await Promise.all(months.map(({ m, y }) => expApi.forMonth(m, y).catch(() => [] as any[])));
+      setSuggestions(detectRecurring(lists.flat(), items, 3, dismissed));
+      setScanned(true);
+    } catch {
+      Alert.alert('Не удалось просканировать историю');
+    } finally { setScanning(false); }
+  };
+
+  const addSuggestion = async (s: RecurringSuggestion) => {
+    const item: RecurringItem = {
+      id: genId(), name: s.name, amount: s.amount, category: s.category, user: s.user || (user?.name ?? ''),
+      active: true, freq: s.freq, day: s.day, days: s.days, times: s.times,
+    };
+    haptics.success();
+    setSuggestions(suggestions.filter(x => x.key !== s.key));
+    await persist([...items, item]);
+  };
+  const dismissSuggestion = (s: RecurringSuggestion) => {
+    setDismissed([...dismissed, s.key]);
+    setSuggestions(suggestions.filter(x => x.key !== s.key));
+  };
+
   const memberNames = Array.from(new Set([user?.name, ...items.map(i => i.user)].filter(Boolean))) as string[];
 
   const setDayField = (v: string) => setDraft(d => d && ({ ...d, day: Math.max(1, parseInt(v.replace(/[^\d]/g, '')) || 1) }));
@@ -140,6 +175,51 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
           <ActivityIndicator style={{ marginTop: 40 }} color={t.primary} />
         ) : (
           <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
+            <Card>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.text, fontWeight: '700' }}>🔍 Найти повторяющиеся</Text>
+                  <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                    Просмотрю расходы за 3 месяца и предложу оформить регулярные. Считается на устройстве.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.payBtn, { backgroundColor: t.primary, opacity: scanning ? 0.6 : 1 }]}
+                  onPress={scan}
+                  disabled={scanning}
+                >
+                  {scanning
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={{ color: '#fff', fontWeight: '700', fontSize: font.sm }}>Сканировать</Text>}
+                </TouchableOpacity>
+              </View>
+
+              {suggestions.map(s => (
+                <View key={s.key} style={[styles.upRow, { alignItems: 'flex-start' }]}>
+                  <Text style={{ fontSize: 22 }}>{catIcon(s.category)}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: t.text, fontWeight: '600' }} numberOfLines={1}>{s.name} · {fmt(s.amount)}</Text>
+                    <Text style={{ color: t.textMuted, fontSize: font.xs }}>
+                      {scheduleLabel(s as unknown as RecurringItem)} · встречалось {s.count}×
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: 6 }}>
+                      <TouchableOpacity style={[styles.payBtn, { backgroundColor: t.primary }]} onPress={() => addSuggestion(s)}>
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: font.sm }}>Добавить</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.payBtn, { backgroundColor: t.surface2 }]} onPress={() => dismissSuggestion(s)}>
+                        <Text style={{ color: t.textMuted, fontWeight: '600', fontSize: font.sm }}>Скрыть</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+              {scanned && suggestions.length === 0 && (
+                <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: spacing.sm }}>
+                  Новых повторяющихся платежей не нашлось — либо истории пока мало, либо всё уже оформлено.
+                </Text>
+              )}
+            </Card>
+
             {upcoming.length > 0 && (
               <Card>
                 <Text style={[styles.section, { color: t.text }]}>🔁 К оплате</Text>

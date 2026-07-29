@@ -733,13 +733,20 @@ export default function SettingsScreen() {
         </View>
 
         {/* Планирование */}
-        <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Планирование</Text>
-          <TouchableOpacity style={styles.row} onPress={() => setRecurringVisible(true)}>
-            <Text style={{ color: t.text }}>🔁 Регулярные платежи</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
-        </Card>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setRecurringVisible(true)}
+          style={{
+            backgroundColor: t.primary, borderRadius: 18, padding: 16, marginBottom: 12,
+            flexDirection: 'row', alignItems: 'center', gap: 14,
+          }}>
+          <Text style={{ fontSize: 30 }}>🔁</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Регулярные платежи</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 }}>
+              Подписки, аренда, проездной · автопоиск в истории
+            </Text>
+          </View>
+          <Text style={{ color: '#fff', fontSize: 22 }}>›</Text>
+        </TouchableOpacity>
 
         {/* Data */}
         <Card>
