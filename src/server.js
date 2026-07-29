@@ -35,6 +35,8 @@ import {
   deleteGoal,
   getBudgetPlan,
   saveBudgetPlan,
+  getRecurring,
+  saveRecurring,
   getCashflow,
   saveCashflow,
   getMonthDailyTotals,
@@ -1058,6 +1060,17 @@ app.get('/api/budget-plan', authMiddleware, (req, res) => {
 app.put('/api/budget-plan', authMiddleware, async (req, res) => {
   await saveBudgetPlan(req.body, req.user.family);
   io.to(req.user.family).emit('budget-plan:updated');
+  res.json({ ok: true });
+});
+
+// Регулярные платежи (подписки/аренда/ЖКХ)
+app.get('/api/recurring', authMiddleware, (req, res) => {
+  res.json(getRecurring(req.user.family));
+});
+
+app.put('/api/recurring', authMiddleware, async (req, res) => {
+  await saveRecurring(req.body, req.user.family);
+  io.to(req.user.family).emit('sync:changed', { by: req.user.name });
   res.json({ ok: true });
 });
 

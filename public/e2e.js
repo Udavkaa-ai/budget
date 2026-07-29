@@ -632,6 +632,14 @@ export async function handle(method, path, body) {
     return { ok: true };
   }
 
+  // ── Регулярные платежи ──
+  if (pathname === '/api/recurring' && method === 'GET') return getLocalDoc('recurring')?.value ?? [];
+  if (pathname === '/api/recurring' && method === 'PUT') {
+    setLocalDoc('recurring', Array.isArray(body) ? body : [], { dirty: true });
+    bump();
+    return { ok: true };
+  }
+
   // ── Цели ──
   if (pathname === '/api/goals' && method === 'GET') return rawGoals();
   if (pathname === '/api/goals' && method === 'POST') {

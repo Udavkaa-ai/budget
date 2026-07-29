@@ -638,6 +638,17 @@ export async function saveBudgetPlan(plan, familyId) {
   debouncedSave();
 }
 
+// Регулярные (повторяющиеся) платежи семьи: подписки, аренда, ЖКХ и т.п.
+// [{ id, name, amount, category, day, user, active, lastPaid: "YYYY-MM" }]
+export function getRecurring(familyId) {
+  return familySettings(familyId).recurring || [];
+}
+
+export async function saveRecurring(list, familyId) {
+  familySettings(familyId).recurring = Array.isArray(list) ? list : [];
+  debouncedSave();
+}
+
 // ─── Снапшот семьи и шифрованные бэкапы ──────────────────────────────────────
 
 // Полный снимок данных семьи — клиент шифрует его своим ключом
