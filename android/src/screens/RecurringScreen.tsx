@@ -5,12 +5,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
-import { recurring as recurringApi, expenses as expApi, type RecurringItem } from '../api/client';
+import { recurring as recurringApi, expenses as expApi, type RecurringItem, type RecurringFreq } from '../api/client';
 import { useCategories } from '../categories';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/Card';
 import { Field, PrimaryButton } from '../components/UI';
 import { haptics } from '../haptics';
+import {
+  remaining, dueDate, dueLabel, daysUntil, scheduleLabel, periodKey, paidInPeriod,
+  FREQ_LABEL, WEEKDAYS_SHORT,
+} from '../recurring';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -18,12 +22,13 @@ function fmt(n: number) {
 function genId() {
   return `r_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
-function curYm() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
 
-type Draft = { id?: string; name: string; amount: string; category: string; day: string; user: string; active: boolean };
+type Draft = {
+  id?: string; name: string; amount: string; category: string;
+  freq: RecurringFreq; day: number; times: string; user: string; active: boolean;
+};
+
+const FREQS: RecurringFreq[] = ['daily', 'weekly', 'monthly'];
 
 export function RecurringScreen({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useTheme();
@@ -46,28 +51,24 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
   };
 
   const now = new Date();
-  const ym = curYm();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const upcoming = items.filter(i => i.active && i.lastPaid !== ym).sort((a, b) => a.day - b.day);
-  const dueLabel = (day: number) => {
-    const diff = Math.min(day, daysInMonth) - now.getDate();
-    if (diff === 0) return 'сегодня';
-    if (diff > 0) return `через ${diff} дн.`;
-    return `просрочено ${-diff} дн.`;
-  };
-  const dueColor = (day: number) => {
-    const diff = Math.min(day, daysInMonth) - now.getDate();
-    return diff < 0 ? t.danger : diff <= 2 ? '#f59e0b' : t.textMuted;
+  const upcoming = items
+    .filter(i => i.active && remaining(i, now) > 0)
+    .sort((a, b) => daysUntil(a, now) - daysUntil(b, now) || a.name.localeCompare(b.name));
+
+  const dueColor = (i: RecurringItem) => {
+    const diff = daysUntil(i, now);
+    return diff < 0 ? t.danger : diff <= 1 ? '#f59e0b' : t.textMuted;
   };
 
   const payNow = async (item: RecurringItem) => {
     setBusy(true);
     try {
-      const d = Math.min(Math.max(item.day, 1), daysInMonth);
-      const date = `${String(d).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+      const date = dueDate(item, now);
       await expApi.add({ expenses: [{ date, category: item.category, amount: item.amount, description: item.name }] });
       haptics.success();
-      await persist(items.map(i => i.id === item.id ? { ...i, lastPaid: ym } : i));
+      const key = periodKey(item, now);
+      const paid = paidInPeriod(item, now) + 1;
+      await persist(items.map(i => i.id === item.id ? { ...i, lastPaid: key, paidCount: paid } : i));
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally { setBusy(false); }
@@ -81,16 +82,25 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
     ]);
   };
 
-  const openNew = () => setDraft({ name: '', amount: '', category: cats[0] ?? '', day: '1', user: user?.name ?? '', active: true });
-  const openEdit = (i: RecurringItem) => setDraft({ id: i.id, name: i.name, amount: String(i.amount), category: i.category, day: String(i.day), user: i.user, active: i.active });
+  const openNew = () => setDraft({ name: '', amount: '', category: cats[0] ?? '', freq: 'monthly', day: 1, times: '1', user: user?.name ?? '', active: true });
+  const openEdit = (i: RecurringItem) => setDraft({
+    id: i.id, name: i.name, amount: String(i.amount), category: i.category,
+    freq: i.freq || 'monthly', day: i.day, times: String(Math.max(1, i.times || 1)), user: i.user, active: i.active,
+  });
 
   const saveDraft = async () => {
     if (!draft) return;
     const amount = parseInt(draft.amount.replace(/[^\d]/g, '')) || 0;
-    const day = Math.min(Math.max(parseInt(draft.day) || 1, 1), 31);
+    const times = Math.max(1, parseInt(draft.times) || 1);
+    let day = draft.day;
+    if (draft.freq === 'monthly') day = Math.min(Math.max(day, 1), 31);
+    if (draft.freq === 'weekly') day = ((day % 7) + 7) % 7;
     if (!draft.name.trim()) { Alert.alert('Введите название'); return; }
     if (amount <= 0) { Alert.alert('Введите сумму'); return; }
-    const base = { name: draft.name.trim(), amount, category: draft.category, day, user: draft.user || (user?.name ?? ''), active: draft.active };
+    const base = {
+      name: draft.name.trim(), amount, category: draft.category, user: draft.user || (user?.name ?? ''),
+      active: draft.active, freq: draft.freq, day, times,
+    };
     const next = draft.id
       ? items.map(i => i.id === draft.id ? { ...i, ...base } : i)
       : [...items, { id: genId(), ...base }];
@@ -98,8 +108,9 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
     setDraft(null);
   };
 
-  // Кандидаты «кто платит»: текущий пользователь + уже встречавшиеся в платежах
   const memberNames = Array.from(new Set([user?.name, ...items.map(i => i.user)].filter(Boolean))) as string[];
+
+  const setDayField = (v: string) => setDraft(d => d && ({ ...d, day: Math.max(1, parseInt(v.replace(/[^\d]/g, '')) || 1) }));
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -119,13 +130,13 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
           <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
             {upcoming.length > 0 && (
               <Card>
-                <Text style={[styles.section, { color: t.text }]}>🔁 Предстоящие в этом месяце</Text>
+                <Text style={[styles.section, { color: t.text }]}>🔁 К оплате</Text>
                 {upcoming.map(i => (
                   <View key={i.id} style={styles.upRow}>
                     <Text style={{ fontSize: 22 }}>{catIcon(i.category)}</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: t.text, fontWeight: '600' }} numberOfLines={1}>{i.name}</Text>
-                      <Text style={{ color: dueColor(i.day), fontSize: font.xs }}>{i.day}-го · {dueLabel(i.day)}</Text>
+                      <Text style={{ color: dueColor(i), fontSize: font.xs }}>{dueLabel(i, now)}</Text>
                     </View>
                     <Text style={{ color: t.text, fontWeight: '700', marginRight: spacing.sm }}>{fmt(i.amount)}</Text>
                     <TouchableOpacity
@@ -143,7 +154,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
             <Card>
               <Text style={[styles.section, { color: t.text }]}>Все платежи</Text>
               {items.length === 0 && (
-                <Text style={{ color: t.textMuted }}>Пока пусто. Добавьте подписку, аренду или ЖКХ по кнопке «＋».</Text>
+                <Text style={{ color: t.textMuted }}>Пока пусто. Добавьте подписку, аренду, проездной или что-то ежедневное по кнопке «＋».</Text>
               )}
               {items.map(i => (
                 <TouchableOpacity key={i.id} style={styles.listRow} activeOpacity={0.7} onPress={() => openEdit(i)} onLongPress={() => removeItem(i)}>
@@ -151,7 +162,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: i.active ? t.text : t.textMuted, fontWeight: '600' }} numberOfLines={1}>{i.name}</Text>
                     <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>
-                      {i.day}-го · {i.category}{i.user ? ` · ${i.user}` : ''}{i.lastPaid === ym ? ' · ✓ внесён' : ''}
+                      {scheduleLabel(i)} · {i.category}{i.user ? ` · ${i.user}` : ''}
                     </Text>
                   </View>
                   <Text style={{ color: i.active ? t.text : t.textMuted, fontWeight: '700', marginRight: spacing.sm }}>{fmt(i.amount)}</Text>
@@ -170,17 +181,48 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
               <Text style={[styles.title, { color: t.text, marginBottom: spacing.md }]}>{draft?.id ? 'Изменить платёж' : 'Новый платёж'}</Text>
               <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={[styles.lbl, { color: t.textMuted }]}>Название</Text>
-                <Field value={draft?.name} onChangeText={v => setDraft(d => d && ({ ...d, name: v }))} placeholder="Напр. Интернет" />
+                <Field value={draft?.name} onChangeText={v => setDraft(d => d && ({ ...d, name: v }))} placeholder="Напр. Маршрутка" />
+
                 <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                   <View style={{ flex: 2 }}>
                     <Text style={[styles.lbl, { color: t.textMuted }]}>Сумма, ₽</Text>
                     <Field value={draft?.amount} onChangeText={v => setDraft(d => d && ({ ...d, amount: v }))} placeholder="0" keyboardType="number-pad" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.lbl, { color: t.textMuted }]}>День</Text>
-                    <Field value={draft?.day} onChangeText={v => setDraft(d => d && ({ ...d, day: v }))} placeholder="1" keyboardType="number-pad" />
+                    <Text style={[styles.lbl, { color: t.textMuted }]}>Раз за период</Text>
+                    <Field value={draft?.times} onChangeText={v => setDraft(d => d && ({ ...d, times: v }))} placeholder="1" keyboardType="number-pad" />
                   </View>
                 </View>
+
+                <Text style={[styles.lbl, { color: t.textMuted }]}>Как часто</Text>
+                <View style={styles.chips}>
+                  {FREQS.map(f => (
+                    <TouchableOpacity key={f} onPress={() => setDraft(d => d && ({ ...d, freq: f, day: f === 'weekly' ? 1 : d.day }))}
+                      style={[styles.chip, { backgroundColor: draft?.freq === f ? t.primary : t.surface2, borderColor: t.border }]}>
+                      <Text style={{ color: draft?.freq === f ? '#fff' : t.text, fontSize: font.sm }}>{FREQ_LABEL[f]}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {draft?.freq === 'weekly' && (
+                  <>
+                    <Text style={[styles.lbl, { color: t.textMuted }]}>День недели</Text>
+                    <View style={styles.chips}>
+                      {[1, 2, 3, 4, 5, 6, 0].map(wd => (
+                        <TouchableOpacity key={wd} onPress={() => setDraft(d => d && ({ ...d, day: wd }))}
+                          style={[styles.chip, { backgroundColor: draft?.day === wd ? t.primary : t.surface2, borderColor: t.border }]}>
+                          <Text style={{ color: draft?.day === wd ? '#fff' : t.text, fontSize: font.sm }}>{WEEKDAYS_SHORT[wd]}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+                {draft?.freq === 'monthly' && (
+                  <>
+                    <Text style={[styles.lbl, { color: t.textMuted }]}>День месяца</Text>
+                    <Field value={String(draft?.day ?? 1)} onChangeText={setDayField} placeholder="1" keyboardType="number-pad" />
+                  </>
+                )}
 
                 <Text style={[styles.lbl, { color: t.textMuted }]}>Категория</Text>
                 <View style={styles.chips}>

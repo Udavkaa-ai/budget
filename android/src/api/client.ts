@@ -226,15 +226,20 @@ export const budgetPlan = {
 
 // ─── Regular / recurring payments ────────────────────────────────────────────
 
+export type RecurringFreq = 'daily' | 'weekly' | 'monthly';
+
 export interface RecurringItem {
   id: string;
   name: string;
   amount: number;
   category: string;
-  day: number;          // день месяца 1–31
   user: string;         // кто платит
   active: boolean;
-  lastPaid?: string;    // "YYYY-MM" — когда уже внесён в этом месяце
+  freq: RecurringFreq;  // как часто
+  day: number;          // monthly: день месяца 1–31; weekly: день недели 0(вс)–6(сб); daily: не используется
+  times: number;        // сколько раз за период (напр. маршрутка 2 раза в день)
+  lastPaid?: string;    // ключ последнего оплаченного периода (YYYY-MM-DD / понедельник недели / YYYY-MM)
+  paidCount?: number;   // сколько раз внесено в периоде lastPaid
 }
 
 export const recurring = {

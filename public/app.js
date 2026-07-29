@@ -607,6 +607,7 @@ const SCREEN_TITLES = {
   chart: 'График',
   settings: 'Настройки',
   goals: 'Цели',
+  recurring: 'Регулярные платежи',
 };
 
 let currentScreen = 'budget';
@@ -639,6 +640,7 @@ function loadScreen(name) {
     case 'chart': loadChart(); loadCashflowSection(); break;
     case 'settings': loadSettingsScreen(); break;
     case 'goals': loadGoalsScreen(); break;
+    case 'recurring': loadRecurring(); break;
   }
 }
 
@@ -2803,6 +2805,7 @@ async function initApp() {
   initCategoryGrid();
   setupEventListeners();
   initGoalsScreen();
+  initRecurring();
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
@@ -4104,6 +4107,238 @@ function initGoalsScreen() {
   document.getElementById('goal-modal-overlay').addEventListener('click', closeGoalModal);
   document.getElementById('btn-goal-create').addEventListener('click', createGoal);
   document.getElementById('btn-goal-contribute').addEventListener('click', contributeToGoal);
+}
+
+// ─── RECURRING / РЕГУЛЯРНЫЕ ПЛАТЕЖИ ─────────────────────────────────────────────
+// Логика 1:1 с android/src/recurring.ts — меняешь тут, меняй там.
+const REC_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']; // getDay(): 0 = воскресенье
+const REC_FREQ_LABEL = { daily: 'Каждый день', weekly: 'Каждую неделю', monthly: 'Каждый месяц' };
+const recPad = n => String(n).padStart(2, '0');
+const recYmd = d => `${d.getFullYear()}-${recPad(d.getMonth() + 1)}-${recPad(d.getDate())}`;
+const recYm = d => `${d.getFullYear()}-${recPad(d.getMonth() + 1)}`;
+const recFreqOf = i => i.freq || 'monthly';
+const recTimesOf = i => Math.max(1, i.times || 1);
+
+function recMondayOf(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+function recPeriodKey(item, now) {
+  const f = recFreqOf(item);
+  if (f === 'daily') return recYmd(now);
+  if (f === 'weekly') return recYmd(recMondayOf(now));
+  return recYm(now);
+}
+function recPaidInPeriod(item, now) {
+  if (item.lastPaid !== recPeriodKey(item, now)) return 0;
+  return item.paidCount != null ? item.paidCount : recTimesOf(item);
+}
+function recRemaining(item, now) {
+  return Math.max(0, recTimesOf(item) - recPaidInPeriod(item, now));
+}
+function recDueDate(item, now) {
+  const f = recFreqOf(item);
+  let d;
+  if (f === 'daily') {
+    d = now;
+  } else if (f === 'weekly') {
+    const base = recMondayOf(now);
+    d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + ((item.day + 6) % 7));
+  } else {
+    const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    d = new Date(now.getFullYear(), now.getMonth(), Math.min(Math.max(item.day, 1), dim));
+  }
+  return `${recPad(d.getDate())}.${recPad(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+function recDaysUntil(item, now) {
+  const f = recFreqOf(item);
+  if (f === 'daily') return 0;
+  if (f === 'weekly') return item.day - now.getDay();
+  const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return Math.min(item.day, dim) - now.getDate();
+}
+function recDueLabel(item, now) {
+  const rem = recRemaining(item, now);
+  if (recFreqOf(item) === 'daily') return rem > 1 ? `сегодня · осталось ${rem}` : 'сегодня';
+  const diff = recDaysUntil(item, now);
+  const base = diff === 0 ? 'сегодня' : diff > 0 ? `через ${diff} дн.` : `просрочено ${-diff} дн.`;
+  return rem > 1 ? `${base} · осталось ${rem}` : base;
+}
+function recScheduleLabel(item) {
+  const f = recFreqOf(item), t = recTimesOf(item);
+  const times = t > 1 ? ` ×${t}` : '';
+  if (f === 'daily') return `каждый день${times}`;
+  if (f === 'weekly') return `по ${REC_WEEKDAYS[((item.day % 7) + 7) % 7]}${times}`;
+  return `${item.day}-го${times}`;
+}
+
+let recItems = [];
+let recEditId = null;
+let recFreq = 'monthly';
+let recBusy = false;
+
+async function loadRecurring() {
+  try { recItems = await apiJson('GET', '/api/recurring'); } catch { recItems = []; }
+  if (!Array.isArray(recItems)) recItems = [];
+  renderRecurring();
+}
+
+async function recPersist() {
+  try { await apiJson('PUT', '/api/recurring', recItems); }
+  catch { showToastInfo('Не удалось сохранить'); }
+}
+
+function recDueClass(item, now) {
+  if (recFreqOf(item) === 'daily') return '';
+  const diff = recDaysUntil(item, now);
+  return diff < 0 ? 'due-over' : diff <= 1 ? 'due-soon' : '';
+}
+
+function renderRecurring() {
+  const now = new Date();
+  const upEl = document.getElementById('rec-upcoming');
+  const listEl = document.getElementById('rec-list');
+
+  const upcoming = recItems
+    .filter(i => i.active && recRemaining(i, now) > 0)
+    .sort((a, b) => recDaysUntil(a, now) - recDaysUntil(b, now) || a.name.localeCompare(b.name));
+
+  upEl.innerHTML = upcoming.length ? `<div class="rec-card">
+    <div class="rec-card-title">🔁 К оплате</div>
+    ${upcoming.map(i => `<div class="rec-row">
+      <span class="rec-ico">${CATEGORY_ICONS[i.category] || '❓'}</span>
+      <span class="rec-main">
+        <div class="rec-name">${esc(i.name)}</div>
+        <div class="rec-sub ${recDueClass(i, now)}">${recDueLabel(i, now)}</div>
+      </span>
+      <span class="rec-amt">${fmt(i.amount)}</span>
+      <button class="rec-pay" data-pay="${i.id}"${recBusy ? ' disabled' : ''}>Внести</button>
+    </div>`).join('')}
+  </div>` : '';
+
+  listEl.innerHTML = `<div class="rec-card">
+    <div class="rec-card-title">Все платежи</div>
+    ${recItems.length ? recItems.map(i => `<div class="rec-row">
+      <span class="rec-ico ${i.active ? '' : 'off'}">${CATEGORY_ICONS[i.category] || '❓'}</span>
+      <span class="rec-main" data-edit="${i.id}" style="cursor:pointer">
+        <div class="rec-name ${i.active ? '' : 'off'}">${esc(i.name)}</div>
+        <div class="rec-sub">${recScheduleLabel(i)} · ${esc(i.category)}${i.user ? ' · ' + esc(i.user) : ''}${i.active ? '' : ' · выкл'}</div>
+      </span>
+      <span class="rec-amt ${i.active ? '' : 'off'}">${fmt(i.amount)}</span>
+      <span class="rec-actions"><button class="rec-del" data-del="${i.id}" title="Удалить">🗑</button></span>
+    </div>`).join('') : '<div class="rec-empty">Пока пусто. Добавьте подписку, аренду, проездной или что-то ежедневное.</div>'}
+  </div>`;
+
+  upEl.querySelectorAll('[data-pay]').forEach(b => b.addEventListener('click', () => recPay(b.dataset.pay)));
+  listEl.querySelectorAll('[data-edit]').forEach(e => e.addEventListener('click', () => openRecModal(e.dataset.edit)));
+  listEl.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => recDelete(b.dataset.del)));
+}
+
+async function recPay(id) {
+  const item = recItems.find(i => i.id === id);
+  if (!item || recBusy) return;
+  recBusy = true; renderRecurring();
+  try {
+    const date = recDueDate(item, new Date());
+    await apiJson('POST', '/api/expenses', { expenses: [{ date, category: item.category, amount: item.amount, description: item.name }] });
+    const now = new Date();
+    item.lastPaid = recPeriodKey(item, now);
+    item.paidCount = recPaidInPeriod(item, now) + 1;
+    await recPersist();
+  } catch { showToastInfo('Не удалось внести'); }
+  finally { recBusy = false; renderRecurring(); }
+}
+
+function recDelete(id) {
+  const item = recItems.find(i => i.id === id);
+  if (!item) return;
+  if (!confirm(`Удалить «${item.name}»?`)) return;
+  recItems = recItems.filter(i => i.id !== id);
+  recPersist();
+  renderRecurring();
+}
+
+function recSetFreq(f) {
+  recFreq = f;
+  document.querySelectorAll('#rec-freq button').forEach(b => b.classList.toggle('active', b.dataset.freq === f));
+  document.getElementById('rec-weekday-group').classList.toggle('hidden', f !== 'weekly');
+  document.getElementById('rec-monthday-group').classList.toggle('hidden', f !== 'monthly');
+}
+
+function openRecModal(id) {
+  recEditId = id || null;
+  const item = id ? recItems.find(i => i.id === id) : null;
+
+  // Категории
+  const catSel = document.getElementById('rec-category');
+  catSel.innerHTML = Object.keys(CATEGORY_ICONS).map(c => `<option value="${esc(c)}">${CATEGORY_ICONS[c]} ${esc(c)}</option>`).join('');
+  // Дни недели (Пн..Вс)
+  const wdSel = document.getElementById('rec-weekday');
+  wdSel.innerHTML = [1, 2, 3, 4, 5, 6, 0].map(w => `<option value="${w}">${REC_WEEKDAYS[w]}</option>`).join('');
+  // Плательщики
+  const members = Array.from(new Set([currentUser && currentUser.name, ...recItems.map(i => i.user)].filter(Boolean)));
+  const paySel = document.getElementById('rec-payer');
+  paySel.innerHTML = members.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  document.getElementById('rec-payer-group').classList.toggle('hidden', members.length <= 1);
+
+  document.getElementById('rec-modal-title').textContent = item ? 'Изменить платёж' : 'Новый платёж';
+  document.getElementById('rec-name').value = item ? item.name : '';
+  document.getElementById('rec-amount').value = item ? item.amount : '';
+  document.getElementById('rec-times').value = item ? recTimesOf(item) : 1;
+  document.getElementById('rec-monthday').value = item && recFreqOf(item) === 'monthly' ? item.day : 1;
+  document.getElementById('rec-active').checked = item ? item.active : true;
+  catSel.value = item ? item.category : Object.keys(CATEGORY_ICONS)[0];
+  if (members.length) paySel.value = item && item.user ? item.user : (currentUser && currentUser.name) || members[0];
+  recSetFreq(item ? recFreqOf(item) : 'monthly');
+  if (item && recFreqOf(item) === 'weekly') wdSel.value = String(item.day);
+
+  document.getElementById('rec-modal-overlay').classList.remove('hidden');
+  document.getElementById('rec-modal').classList.add('open');
+}
+
+function closeRecModal() {
+  document.getElementById('rec-modal-overlay').classList.add('hidden');
+  document.getElementById('rec-modal').classList.remove('open');
+}
+
+function recSaveModal() {
+  const name = document.getElementById('rec-name').value.trim();
+  const amount = parseInt(String(document.getElementById('rec-amount').value).replace(/[^\d]/g, '')) || 0;
+  const times = Math.max(1, parseInt(document.getElementById('rec-times').value) || 1);
+  if (!name) { showToastInfo('Введите название'); return; }
+  if (amount <= 0) { showToastInfo('Введите сумму'); return; }
+
+  let day;
+  if (recFreq === 'weekly') day = parseInt(document.getElementById('rec-weekday').value);
+  else if (recFreq === 'monthly') day = Math.min(Math.max(parseInt(document.getElementById('rec-monthday').value) || 1, 1), 31);
+  else day = 0;
+
+  const base = {
+    name, amount, times, freq: recFreq, day,
+    category: document.getElementById('rec-category').value,
+    user: document.getElementById('rec-payer').value || (currentUser && currentUser.name) || '',
+    active: document.getElementById('rec-active').checked,
+  };
+
+  if (recEditId) {
+    recItems = recItems.map(i => i.id === recEditId ? { ...i, ...base } : i);
+  } else {
+    recItems.push({ id: 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8), ...base });
+  }
+  recPersist();
+  closeRecModal();
+  renderRecurring();
+}
+
+function initRecurring() {
+  document.getElementById('btn-open-recurring').addEventListener('click', () => navigate('recurring'));
+  document.getElementById('rec-back').addEventListener('click', () => navigate('settings'));
+  document.getElementById('rec-add').addEventListener('click', () => openRecModal(null));
+  document.getElementById('rec-modal-close').addEventListener('click', closeRecModal);
+  document.getElementById('rec-modal-overlay').addEventListener('click', closeRecModal);
+  document.getElementById('rec-save').addEventListener('click', recSaveModal);
+  document.querySelectorAll('#rec-freq button').forEach(b => b.addEventListener('click', () => recSetFreq(b.dataset.freq)));
 }
 
 // ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
