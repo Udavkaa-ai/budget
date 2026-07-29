@@ -236,7 +236,8 @@ export interface RecurringItem {
   user: string;         // кто платит
   active: boolean;
   freq: RecurringFreq;  // как часто
-  day: number;          // monthly: день месяца 1–31; weekly: день недели 0(вс)–6(сб); daily: не используется
+  day: number;          // monthly: день месяца 1–31; weekly (легаси): один день недели; daily: не используется
+  days?: number[];      // weekly: выбранные дни недели getDay 0(вс)–6(сб), напр. будни [1,2,3,4,5]
   times: number;        // сколько раз за период (напр. маршрутка 2 раза в день)
   lastPaid?: string;    // ключ последнего оплаченного периода (YYYY-MM-DD / понедельник недели / YYYY-MM)
   paidCount?: number;   // сколько раз внесено в периоде lastPaid

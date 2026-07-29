@@ -13,7 +13,7 @@ import { Field, PrimaryButton } from '../components/UI';
 import { haptics } from '../haptics';
 import {
   remaining, dueDate, dueLabel, daysUntil, scheduleLabel, periodKey, paidInPeriod,
-  FREQ_LABEL, WEEKDAYS_SHORT,
+  weekdaysOf, FREQ_LABEL, WEEKDAYS_SHORT, WEEKDAYS_ORDER,
 } from '../recurring';
 
 function fmt(n: number) {
@@ -25,10 +25,15 @@ function genId() {
 
 type Draft = {
   id?: string; name: string; amount: string; category: string;
-  freq: RecurringFreq; day: number; times: string; user: string; active: boolean;
+  freq: RecurringFreq; day: number; days: number[]; times: string; user: string; active: boolean;
 };
 
 const FREQS: RecurringFreq[] = ['daily', 'weekly', 'monthly'];
+const WEEKDAY_PRESETS: { label: string; days: number[] }[] = [
+  { label: 'Будни', days: [1, 2, 3, 4, 5] },
+  { label: 'Выходные', days: [0, 6] },
+  { label: 'Каждый день', days: [1, 2, 3, 4, 5, 6, 0] },
+];
 
 export function RecurringScreen({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useTheme();
@@ -82,24 +87,31 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
     ]);
   };
 
-  const openNew = () => setDraft({ name: '', amount: '', category: cats[0] ?? '', freq: 'monthly', day: 1, times: '1', user: user?.name ?? '', active: true });
+  const openNew = () => setDraft({ name: '', amount: '', category: cats[0] ?? '', freq: 'monthly', day: 1, days: [1, 2, 3, 4, 5], times: '1', user: user?.name ?? '', active: true });
   const openEdit = (i: RecurringItem) => setDraft({
     id: i.id, name: i.name, amount: String(i.amount), category: i.category,
-    freq: i.freq || 'monthly', day: i.day, times: String(Math.max(1, i.times || 1)), user: i.user, active: i.active,
+    freq: i.freq || 'monthly', day: i.day, days: (i.freq || 'monthly') === 'weekly' ? weekdaysOf(i) : [1, 2, 3, 4, 5],
+    times: String(Math.max(1, i.times || 1)), user: i.user, active: i.active,
+  });
+
+  const toggleDay = (wd: number) => setDraft(d => {
+    if (!d) return d;
+    const has = d.days.includes(wd);
+    return { ...d, days: has ? d.days.filter(x => x !== wd) : [...d.days, wd] };
   });
 
   const saveDraft = async () => {
     if (!draft) return;
     const amount = parseInt(draft.amount.replace(/[^\d]/g, '')) || 0;
     const times = Math.max(1, parseInt(draft.times) || 1);
-    let day = draft.day;
-    if (draft.freq === 'monthly') day = Math.min(Math.max(day, 1), 31);
-    if (draft.freq === 'weekly') day = ((day % 7) + 7) % 7;
     if (!draft.name.trim()) { Alert.alert('Введите название'); return; }
     if (amount <= 0) { Alert.alert('Введите сумму'); return; }
+    if (draft.freq === 'weekly' && draft.days.length === 0) { Alert.alert('Выберите хотя бы один день недели'); return; }
+    const day = draft.freq === 'monthly' ? Math.min(Math.max(draft.day, 1), 31) : (draft.days[0] ?? 1);
+    const days = draft.freq === 'weekly' ? WEEKDAYS_ORDER.filter(w => draft.days.includes(w)) : [];
     const base = {
       name: draft.name.trim(), amount, category: draft.category, user: draft.user || (user?.name ?? ''),
-      active: draft.active, freq: draft.freq, day, times,
+      active: draft.active, freq: draft.freq, day, days, times,
     };
     const next = draft.id
       ? items.map(i => i.id === draft.id ? { ...i, ...base } : i)
@@ -197,7 +209,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
                 <Text style={[styles.lbl, { color: t.textMuted }]}>Как часто</Text>
                 <View style={styles.chips}>
                   {FREQS.map(f => (
-                    <TouchableOpacity key={f} onPress={() => setDraft(d => d && ({ ...d, freq: f, day: f === 'weekly' ? 1 : d.day }))}
+                    <TouchableOpacity key={f} onPress={() => setDraft(d => d && ({ ...d, freq: f, days: f === 'weekly' && d.days.length === 0 ? [1, 2, 3, 4, 5] : d.days }))}
                       style={[styles.chip, { backgroundColor: draft?.freq === f ? t.primary : t.surface2, borderColor: t.border }]}>
                       <Text style={{ color: draft?.freq === f ? '#fff' : t.text, fontSize: font.sm }}>{FREQ_LABEL[f]}</Text>
                     </TouchableOpacity>
@@ -206,14 +218,25 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
 
                 {draft?.freq === 'weekly' && (
                   <>
-                    <Text style={[styles.lbl, { color: t.textMuted }]}>День недели</Text>
-                    <View style={styles.chips}>
-                      {[1, 2, 3, 4, 5, 6, 0].map(wd => (
-                        <TouchableOpacity key={wd} onPress={() => setDraft(d => d && ({ ...d, day: wd }))}
-                          style={[styles.chip, { backgroundColor: draft?.day === wd ? t.primary : t.surface2, borderColor: t.border }]}>
-                          <Text style={{ color: draft?.day === wd ? '#fff' : t.text, fontSize: font.sm }}>{WEEKDAYS_SHORT[wd]}</Text>
+                    <Text style={[styles.lbl, { color: t.textMuted }]}>Дни недели</Text>
+                    <View style={[styles.chips, { marginBottom: spacing.sm }]}>
+                      {WEEKDAY_PRESETS.map(p => (
+                        <TouchableOpacity key={p.label} onPress={() => setDraft(d => d && ({ ...d, days: [...p.days] }))}
+                          style={[styles.preset, { borderColor: t.primary }]}>
+                          <Text style={{ color: t.primary, fontSize: font.xs, fontWeight: '600' }}>{p.label}</Text>
                         </TouchableOpacity>
                       ))}
+                    </View>
+                    <View style={styles.chips}>
+                      {WEEKDAYS_ORDER.map(wd => {
+                        const on = !!draft?.days.includes(wd);
+                        return (
+                          <TouchableOpacity key={wd} onPress={() => toggleDay(wd)}
+                            style={[styles.chip, { backgroundColor: on ? t.primary : t.surface2, borderColor: t.border }]}>
+                            <Text style={{ color: on ? '#fff' : t.text, fontSize: font.sm }}>{WEEKDAYS_SHORT[wd]}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   </>
                 )}
@@ -278,4 +301,5 @@ const styles = StyleSheet.create({
   lbl:     { fontSize: font.xs, letterSpacing: 0.5, marginTop: spacing.md, marginBottom: 4 },
   chips:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip:    { borderRadius: radius.xl, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  preset:  { borderRadius: radius.xl, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: 6 },
 });
