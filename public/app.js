@@ -4183,10 +4183,107 @@ function recScheduleLabel(item) {
   return `${item.day}-го${times}`;
 }
 
+// ─── Автопоиск повторяющихся платежей (локально, приватно, работает с E2E) ──────
+const recNorm = s => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const REC_DAY_MS = 86400000;
+function recParseDMY(s) {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s || '');
+  return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+}
+function recMonday(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+function recMedian(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b), m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function recModeNum(arr) {
+  const c = new Map(); let best = arr[0], bestN = 0;
+  for (const v of arr) { const n = (c.get(v) || 0) + 1; c.set(v, n); if (n > bestN) { bestN = n; best = v; } }
+  return best;
+}
+function recModeStr(arr) {
+  const c = new Map(); let best = arr[0] || '', bestN = 0;
+  for (const v of arr) { const n = (c.get(v) || 0) + 1; c.set(v, n); if (n > bestN) { bestN = n; best = v; } }
+  return best;
+}
+const recDkey = d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+function recSuggestionKey(name, category, amount) { return `${recNorm(name)}|${category}|${amount}`; }
+
+function recClassify(dates) {
+  const seen = new Set();
+  const distinct = dates.filter(d => { const k = recDkey(d); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.getTime() - b.getTime());
+  if (distinct.length < 3) return null;
+  const range = Math.round((distinct[distinct.length - 1].getTime() - distinct[0].getTime()) / REC_DAY_MS);
+  if (range < 5) return null;
+
+  const months = new Set(distinct.map(d => `${d.getFullYear()}-${d.getMonth()}`));
+  if (months.size >= 3 && distinct.length <= months.size * 1.6) {
+    const dom = distinct.map(d => d.getDate());
+    const day = recModeNum(dom);
+    if (dom.filter(x => Math.abs(x - day) <= 3).length >= dom.length * 0.7) {
+      return { freq: 'monthly', day, days: [], times: Math.max(1, Math.round(dates.length / months.size)) };
+    }
+  }
+
+  const weeks = new Set(distinct.map(d => recDkey(recMonday(d))));
+  if (weeks.size < 2) return null;
+  const wdWeeks = new Map();
+  for (const d of distinct) {
+    const wd = d.getDay();
+    if (!wdWeeks.has(wd)) wdWeeks.set(wd, new Set());
+    wdWeeks.get(wd).add(recDkey(recMonday(d)));
+  }
+  const active = [];
+  for (const [wd, wset] of wdWeeks) if (wset.size / weeks.size >= 0.5) active.push(wd);
+  if (active.length === 0) return null;
+
+  const perDate = new Map();
+  for (const d of dates) {
+    if (!active.includes(d.getDay())) continue;
+    perDate.set(recDkey(d), (perDate.get(recDkey(d)) || 0) + 1);
+  }
+  const times = Math.max(1, Math.round(recMedian([...perDate.values()])));
+  if (active.length >= 7) return { freq: 'daily', day: 0, days: [], times };
+  const days = REC_WEEKDAYS_ORDER.filter(w => active.includes(w));
+  return { freq: 'weekly', day: days[0], days, times };
+}
+
+function recDetect(expenses, existing, minCount = 3, dismissed = []) {
+  const skip = new Set([...existing.map(i => recSuggestionKey(i.name, i.category, i.amount)), ...dismissed]);
+  const groups = new Map(), meta = new Map();
+  for (const e of expenses) {
+    const d = recParseDMY(e.date);
+    if (!d || !(e.amount > 0)) continue;
+    const name = (e.description || e.category || '').trim();
+    if (!name) continue;
+    const key = recSuggestionKey(name, e.category, e.amount);
+    if (!groups.has(key)) { groups.set(key, []); meta.set(key, { name, category: e.category, amount: e.amount }); }
+    groups.get(key).push({ d, user: e.user });
+  }
+  const out = [];
+  for (const [key, arr] of groups) {
+    if (arr.length < minCount || skip.has(key)) continue;
+    const detected = recClassify(arr.map(x => x.d));
+    if (!detected) continue;
+    const m = meta.get(key);
+    out.push({ key, name: m.name, amount: m.amount, category: m.category, user: recModeStr(arr.map(x => x.user)), count: arr.length, ...detected });
+  }
+  return out.sort((a, b) => b.count - a.count).slice(0, 8);
+}
+
 let recItems = [];
 let recEditId = null;
 let recFreq = 'monthly';
 let recBusy = false;
+let recSuggestions = [];
+let recDismissed = [];
+let recScanning = false;
+let recScanned = false;
 
 async function loadRecurring() {
   try { recItems = await apiJson('GET', '/api/recurring'); } catch { recItems = []; }
@@ -4243,6 +4340,75 @@ function renderRecurring() {
   upEl.querySelectorAll('[data-pay]').forEach(b => b.addEventListener('click', () => recPay(b.dataset.pay)));
   listEl.querySelectorAll('[data-edit]').forEach(e => e.addEventListener('click', () => openRecModal(e.dataset.edit)));
   listEl.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => recDelete(b.dataset.del)));
+  renderRecSuggestions();
+}
+
+function renderRecSuggestions() {
+  const el = document.getElementById('rec-suggestions');
+  if (!el) return;
+  const btn = `<button id="rec-scan" class="btn btn-primary btn-full"${recScanning ? ' disabled' : ''}>${recScanning ? 'Сканирую…' : '🔍 Найти повторяющиеся'}</button>`;
+  let body = '';
+  if (recSuggestions.length) {
+    body = recSuggestions.map(s => `<div class="rec-row rec-suggest">
+      <span class="rec-ico">${CATEGORY_ICONS[s.category] || '❓'}</span>
+      <span class="rec-main">
+        <div class="rec-name">${esc(s.name)} · ${fmt(s.amount)}</div>
+        <div class="rec-sub">${recScheduleLabel(s)} · встречалось ${s.count}×</div>
+        <div class="rec-suggest-actions">
+          <button class="rec-pay" data-add="${esc(s.key)}">Добавить</button>
+          <button class="rec-skip" data-skip="${esc(s.key)}">Скрыть</button>
+        </div>
+      </span>
+    </div>`).join('');
+  } else if (recScanned) {
+    body = '<div class="rec-empty">Новых повторяющихся платежей не нашлось — либо истории мало, либо всё уже оформлено.</div>';
+  }
+  el.innerHTML = `<div class="rec-card">
+    <div class="rec-card-title">🔍 Автопоиск</div>
+    <div class="rec-scan-hint">Просмотрю расходы за 3 месяца и предложу оформить регулярные. Всё считается на устройстве.</div>
+    ${btn}
+    ${body}
+  </div>`;
+  const scanBtn = document.getElementById('rec-scan');
+  if (scanBtn) scanBtn.addEventListener('click', recScan);
+  el.querySelectorAll('[data-add]').forEach(b => b.addEventListener('click', () => recAddSuggestion(b.dataset.add)));
+  el.querySelectorAll('[data-skip]').forEach(b => b.addEventListener('click', () => recDismissSuggestion(b.dataset.skip)));
+}
+
+async function recScan() {
+  recScanning = true; renderRecSuggestions();
+  try {
+    const base = new Date();
+    const months = [0, 1, 2].map(k => {
+      const d = new Date(base.getFullYear(), base.getMonth() - k, 1);
+      return { m: d.getMonth() + 1, y: d.getFullYear() };
+    });
+    const lists = await Promise.all(months.map(({ m, y }) =>
+      apiJson('GET', `/api/expenses/month?month=${m}&year=${y}`)
+        .then(r => Array.isArray(r) ? r : (r.expenses || [])).catch(() => [])));
+    recSuggestions = recDetect(lists.flat(), recItems, 3, recDismissed);
+    recScanned = true;
+  } catch { showToastInfo('Не удалось просканировать'); }
+  finally { recScanning = false; renderRecSuggestions(); }
+}
+
+function recAddSuggestion(key) {
+  const s = recSuggestions.find(x => x.key === key);
+  if (!s) return;
+  recItems.push({
+    id: 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+    name: s.name, amount: s.amount, category: s.category, user: s.user || (currentUser && currentUser.name) || '',
+    active: true, freq: s.freq, day: s.day, days: s.days, times: s.times,
+  });
+  recSuggestions = recSuggestions.filter(x => x.key !== key);
+  recPersist();
+  renderRecurring();
+}
+
+function recDismissSuggestion(key) {
+  recDismissed.push(key);
+  recSuggestions = recSuggestions.filter(x => x.key !== key);
+  renderRecSuggestions();
 }
 
 async function recPay(id) {
