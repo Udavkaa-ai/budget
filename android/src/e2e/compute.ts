@@ -1,5 +1,5 @@
 import type {
-  Expense, SummaryData, BudgetPlan, Cashflow, UnifiedChart, Goal,
+  Expense, SummaryData, BudgetPlan, Cashflow, UnifiedChart, Goal, RecurringItem,
 } from '../api/client';
 import {
   allLocalExpenses, addLocalExpense, updateLocalExpense, deleteLocalExpense,
@@ -64,6 +64,12 @@ export async function getBudgetPlan(): Promise<BudgetPlan> {
   return d?.value ?? { categoryBudgets: {}, incomes: {} };
 }
 export async function saveBudgetPlan(plan: BudgetPlan) { await setLocalDoc('plan', plan, { dirty: true }); bump(); }
+
+// Регулярные платежи — E2E-документ 'recurring' (синхронизируется как план/цели)
+export async function getRecurring(): Promise<RecurringItem[]> {
+  return (await getLocalDoc<RecurringItem[]>('recurring'))?.value ?? [];
+}
+export async function saveRecurring(list: RecurringItem[]) { await setLocalDoc('recurring', list, { dirty: true }); bump(); }
 
 export async function getPlannedMonthly(): Promise<number> {
   const d = await getLocalDoc<{ plannedMonthly?: number }>('meta');

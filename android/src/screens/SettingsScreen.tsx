@@ -17,6 +17,7 @@ import { useCategories, refreshCategories } from '../categories';
 import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate, useHasPin, setPin, clearPin } from '../applock';
 import { PinPad } from '../components/PinPad';
 import { Field, PrimaryButton } from '../components/UI';
+import { RecurringScreen } from './RecurringScreen';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
@@ -91,6 +92,7 @@ export default function SettingsScreen() {
   const [importVisible, setImportVisible] = useState(false);
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recurringVisible, setRecurringVisible] = useState(false);
 
   const [familyName, setFamilyName] = useState('');
   const [plannedMonthly, setPlannedMonthly] = useState('');
@@ -730,6 +732,15 @@ export default function SettingsScreen() {
         </Card>
         </View>
 
+        {/* Планирование */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Планирование</Text>
+          <TouchableOpacity style={styles.row} onPress={() => setRecurringVisible(true)}>
+            <Text style={{ color: t.text }}>🔁 Регулярные платежи</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+        </Card>
+
         {/* Data */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Данные</Text>
@@ -823,6 +834,8 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      <RecurringScreen visible={recurringVisible} onClose={() => setRecurringVisible(false)} />
 
       {/* Join family modal */}
       <Modal visible={joinVisible} animationType="slide" transparent onRequestClose={() => setJoinVisible(false)}>

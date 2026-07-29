@@ -224,6 +224,26 @@ export const budgetPlan = {
     : api.put<{ ok: boolean }>('/api/budget-plan', plan),
 };
 
+// ─── Regular / recurring payments ────────────────────────────────────────────
+
+export interface RecurringItem {
+  id: string;
+  name: string;
+  amount: number;
+  category: string;
+  day: number;          // день месяца 1–31
+  user: string;         // кто платит
+  active: boolean;
+  lastPaid?: string;    // "YYYY-MM" — когда уже внесён в этом месяце
+}
+
+export const recurring = {
+  get:  () => isE2E() ? e2e.getRecurring() : api.get<RecurringItem[]>('/api/recurring'),
+  save: (list: RecurringItem[]) => isE2E()
+    ? e2e.saveRecurring(list).then(() => ({ ok: true }))
+    : api.put<{ ok: boolean }>('/api/recurring', list),
+};
+
 // ─── Goals ───────────────────────────────────────────────────────────────────
 
 export interface Goal {
