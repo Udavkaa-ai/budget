@@ -801,7 +801,7 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
   <g class="prop p-wrench" transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g>
   <g class="prop p-magnifier"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
   <g class="prop p-hearts" fill="#FF5C87"><path class="heart" d="M60 96 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q0 7 -10 13 q-10 -6 -10 -13 Z"/><path class="heart" d="M124 92 a4 4 0 0 1 8 0 a4 4 0 0 1 8 0 q0 5 -8 10 q-8 -5 -8 -10 Z"/></g>
-  <g class="prop p-plus"><g class="plus-badge"><circle cx="168" cy="98" r="18" fill="#5947E0"/><rect x="158" y="93.5" width="20" height="9" rx="4.5" fill="#fff"/><rect x="163.5" y="88" width="9" height="20" rx="4.5" fill="#fff"/></g></g>
+  <g class="prop p-plus"><g class="plus-badge"><circle cx="100" cy="150" r="34" fill="#5947E0"/><rect x="80" y="143" width="40" height="14" rx="7" fill="#fff"/><rect x="93" y="130" width="14" height="40" rx="7" fill="#fff"/></g><circle cx="72" cy="166" r="11" fill="#8E76F5"/><circle cx="128" cy="166" r="11" fill="#8E76F5"/></g>
 </svg>`;
 
 function ensureFinikDefs() {
@@ -844,7 +844,7 @@ function finikActivate() {
   window.addEventListener('pointermove', e => { ev = e; if (!raf) raf = requestAnimationFrame(track); }, { passive: true });
 
   // тап по Финику — одна из 4 случайных реакций
-  const TAPS = ['fk-tap-jump', 'fk-tap-spin', 'fk-tap-wobble', 'fk-tap-hearts'];
+  const TAPS = ['fk-tap-jump', 'fk-tap-coin', 'fk-tap-wobble', 'fk-tap-hearts'];
   document.addEventListener('click', e => {
     const wrap = e.target.closest('.finik');
     if (!wrap || wrap.classList.contains('finik-walker') || wrap.classList.contains('finik-wander') || wrap.closest('.fab')) return;
@@ -877,8 +877,14 @@ function finikWander() {
   const app = document.getElementById('app');
   let dir = 0; // чередуем: слева-направо, затем справа-налево
   const spawn = () => {
+    // не выходим гулять, если на экране уже есть Финики (чтобы их не стало трое)
+    let others = 0;
+    document.querySelectorAll('.finik:not(.finik-wander)').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.bottom > 0 && r.top < innerHeight) others++;
+    });
     const visible = app && !app.classList.contains('hidden') && !document.hidden;
-    if (visible && !document.querySelector('.finik-wander')) {
+    if (visible && others < 2 && !document.querySelector('.finik-wander')) {
       const el = document.createElement('div');
       el.className = 'finik finik-wander' + (dir % 2 ? ' rtl' : '');
       dir++;
