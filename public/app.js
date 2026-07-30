@@ -750,6 +750,62 @@ function closeSheet() {
   resetAddForm();
 }
 
+// ─── ФИНИК — маскот (переиспользуемый SVG с эмоциями) ────────────────────────
+const FINIK_DEFS = `<svg class="finik-defs" width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+  <linearGradient id="fk-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9B80FF"/><stop offset="1" stop-color="#5947E0"/></linearGradient>
+  <radialGradient id="fk-belly" cx="0.5" cy="0.4" r="0.7"><stop offset="0" stop-color="#F3EFFF"/><stop offset="1" stop-color="#DED3FF"/></radialGradient>
+</defs></svg>`;
+
+const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="idle" role="img" aria-label="Финик — помощник">
+  <ellipse cx="100" cy="196" rx="52" ry="9" fill="rgba(60,40,120,0.18)"/>
+  <g class="prop confetti">
+    <rect class="c-piece" x="60" y="30" width="7" height="10" rx="2" fill="#FF7AB3"/>
+    <rect class="c-piece" x="98" y="22" width="7" height="10" rx="2" fill="#34C7A0" style="animation-delay:.2s"/>
+    <rect class="c-piece" x="134" y="32" width="7" height="10" rx="2" fill="#FFC24B" style="animation-delay:.4s"/>
+    <rect class="c-piece" x="80" y="26" width="7" height="10" rx="2" fill="#8A6BFF" style="animation-delay:.55s"/>
+    <rect class="c-piece" x="118" y="26" width="7" height="10" rx="2" fill="#FF7AB3" style="animation-delay:.3s"/>
+  </g>
+  <g class="f-body">
+    <g class="arm-l"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
+    <g class="arm-r"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
+    <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
+    <ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/>
+    <rect x="72" y="132" width="56" height="44" rx="12" fill="url(#fk-belly)"/>
+    <line x1="82" y1="145" x2="118" y2="145" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <line x1="82" y1="165" x2="104" y2="165" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <ellipse class="cheek" cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8"/><ellipse class="cheek" cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8"/>
+    <line x1="92" y1="96" x2="108" y2="96" stroke="#FFC24B" stroke-width="4"/>
+    <circle cx="79" cy="97" r="19" fill="#FFFFFF"/><circle cx="121" cy="97" r="19" fill="#FFFFFF"/>
+    <g class="pupil"><circle cx="79" cy="98" r="7.5" fill="#241C42"/><circle cx="82" cy="95" r="2.4" fill="#fff"/></g>
+    <g class="pupil"><circle cx="121" cy="98" r="7.5" fill="#241C42"/><circle cx="124" cy="95" r="2.4" fill="#fff"/></g>
+    <rect class="lid" x="60" y="79" width="38" height="19" rx="9" fill="url(#fk-body)"/>
+    <rect class="lid" x="102" y="79" width="38" height="19" rx="9" fill="url(#fk-body)"/>
+    <circle cx="79" cy="97" r="19" fill="none" stroke="#FFC24B" stroke-width="4"/><circle cx="121" cy="97" r="19" fill="none" stroke="#FFC24B" stroke-width="4"/>
+    <g class="brow brow-l"><rect x="66" y="72" width="20" height="6" rx="3" fill="#3A2E80"/></g>
+    <g class="brow brow-r"><rect x="114" y="72" width="20" height="6" rx="3" fill="#3A2E80"/></g>
+    <path class="mouth m-smile" d="M88 126 Q100 136 112 126" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path class="mouth m-grin" d="M86 124 Q100 142 114 124 Q100 132 86 124 Z" fill="#3A2E80"/>
+    <path class="mouth m-frown" d="M88 132 Q100 123 112 132" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <ellipse class="mouth m-focus" cx="100" cy="128" rx="5" ry="4" fill="#3A2E80"/>
+    <line class="mouth m-flat" x1="90" y1="128" x2="110" y2="128" stroke="#3A2E80" stroke-width="4" stroke-linecap="round"/>
+    <g class="prop p-coin"><circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="170" y="110" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
+    <g class="prop p-pencil"><rect x="150" y="150" width="8" height="34" rx="3" fill="#FFC24B" transform="rotate(24 154 167)"/><path d="M150 182 l8 0 l-4 8 Z" fill="#3A2E80" transform="rotate(24 154 167)"/></g>
+    <g class="prop p-sweat"><path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7"/></g>
+  </g>
+  <g class="prop p-ledger"><rect x="120" y="150" width="46" height="34" rx="5" fill="#fff" stroke="#DED3FF" stroke-width="2" transform="rotate(-8 143 167)"/><line x1="128" y1="160" x2="158" y2="158" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/><line x1="128" y1="168" x2="158" y2="166" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/></g>
+  <g class="prop sparkle" fill="#FFC24B"><path d="M40 60 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z"/><path d="M168 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3"/></g>
+  <g class="prop p-think" fill="#5947E0"><circle class="t-dot" cx="150" cy="70" r="4"/><circle class="t-dot" cx="164" cy="58" r="5.5"/><circle class="t-dot" cx="180" cy="44" r="7"/></g>
+</svg>`;
+
+function ensureFinikDefs() {
+  if (!document.querySelector('.finik-defs')) document.body.insertAdjacentHTML('beforeend', FINIK_DEFS);
+}
+// Возвращает HTML маскота с заданной эмоцией. size: 'finik-sm' | 'finik-md'
+function finik(emotion = 'idle', size = 'finik-sm') {
+  return `<div class="finik ${size}">${FINIK_SVG.replace('data-emotion="idle"', `data-emotion="${emotion}"`)}</div>`;
+}
+
 // ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
 
 let lastAnalysisText = null;
@@ -806,7 +862,7 @@ async function getFinancialAnalysis() {
   btn.textContent = '⏳ Анализирую...';
 
   const body = document.getElementById('analysis-body');
-  body.innerHTML = '<div class="analysis-loading"><div class="analysis-spinner"></div><p>Собираю данные и готовлю анализ…</p></div>';
+  body.innerHTML = `<div class="analysis-loading">${finik('thinking', 'finik-md')}<p>Финик собирает данные и готовит анализ…</p></div>`;
   document.getElementById('analysis-share').classList.add('hidden');
   lastAnalysisText = null;
   openAnalysis();
@@ -2882,6 +2938,7 @@ async function initApp() {
   initGoalsScreen();
   initRecurring();
   initChat();
+  ensureFinikDefs();
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
@@ -3590,6 +3647,8 @@ function renderAchievements() {
   const cnt = ACHIEVEMENTS.filter(a => s.has(a.id)).length;
   const cntEl = document.getElementById('achievements-count');
   if (cntEl) cntEl.textContent = `${cnt} / ${ACHIEVEMENTS.length}`;
+  const fEl = document.getElementById('ach-finik');
+  if (fEl) fEl.innerHTML = finik(cnt > 0 ? 'goal' : 'idle', 'finik-sm');
   box.innerHTML = ACHIEVEMENTS.map(a => {
     const got = s.has(a.id);
     const hidden = a.secret && !got;
@@ -3800,7 +3859,10 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
       <text x="${l90x}"  y="${l90y}"  text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">90%</text>
       <text x="${l160x}" y="${l160y}" text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">160%</text>
     </svg>
-    <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
+    <div class="bablometr-verdict-row">
+      ${finik(pctFmt <= 70 ? 'income' : pctFmt <= 90 ? 'idle' : 'overspend', 'finik-sm')}
+      <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
+    </div>
     <div class="bablometr-stats">
       <div class="bablometr-stat">
         <span class="bablometr-stat-label">Потрачено</span>
