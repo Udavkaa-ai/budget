@@ -168,7 +168,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
             <Text style={{ color: t.primary }}>Назад</Text>
           </TouchableOpacity>
           <Text style={[styles.title, { color: t.text }]}>Регулярные платежи</Text>
-          <TouchableOpacity onPress={openNew}><Text style={{ color: t.primary, fontSize: 26, fontWeight: '700' }}>＋</Text></TouchableOpacity>
+          <TouchableOpacity onPress={openNew} accessibilityLabel="Добавить платёж" accessibilityRole="button"><Text style={{ color: t.primary, fontSize: 26, fontWeight: '700' }}>＋</Text></TouchableOpacity>
         </View>
 
         {loading ? (

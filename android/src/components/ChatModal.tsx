@@ -110,6 +110,8 @@ export function ChatModal({ visible, onClose, month, year, monthLabel }: {
               onSubmitEditing={send}
             />
             <TouchableOpacity
+              accessibilityLabel="Отправить сообщение"
+              accessibilityRole="button"
               style={[styles.sendBtn, { backgroundColor: input.trim() && !loading ? '#a855f7' : t.surface2 }]}
               onPress={send}
               disabled={!input.trim() || loading}
