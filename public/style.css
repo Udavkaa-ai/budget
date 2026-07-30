@@ -10,7 +10,7 @@
   --warning: #FFB47A;
   --income: #7AE0C3;
   --text: #1A1530;
-  --text-muted: rgba(26,21,48,0.52);
+  --text-muted: rgba(26,21,48,0.62); /* WCAG AA: 0.52 давал 3.4:1, теперь 4.6:1 */
   --border: rgba(255,255,255,0.65);
   --border-soft: rgba(89,71,224,0.12);
   --bg: #EAE4FF;
