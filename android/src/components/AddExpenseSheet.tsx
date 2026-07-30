@@ -48,6 +48,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   // Без премиума открываем форму, чтобы не упереться в платный разбор.
   const [mode, setMode] = useState<'form' | 'text'>(premium ? 'text' : 'form');
   const [freeText, setFreeText] = useState('');
+  const [freeTextFocused, setFreeTextFocused] = useState(false);
   const [parsing, setParsing] = useState(false);
   // Тематическое превью ИИ-разбора (вместо системного Alert) — позиции редактируемы
   const [preview, setPreview] = useState<{ items: ParsedExpense[]; source: 'text' | 'photo' } | null>(null);
@@ -261,7 +262,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       // на Android «пробивают» лист ввода
       containerStyle={{ elevation: 30, zIndex: 30 }}
     >
-      <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg }}>
+      <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
         <View style={styles.titleRow}>
           <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
           <TouchableOpacity
@@ -300,17 +301,33 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
               Напишите расходы в свободной форме — ИИ разберёт их сам
             </Text>
             <TextInput
-              style={[styles.input, styles.textArea, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              style={[
+                styles.freeText,
+                {
+                  color: t.text,
+                  backgroundColor: t.surface2,
+                  borderColor: freeTextFocused ? t.primary : t.border,
+                },
+                freeTextFocused && styles.freeTextFocused,
+                freeTextFocused && { shadowColor: t.primary },
+              ]}
               value={freeText}
               onChangeText={setFreeText}
-              placeholder="Пример: продукты 2300, вчера такси 450, кофе 180"
+              onFocus={() => setFreeTextFocused(true)}
+              onBlur={() => setFreeTextFocused(false)}
+              placeholder={'Пример:\nпродукты 2300\nвчера такси 450\nкофе 180'}
               placeholderTextColor={t.textMuted}
               multiline
+              textAlignVertical="top"
             />
+            <Text style={[styles.freeHint, { color: t.textMuted }]}>
+              По одной трате на строку или через запятую — ИИ сам определит суммы, даты и категории.
+            </Text>
             <TouchableOpacity
-              style={[styles.submitBtn, { backgroundColor: '#a855f7', opacity: parsing ? 0.6 : 1 }]}
+              style={[styles.submitBtn, { backgroundColor: '#9333EA', opacity: parsing ? 0.7 : 1 }]}
               onPress={parseFreeText}
               disabled={parsing}
+              activeOpacity={0.85}
             >
               {parsing
                 ? <ActivityIndicator color="#fff" />
@@ -498,7 +515,15 @@ const styles = StyleSheet.create({
   scanBtn:   { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   modeRow:   { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   modeBtn:   { flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
-  textArea:  { height: 110, textAlignVertical: 'top', marginTop: spacing.sm },
+  freeText:  {
+    borderRadius: radius.md, borderWidth: 1.5,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+    fontSize: 16, lineHeight: 22, minHeight: 140, marginTop: spacing.sm,
+  },
+  freeTextFocused: {
+    shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3,
+  },
+  freeHint:  { fontSize: font.xs, lineHeight: 16, marginTop: spacing.sm, marginBottom: spacing.xs },
   label:     { fontSize: font.sm, marginBottom: spacing.xs, marginTop: spacing.md },
   input:     { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md },
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
