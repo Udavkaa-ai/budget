@@ -17,6 +17,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
+import { Finik } from '../components/Finik';
 import PagerView from 'react-native-pager-view';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
@@ -312,7 +313,12 @@ export default function HomeScreen() {
           keyExtractor={e => e.id}
           refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
-          ListEmptyComponent={<Text style={[styles.empty, { color: t.textMuted }]}>Пока нет расходов за этот день — добавьте первый кнопкой «+»</Text>}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}>
+              <Finik emotion="record" size={130} />
+              <Text style={[styles.empty, { color: t.textMuted, marginTop: spacing.sm }]}>Пока нет расходов за этот день — добавьте первый кнопкой «+»</Text>
+            </View>
+          }
           renderItem={({ item }) => renderRowContent(item)}
         />
       </View>

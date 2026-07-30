@@ -16,6 +16,7 @@ import { expenses, ai, type AuthUser, type ParsedExpense } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
+import { Finik } from '../components/Finik';
 import { checkOnAddExpense } from '../achievements';
 import { beginSystemUi, endSystemUi } from '../applock';
 
@@ -291,7 +292,10 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     >
       <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 96 }} keyboardShouldPersistTaps="handled">
         <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 }}>
+            <Finik emotion="record" size={42} />
+            <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
+          </View>
           <TouchableOpacity
             style={[styles.scanBtn, { backgroundColor: t.surface2 }]}
             onPress={scanReceipt}

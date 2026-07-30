@@ -11,6 +11,23 @@ import { goToTab } from '../navigation';
 import { measureTarget, measureNode, scrollTargetIntoView, type Rect } from '../tourTargets';
 import { openHelp } from '../help';
 import { haptics } from '../haptics';
+import { Finik, type FinikEmotion } from './Finik';
+
+// Эмоция Финика для каждой карточки инструктажа (по заголовку — устойчиво к фильтрации шагов)
+const FINIK_BY_TITLE: Record<string, FinikEmotion> = {
+  'Привет!': 'income',
+  'Шаг 1. Внесите расход': 'record',
+  'Кто потратил': 'idle',
+  'Шаг 2. Итоги месяца': 'idle',
+  'Барометр бюджета': 'overspend',
+  'Динамика и доходы': 'income',
+  'Копите на общее': 'goal',
+  'Шаг 3. Позовите семью': 'idle',
+  'Соберите аналитику под себя': 'thinking',
+  'Приватность': 'idle',
+  'Премиум': 'thinking',
+  'Готово!': 'goal',
+};
 
 type Step = {
   tab?: string;          // на какую вкладку перейти перед показом
@@ -192,6 +209,9 @@ export function Tour() {
             : { top: insets.top + 20 },
         ]}
       >
+        <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
+          <Finik emotion={FINIK_BY_TITLE[step.title] ?? 'idle'} size={80} />
+        </View>
         <View style={styles.cardHead}>
           <View style={[styles.iconBadge, { backgroundColor: t.surface2 }]}>
             <Ionicons name={step.icon as never} size={22} color={t.primary} />

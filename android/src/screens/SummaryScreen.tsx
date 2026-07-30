@@ -15,6 +15,7 @@ import { useCategories } from '../categories';
 import { MonthPickerModal } from '../components/Pickers';
 import { usePremium } from '../premium';
 import { ChatModal } from '../components/ChatModal';
+import { Finik } from '../components/Finik';
 import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
@@ -846,8 +847,8 @@ export default function SummaryScreen() {
           </View>
           {aiLoading ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#a855f7" />
-              <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Анализирую расходы…</Text>
+              <Finik emotion="thinking" size={150} />
+              <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Финик считает и готовит разбор…</Text>
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ padding: spacing.lg }}>

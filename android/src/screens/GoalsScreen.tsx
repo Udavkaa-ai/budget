@@ -16,6 +16,7 @@ import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
 import { ACHIEVEMENTS, useAchievements, evaluateFromData } from '../achievements';
+import { Finik } from '../components/Finik';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
@@ -239,8 +240,9 @@ export default function GoalsScreen() {
             {/* Мои достижения */}
             <FadeInItem index={list.length + 1}>
             <Card>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                <Text style={{ fontSize: font.sm, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textMuted }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
+                <Finik emotion={count > 0 ? 'goal' : 'idle'} size={46} />
+                <Text style={{ flex: 1, fontSize: font.sm, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textMuted }}>
                   🏅 Мои достижения
                 </Text>
                 <Text style={{ color: t.primary, fontWeight: '700', fontSize: font.sm }}>{count} / {total}</Text>

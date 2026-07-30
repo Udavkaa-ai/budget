@@ -5,6 +5,7 @@ import Svg, {
   Defs, LinearGradient, Stop, G,
 } from 'react-native-svg';
 import { useTheme, font } from '../theme';
+import { Finik, type FinikEmotion } from './Finik';
 
 const CX = 130, CY = 132, R = 96, MAX = 160, STROKE = 16;
 
@@ -50,6 +51,18 @@ export function BudgetGauge({ pct }: { pct: number }) {
 
   const shown = Math.round(anim);
   const color = pct <= 70 ? '#22c55e' : pct <= 100 ? '#f59e0b' : '#ef4444';
+
+  // Финик отражает статус: перерасход — сперва машет «вы чего, транжиры!», потом стоит угрюмый
+  const status = pct <= 70 ? 'good' : pct <= 100 ? 'ok' : 'over';
+  const [barEmo, setBarEmo] = useState<FinikEmotion>(status === 'over' ? 'scold' : status === 'good' ? 'income' : 'idle');
+  useEffect(() => {
+    if (status === 'over') {
+      setBarEmo('scold');
+      const id = setTimeout(() => setBarEmo('grumpy'), 2300);
+      return () => clearTimeout(id);
+    }
+    setBarEmo(status === 'good' ? 'income' : 'idle');
+  }, [status]);
   const tip = polar(R - STROKE / 2 - 12, anim);
   // Направление стрелки и перпендикуляр — чтобы основание было конусом, а не точкой
   const ang = Math.PI * (1 - Math.min(Math.max(anim, 0), MAX) / MAX);
@@ -105,9 +118,14 @@ export function BudgetGauge({ pct }: { pct: number }) {
 
       <Text style={{ fontSize: 38, fontWeight: '800', marginTop: 2, color }}>{shown}%</Text>
       <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 0.5 }}>ФАКТ / ПЛАН</Text>
-      <Text style={{ color: t.text, fontSize: font.sm, marginTop: 2, fontWeight: '600' }}>
-        {pct > 100 ? 'Перерасход 🔴' : pct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
-      </Text>
+      <View style={{ alignSelf: 'stretch', minHeight: 84, marginTop: 4, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ position: 'absolute', left: 8, bottom: -4 }}>
+          <Finik emotion={barEmo} size={78} />
+        </View>
+        <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700' }}>
+          {pct > 100 ? 'Перерасход 🔴' : pct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
+        </Text>
+      </View>
     </View>
   );
 }
