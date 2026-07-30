@@ -770,10 +770,10 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
     <g class="arm-r"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
     <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
     <g class="leg leg-l"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g><g class="leg leg-r"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
-    <rect x="72" y="132" width="56" height="44" rx="12" fill="url(#fk-belly)"/>
-    <line x1="82" y1="145" x2="118" y2="145" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <rect x="72" y="143" width="56" height="40" rx="12" fill="url(#fk-belly)"/>
     <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
-    <line x1="82" y1="165" x2="104" y2="165" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
     <ellipse class="cheek" cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8"/><ellipse class="cheek" cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8"/>
     <line x1="92" y1="96" x2="108" y2="96" stroke="#FFC24B" stroke-width="4"/>
     <circle cx="79" cy="97" r="19" fill="#FFFFFF"/><circle cx="121" cy="97" r="19" fill="#FFFFFF"/>
@@ -802,8 +802,8 @@ function ensureFinikDefs() {
   if (!document.querySelector('.finik-defs')) document.body.insertAdjacentHTML('beforeend', FINIK_DEFS);
 }
 // Возвращает HTML маскота с заданной эмоцией. size: 'finik-sm' | 'finik-md' | 'finik-lg'
-function finik(emotion = 'idle', size = 'finik-sm') {
-  return `<div class="finik ${size}">${FINIK_SVG.replace('data-emotion="idle"', `data-emotion="${emotion}"`)}</div>`;
+function finik(emotion = 'idle', size = 'finik-sm', extra = '') {
+  return `<div class="finik ${size} ${extra}">${FINIK_SVG.replace('data-emotion="idle"', `data-emotion="${emotion}"`)}</div>`;
 }
 
 // Гуляющий Финик на верхней границе кнопок в контейнере [data-finik-walk]
@@ -3870,6 +3870,9 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
 
   const color   = pctFmt <= 70 ? '#22c55e' : pctFmt <= 90 ? '#f59e0b' : '#ef4444';
   const verdict = pctFmt <= 70 ? 'Экономим 🟢' : pctFmt <= 90 ? 'В норме 🟡' : 'Перерасход 🔴';
+  const overspent = pctFmt > 90;
+  // при перерасходе — сначала машет лапами «вы чего, транжиры!», потом стоит угрюмый
+  const barEmo = overspent ? 'scold' : pctFmt <= 70 ? 'income' : 'idle';
   const labelFill = 'rgba(26,21,48,0.65)';
 
   const [l0x, l0y]   = labelPt(START_A);   // 0%   at 150° (lower-left)
@@ -3906,7 +3909,7 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
       <text x="${l160x}" y="${l160y}" text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">160%</text>
     </svg>
     <div class="bablometr-verdict-row">
-      ${finik(pctFmt <= 70 ? 'income' : pctFmt <= 90 ? 'idle' : 'overspend', 'finik-md')}
+      ${finik(barEmo, 'finik-md', 'bar-finik')}
       <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
     </div>
     <div class="bablometr-stats">
@@ -3923,6 +3926,12 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
         <span class="bablometr-stat-value">${daysElapsed} из ${daysInMonth}</span>
       </div>
     </div>`;
+
+  // помахал лапами — и перешёл в угрюмое стояние
+  if (overspent) {
+    const svg = container.querySelector('.bar-finik .finik-svg');
+    if (svg) setTimeout(() => { if (svg.isConnected) svg.setAttribute('data-emotion', 'grumpy'); }, 2300);
+  }
 }
 
 let speedChartMonth = null; // { m, y } — currently viewed month
