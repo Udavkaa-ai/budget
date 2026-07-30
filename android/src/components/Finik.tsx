@@ -32,7 +32,7 @@ const FEATURES: Record<FinikEmotion, Feat> = {
   fix:       { mouth: 'focus', armR: -26, props: ['wrench'] },
   inspect:   { mouth: 'flat', browRdy: -4, armR: -40, props: ['coin', 'magnifier'] },
   wave:      { mouth: 'grin', cheeks: true, browDy: -3, armR: -78 },
-  plus:      { mouth: 'smile', armR: -40, props: ['plus'] },
+  plus:      { mouth: 'smile', armL: 52, armR: -52, props: ['plus'] },
 };
 
 const DUR: Record<FinikEmotion, number> = {
@@ -189,7 +189,7 @@ export function Finik({
         {has('shades') && (<G><Rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f" /><Rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f" /><Line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" strokeWidth="6" /><Rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /><Rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /></G>)}
         {has('wrench') && (<G transform="rotate(28 168 150)"><Rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4" /><Path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6" /><Circle cx="168" cy="123" r="5" fill="#F1EDFF" /></G>)}
         {has('magnifier') && (<G><Circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" strokeWidth="4" /><Rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)" /></G>)}
-        {has('plus') && (<G><Circle cx="168" cy="98" r="18" fill="#5947E0" /><Rect x="158" y="93.5" width="20" height="9" rx="4.5" fill="#fff" /><Rect x="163.5" y="88" width="9" height="20" rx="4.5" fill="#fff" /></G>)}
+        {has('plus') && (<G><Circle cx="100" cy="150" r="34" fill="#5947E0" /><Rect x="80" y="143" width="40" height="14" rx="7" fill="#fff" /><Rect x="93" y="130" width="14" height="40" rx="7" fill="#fff" /><Circle cx="72" cy="166" r="11" fill="#8E76F5" /><Circle cx="128" cy="166" r="11" fill="#8E76F5" /></G>)}
       </Svg>
     </Animated.View>
   );

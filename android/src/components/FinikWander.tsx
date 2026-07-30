@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Finik } from './Finik';
+import { navigationRef } from '../navigation';
+
+// Экраны, где Финики уже есть — там снизу не гуляем (чтобы их не стало трое)
+const BUSY = new Set(['Home', 'Goals']);
 
 const TAB_BAR = 60; // высота нижней панели (см. navigation/index.tsx)
 
@@ -19,6 +23,8 @@ export function FinikWander() {
     let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     const cross = () => {
+      const route = navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
+      if (route && BUSY.has(route)) return; // на «занятых» экранах не выходим
       const rtl = count.current % 2 === 1;
       count.current += 1;
       setWalk({ on: true, rtl });
