@@ -20,12 +20,12 @@ const FINIK_BY_TITLE: Record<string, FinikEmotion> = {
   'Кто потратил': 'idle',
   'Шаг 2. Итоги месяца': 'idle',
   'Барометр бюджета': 'overspend',
-  'Динамика и доходы': 'income',
+  'Динамика и доходы': 'inspect',
   'Копите на общее': 'goal',
   'Шаг 3. Позовите семью': 'idle',
   'Соберите аналитику под себя': 'thinking',
-  'Приватность': 'idle',
-  'Премиум': 'thinking',
+  'Приватность': 'spy',
+  'Премиум': 'inspect',
   'Готово!': 'goal',
 };
 
@@ -209,9 +209,17 @@ export function Tour() {
             : { top: insets.top + 20 },
         ]}
       >
-        <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
-          <Finik emotion={FINIK_BY_TITLE[step.title] ?? 'idle'} size={80} />
-        </View>
+        {step.title === 'Шаг 3. Позовите семью' ? (
+          // «Позови семью» — приходит второй Финик
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 2, marginBottom: spacing.sm }}>
+            <Finik emotion="income" size={82} />
+            <Finik emotion="goal" size={58} interactive={false} />
+          </View>
+        ) : (
+          <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
+            <Finik emotion={FINIK_BY_TITLE[step.title] ?? 'idle'} size={80} />
+          </View>
+        )}
         <View style={styles.cardHead}>
           <View style={[styles.iconBadge, { backgroundColor: t.surface2 }]}>
             <Ionicons name={step.icon as never} size={22} color={t.primary} />

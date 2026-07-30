@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Svg, { Rect, Circle, Line as SvgLine, Text as SvgText } from 'react-native-svg';
 import { useTheme, spacing, font, radius } from '../theme';
+import { Finik } from '../components/Finik';
 import {
   summary as summaryApi, cashflow as cfApi,
   type UnifiedChart, type Cashflow, type CashflowMember,
@@ -441,9 +442,12 @@ export default function ChartScreen() {
               <Text style={{ color: t.primary, fontSize: font.lg, fontWeight: '800' }}>{fmt(cfStartTotal)}</Text>
             </View>
 
-            <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700', marginTop: spacing.md }}>
-              💵 Поступления по дням
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md }}>
+              <Finik emotion="inspect" size={48} />
+              <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700', flex: 1 }}>
+                💵 Поступления по дням
+              </Text>
+            </View>
             <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
               Кто, в какой день месяца и сколько зачислено
             </Text>

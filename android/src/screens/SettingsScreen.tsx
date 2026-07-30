@@ -18,6 +18,7 @@ import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate, useHasP
 import { PinPad } from '../components/PinPad';
 import { Field, PrimaryButton } from '../components/UI';
 import { RecurringScreen } from './RecurringScreen';
+import { Finik } from '../components/Finik';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
@@ -497,8 +498,9 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <ScreenGradient tint="settings" />
-      <View style={[styles.header, { borderBottomColor: t.border }]}>
+      <View style={[styles.header, { borderBottomColor: t.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
         <Text style={[styles.title, { color: t.primary }]}>Настройки</Text>
+        <Finik emotion="fix" size={54} />
       </View>
       <ScrollView ref={scrollRef} contentContainerStyle={{ padding: spacing.md }}>
 
