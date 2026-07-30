@@ -3019,3 +3019,32 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 @keyframes fk-cross { 0% { transform: translateX(-60px); } 100% { transform: translateX(calc(100vw + 20px)); } }
 
 @media (prefers-reduced-motion: reduce) { .finik-wander { display: none; } }
+
+/* ═══ Финик v4 — руки, приветствие, плюсик-кнопка, ходьба по краю панели ═══ */
+/* wave — машет приветственно */
+.finik-svg[data-emotion="wave"] .m-smile { opacity: 0; }
+.finik-svg[data-emotion="wave"] .m-grin { opacity: 1; }
+.finik-svg[data-emotion="wave"] .cheek { opacity: 1; }
+.finik-svg[data-emotion="wave"] .arm-r { transform-origin: 8px 8px; animation: fk-wavehi .5s ease-in-out infinite; }
+@keyframes fk-wavehi { 0%,100% { transform: rotate(-54deg); } 50% { transform: rotate(-90deg); } }
+
+/* plus — держит плюсик, иногда крутит */
+.finik-svg[data-emotion="plus"] .p-plus { opacity: 1; }
+.finik-svg[data-emotion="plus"] .arm-r { transform: rotate(-40deg); }
+.plus-badge { transform-box: fill-box; transform-origin: center; }
+.finik-svg[data-emotion="plus"] .plus-badge { animation: fk-plusspin 6s ease-in-out infinite; }
+@keyframes fk-plusspin { 0%,58%,100% { transform: rotate(0); } 26% { transform: rotate(360deg); } }
+
+/* приветственный Финик на логине */
+.finik-hero { width: 132px; margin: 0 auto 6px; }
+
+/* FAB как Финик с плюсиком */
+.fab--finik { background: none; box-shadow: none; animation: none; width: 70px; height: 74px; border-radius: 0; }
+.fab--finik:hover { box-shadow: none; }
+.fab--finik .finik { width: 100%; }
+
+/* прогулка ровно по верхнему краю нижней панели, лицом по ходу */
+.finik-wander { bottom: calc(var(--nav-height) + var(--safe-bottom) - 4px); width: 46px; animation: fk-cross 9s linear forwards; }
+.finik-wander.rtl { animation-name: fk-cross-rtl; }
+@keyframes fk-cross { 0% { transform: translateX(-56px) scaleX(1); } 100% { transform: translateX(calc(100vw + 16px)) scaleX(1); } }
+@keyframes fk-cross-rtl { 0% { transform: translateX(calc(100vw + 16px)) scaleX(-1); } 100% { transform: translateX(-56px) scaleX(-1); } }

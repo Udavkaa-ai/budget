@@ -766,8 +766,8 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
     <rect class="c-piece" x="118" y="26" width="7" height="10" rx="2" fill="#FF7AB3" style="animation-delay:.3s"/>
   </g>
   <g class="f-body">
-    <g class="arm-l"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
-    <g class="arm-r"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
+    <g class="arm-l"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="46" cy="147" r="9" fill="#8E76F5"/></g>
+    <g class="arm-r"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="154" cy="147" r="9" fill="#8E76F5"/></g>
     <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
     <g class="leg leg-l"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g><g class="leg leg-r"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
     <rect x="72" y="143" width="56" height="40" rx="12" fill="url(#fk-belly)"/>
@@ -801,6 +801,7 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
   <g class="prop p-wrench" transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g>
   <g class="prop p-magnifier"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
   <g class="prop p-hearts" fill="#FF5C87"><path class="heart" d="M60 96 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q0 7 -10 13 q-10 -6 -10 -13 Z"/><path class="heart" d="M124 92 a4 4 0 0 1 8 0 a4 4 0 0 1 8 0 q0 5 -8 10 q-8 -5 -8 -10 Z"/></g>
+  <g class="prop p-plus"><g class="plus-badge"><circle cx="168" cy="98" r="18" fill="#5947E0"/><rect x="158" y="93.5" width="20" height="9" rx="4.5" fill="#fff"/><rect x="163.5" y="88" width="9" height="20" rx="4.5" fill="#fff"/></g></g>
 </svg>`;
 
 function ensureFinikDefs() {
@@ -846,7 +847,7 @@ function finikActivate() {
   const TAPS = ['fk-tap-jump', 'fk-tap-spin', 'fk-tap-wobble', 'fk-tap-hearts'];
   document.addEventListener('click', e => {
     const wrap = e.target.closest('.finik');
-    if (!wrap || wrap.classList.contains('finik-walker') || wrap.classList.contains('finik-wander')) return;
+    if (!wrap || wrap.classList.contains('finik-walker') || wrap.classList.contains('finik-wander') || wrap.closest('.fab')) return;
     const svg = wrap.querySelector('.finik-svg');
     if (!svg || svg.dataset.reacting) return;
     const cls = TAPS[Math.floor(Math.random() * TAPS.length)];
@@ -874,18 +875,20 @@ function finikActivate() {
 // Иногда Финик просто проходит по нижней панели слева направо
 function finikWander() {
   const app = document.getElementById('app');
+  let dir = 0; // чередуем: слева-направо, затем справа-налево
   const spawn = () => {
     const visible = app && !app.classList.contains('hidden') && !document.hidden;
     if (visible && !document.querySelector('.finik-wander')) {
       const el = document.createElement('div');
-      el.className = 'finik finik-wander';
+      el.className = 'finik finik-wander' + (dir % 2 ? ' rtl' : '');
+      dir++;
       el.innerHTML = FINIK_SVG.replace('data-emotion="idle"', 'data-emotion="walk"');
       el.addEventListener('animationend', () => el.remove());
       document.body.appendChild(el);
     }
-    setTimeout(spawn, 30000 + Math.random() * 45000);
+    setTimeout(spawn, 55000 + Math.random() * 15000); // примерно раз в минуту
   };
-  setTimeout(spawn, 12000 + Math.random() * 15000);
+  setTimeout(spawn, 15000 + Math.random() * 10000);
 }
 
 // ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
@@ -3024,6 +3027,10 @@ async function initApp() {
   mountWalkers();
   finikActivate();
   finikWander();
+  const loginFinik = document.getElementById('login-finik');
+  if (loginFinik) loginFinik.innerHTML = finik('wave', 'finik-hero');
+  const fabAdd = document.getElementById('fab-add');
+  if (fabAdd) { fabAdd.classList.add('fab--finik'); fabAdd.setAttribute('aria-label', 'Добавить расход'); fabAdd.innerHTML = finik('plus'); }
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
