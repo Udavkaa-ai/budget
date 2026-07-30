@@ -1,9 +1,9 @@
-import React, { forwardRef, useState, useEffect } from 'react';
+import React, { forwardRef, useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, ScrollView,
 } from 'react-native';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, BottomSheetFooter, type BottomSheetFooterProps } from '@gorhom/bottom-sheet';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -48,7 +48,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   // Без премиума открываем форму, чтобы не упереться в платный разбор.
   const [mode, setMode] = useState<'form' | 'text'>(premium ? 'text' : 'form');
   const [freeText, setFreeText] = useState('');
-  const [freeTextFocused, setFreeTextFocused] = useState(false);
+  const [focusedField, setFocusedField] = useState<'free' | 'desc' | 'amount' | null>(null);
   const [parsing, setParsing] = useState(false);
   // Тематическое превью ИИ-разбора (вместо системного Alert) — позиции редактируемы
   const [preview, setPreview] = useState<{ items: ParsedExpense[]; source: 'text' | 'photo' } | null>(null);
@@ -250,6 +250,29 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     ? [prediction.category]
     : null;
 
+  // Закреплённая кнопка действия — всегда над клавиатурой (BottomSheetFooter),
+  // чтобы «Разобрать»/«Добавить» не прятались при вводе. Едина для обеих вкладок.
+  const renderFooter = useCallback((props: BottomSheetFooterProps) => (
+    <BottomSheetFooter {...props} bottomInset={0}>
+      <View style={[styles.footer, { backgroundColor: t.surface, borderTopColor: t.border }]}>
+        {mode === 'text' ? (
+          <TouchableOpacity
+            style={[styles.submitBtn, { backgroundColor: '#9333EA', opacity: parsing || !freeText.trim() ? 0.6 : 1 }]}
+            onPress={parseFreeText}
+            disabled={parsing || !freeText.trim()}
+            activeOpacity={0.85}
+          >
+            {parsing
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.submitText}>🤖 Разобрать</Text>}
+          </TouchableOpacity>
+        ) : (
+          <PrimaryButton title="Добавить" onPress={submit} loading={submitting} />
+        )}
+      </View>
+    </BottomSheetFooter>
+  ), [mode, parsing, submitting, freeText, description, amount, selectedCat, t]);
+
   return (
     <BottomSheet
       ref={ref}
@@ -258,11 +281,15 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       enablePanDownToClose
       backgroundStyle={{ backgroundColor: t.surface }}
       handleIndicatorStyle={{ backgroundColor: t.border }}
+      footerComponent={renderFooter}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
       // Поверх всего экрана: иначе карточки с elevation (напр. «Итого за день»)
       // на Android «пробивают» лист ввода
       containerStyle={{ elevation: 30, zIndex: 30 }}
     >
-      <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
+      <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 96 }} keyboardShouldPersistTaps="handled">
         <View style={styles.titleRow}>
           <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
           <TouchableOpacity
@@ -306,15 +333,15 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
                 {
                   color: t.text,
                   backgroundColor: t.surface2,
-                  borderColor: freeTextFocused ? t.primary : t.border,
+                  borderColor: focusedField === 'free' ? t.primary : t.border,
                 },
-                freeTextFocused && styles.freeTextFocused,
-                freeTextFocused && { shadowColor: t.primary },
+                focusedField === 'free' && styles.inputFocused,
+                focusedField === 'free' && { shadowColor: t.primary },
               ]}
               value={freeText}
               onChangeText={setFreeText}
-              onFocus={() => setFreeTextFocused(true)}
-              onBlur={() => setFreeTextFocused(false)}
+              onFocus={() => setFocusedField('free')}
+              onBlur={() => setFocusedField(null)}
               placeholder={'Пример:\nпродукты 2300\nвчера такси 450\nкофе 180'}
               placeholderTextColor={t.textMuted}
               multiline
@@ -323,26 +350,22 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
             <Text style={[styles.freeHint, { color: t.textMuted }]}>
               По одной трате на строку или через запятую — ИИ сам определит суммы, даты и категории.
             </Text>
-            <TouchableOpacity
-              style={[styles.submitBtn, { backgroundColor: '#9333EA', opacity: parsing ? 0.7 : 1 }]}
-              onPress={parseFreeText}
-              disabled={parsing}
-              activeOpacity={0.85}
-            >
-              {parsing
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.submitText}>🤖 Разобрать</Text>
-              }
-            </TouchableOpacity>
           </>
         ) : (
         <>
         {/* Description */}
         <Text style={[styles.label, { color: t.textMuted }]}>Описание</Text>
         <TextInput
-          style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+          style={[
+            styles.input,
+            { color: t.text, backgroundColor: t.surface2, borderColor: focusedField === 'desc' ? t.primary : t.border },
+            focusedField === 'desc' && styles.inputFocused,
+            focusedField === 'desc' && { shadowColor: t.primary },
+          ]}
           value={description}
           onChangeText={setDescription}
+          onFocus={() => setFocusedField('desc')}
+          onBlur={() => setFocusedField(null)}
           placeholder="Что купили?"
           placeholderTextColor={t.textMuted}
           autoCapitalize="none"
@@ -371,9 +394,16 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
         {/* Amount */}
         <Text style={[styles.label, { color: t.textMuted }]}>Сумма, ₽</Text>
         <TextInput
-          style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+          style={[
+            styles.input,
+            { color: t.text, backgroundColor: t.surface2, borderColor: focusedField === 'amount' ? t.primary : t.border },
+            focusedField === 'amount' && styles.inputFocused,
+            focusedField === 'amount' && { shadowColor: t.primary },
+          ]}
           value={amount}
           onChangeText={setAmount}
+          onFocus={() => setFocusedField('amount')}
+          onBlur={() => setFocusedField(null)}
           placeholder="0"
           placeholderTextColor={t.textMuted}
           keyboardType="decimal-pad"
@@ -399,8 +429,6 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
           })}
         </View>
 
-        {/* Submit */}
-        <PrimaryButton title="Добавить" onPress={submit} loading={submitting} style={{ marginTop: spacing.sm }} />
         </>
         )}
       </BottomSheetScrollView>
@@ -520,12 +548,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     fontSize: 16, lineHeight: 22, minHeight: 140, marginTop: spacing.sm,
   },
-  freeTextFocused: {
+  inputFocused: {
     shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
   freeHint:  { fontSize: font.xs, lineHeight: 16, marginTop: spacing.sm, marginBottom: spacing.xs },
   label:     { fontSize: font.sm, marginBottom: spacing.xs, marginTop: spacing.md },
-  input:     { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md },
+  input:     { borderRadius: radius.md, borderWidth: 1.5, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: 16 },
+  footer:    { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
   predChip:  { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: spacing.lg },
