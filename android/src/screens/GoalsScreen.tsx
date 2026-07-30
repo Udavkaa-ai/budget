@@ -212,7 +212,7 @@ export default function GoalsScreen() {
                         {fmt(g.saved)} / {fmt(g.target)}
                       </Text>
                     </View>
-                    <TouchableOpacity onPress={() => deleteGoal(g.id)}>
+                    <TouchableOpacity onPress={() => deleteGoal(g.id)} hitSlop={8} accessibilityLabel="Удалить цель" accessibilityRole="button">
                       <Text style={{ color: t.textMuted, fontSize: 18 }}>×</Text>
                     </TouchableOpacity>
                   </View>

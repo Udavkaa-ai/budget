@@ -312,7 +312,7 @@ export default function HomeScreen() {
           keyExtractor={e => e.id}
           refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
-          ListEmptyComponent={<Text style={[styles.empty, { color: t.textMuted }]}>Нет расходов за этот день</Text>}
+          ListEmptyComponent={<Text style={[styles.empty, { color: t.textMuted }]}>Пока нет расходов за этот день — добавьте первый кнопкой «+»</Text>}
           renderItem={({ item }) => renderRowContent(item)}
         />
       </View>
@@ -329,7 +329,7 @@ export default function HomeScreen() {
         <View style={styles.titleRow}>
           <Text style={[styles.screenTitle, { color: t.titleColor }]}>Бюджет</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <TouchableOpacity onPress={openHelp} hitSlop={8}>
+            <TouchableOpacity onPress={openHelp} hitSlop={8} accessibilityLabel="Помощь" accessibilityRole="button">
               <Ionicons name="help-circle-outline" size={26} color={t.primary} />
             </TouchableOpacity>
             <View style={[styles.userChipTop, { backgroundColor: t.surface }]}>
@@ -434,6 +434,8 @@ export default function HomeScreen() {
           ref={fabTarget}
           activeOpacity={0.85}
           style={styles.fab}
+          accessibilityLabel="Добавить расход"
+          accessibilityRole="button"
           onPress={() => { haptics.medium(); addSheetRef.current?.expand(); }}
         >
           <LinearGradient

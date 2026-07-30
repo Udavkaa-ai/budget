@@ -24,7 +24,7 @@ const light = {
   surface2:    '#F1EDFF',
   border:      'rgba(89,71,224,0.18)',
   text:        '#1A1530',
-  textMuted:   '#7A7396',
+  textMuted:   '#645E82', /* WCAG AA: #7A7396 давал 3.6–4.3:1, теперь ≥4.9:1 */
   primary:     palette.primary,
   primaryText: '#ffffff',
   accent:      palette.pink,

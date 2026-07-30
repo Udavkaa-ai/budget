@@ -476,7 +476,7 @@ export default function ChartScreen() {
                   keyboardType="number-pad"
                 />
                 <Text style={{ color: t.textMuted, fontSize: font.sm }}>₽</Text>
-                <TouchableOpacity onPress={() => setIncomeDays(d => d.filter((_, xi) => xi !== i))} style={{ paddingHorizontal: spacing.xs, paddingVertical: spacing.sm }}>
+                <TouchableOpacity onPress={() => setIncomeDays(d => d.filter((_, xi) => xi !== i))} style={{ paddingHorizontal: spacing.xs, paddingVertical: spacing.sm }} hitSlop={8} accessibilityLabel="Удалить день дохода" accessibilityRole="button">
                   <Text style={{ color: t.danger, fontSize: font.lg }}>×</Text>
                 </TouchableOpacity>
               </View>

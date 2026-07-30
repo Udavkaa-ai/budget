@@ -796,6 +796,9 @@ export default function SettingsScreen() {
                   { text: 'Удалить', style: 'destructive', onPress: async () => { await backupsApi.remove(b.id); refreshBackups(); } },
                 ])}
                 style={{ padding: 6 }}
+                hitSlop={8}
+                accessibilityLabel="Удалить копию"
+                accessibilityRole="button"
               >
                 <Text style={{ color: t.danger, fontSize: font.sm }}>✕</Text>
               </TouchableOpacity>

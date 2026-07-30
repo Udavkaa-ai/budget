@@ -520,7 +520,7 @@ export default function SummaryScreen() {
                       {monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length > 4
                         ? `  (${monthExp.filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay).length} поз. ▾)` : ''}
                     </Text>
-                    <TouchableOpacity onPress={() => setDrillDay(null)} style={{ paddingHorizontal: 6 }}>
+                    <TouchableOpacity onPress={() => setDrillDay(null)} style={{ paddingHorizontal: 6 }} hitSlop={8} accessibilityLabel="Закрыть день" accessibilityRole="button">
                       <Text style={{ color: t.textMuted }}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -633,7 +633,7 @@ export default function SummaryScreen() {
               </Text>
             )}
             {cats.length === 0 && (
-              <Text style={{ color: t.textMuted, marginTop: spacing.md }}>Нет расходов за месяц</Text>
+              <Text style={{ color: t.textMuted, marginTop: spacing.md }}>За этот месяц ещё нет расходов — они появятся здесь, как только вы их добавите</Text>
             )}
           </Card>
 
