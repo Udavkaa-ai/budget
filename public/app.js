@@ -680,7 +680,7 @@ async function loadBudget() {
     if (total === 0) {
       document.getElementById('budget-total-bar').innerHTML =
         `<span>Итого за день</span><span class="total-amount">${fmt(0)}</span>`;
-      list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
+      list.innerHTML = '<div class="empty-state">Пока нет расходов за этот день — добавьте первый</div>';
       return;
     }
 
@@ -709,7 +709,7 @@ async function loadBudget() {
       const udata = byUser[userName];
       filteredTotal = udata?.total || 0;
       if (!udata || udata.expenses.length === 0) {
-        list.innerHTML = '<div class="empty-state">Нет расходов за этот день</div>';
+        list.innerHTML = '<div class="empty-state">Пока нет расходов за этот день — добавьте первый</div>';
       } else {
         for (const exp of udata.expenses) {
           list.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showUser: false }));
