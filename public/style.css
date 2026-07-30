@@ -2892,3 +2892,58 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 .ach-finik { line-height: 0; }
 .ach-finik .finik-sm { width: 46px; }
 .achievements-header { display: flex; align-items: center; gap: 8px; }
+
+/* ═══ Финик v2 — ходьба, богаче кадры, слежение глаз, крупнее ═══════════ */
+.finik-lg { width: 150px; }
+.finik { cursor: pointer; }
+.finik-walker { cursor: default; }
+
+/* глаза следят за курсором в спокойных состояниях (эмоции переопределяют) */
+.finik-svg .pupil { transform: translate(var(--fk-px, 0px), var(--fk-py, 0px)); }
+
+/* ноги */
+.finik-svg .leg { transform-box: fill-box; transform-origin: center top; }
+
+/* ── walk: ходьба на месте ── */
+.finik-svg[data-emotion="walk"] .f-body { animation: fk-walkbob .5s ease-in-out infinite; }
+.finik-svg[data-emotion="walk"] .leg-l { animation: fk-step .5s ease-in-out infinite; }
+.finik-svg[data-emotion="walk"] .leg-r { animation: fk-step .5s ease-in-out infinite; animation-delay: .25s; }
+.finik-svg[data-emotion="walk"] .arm-l { animation: fk-swing .5s ease-in-out infinite; }
+.finik-svg[data-emotion="walk"] .arm-r { animation: fk-swing .5s ease-in-out infinite; animation-delay: .25s; }
+
+@keyframes fk-step { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes fk-walkbob { 0%,100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-3px) rotate(1.5deg); } }
+@keyframes fk-swing { 0%,100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+
+/* ── walker: патрулирует по верхней границе кнопок ── */
+.finik-walk-host { position: relative; container-type: inline-size; }
+.finik-walker { position: absolute; top: -32px; left: 0; width: 50px; z-index: 3; animation: fk-patrol 8s ease-in-out infinite; }
+@keyframes fk-patrol {
+  0%   { transform: translateX(0) scaleX(1); }
+  46%  { transform: translateX(calc(100cqi - 100%)) scaleX(1); }
+  50%  { transform: translateX(calc(100cqi - 100%)) scaleX(-1); }
+  96%  { transform: translateX(0) scaleX(-1); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+
+/* ── богаче кадры (перекрывают v1) ── */
+@keyframes fk-breathe { 0%,100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.03) rotate(.6deg); } }
+@keyframes fk-blink { 0%,90%,100% { transform: scaleY(0); } 93% { transform: scaleY(1.12); } 96% { transform: scaleY(1); } }
+@keyframes fk-bounce { 0%,100% { transform: translateY(0) scaleY(1); } 12% { transform: translateY(0) scaleY(.92); } 50% { transform: translateY(-12px) scaleY(1.06); } 78% { transform: translateY(0) scaleY(.95); } }
+@keyframes fk-jump { 0% { transform: translateY(0) scale(1,1); } 12% { transform: translateY(3px) scale(1.07,.9); } 42% { transform: translateY(-26px) scale(.93,1.09); } 60% { transform: translateY(-26px); } 82% { transform: translateY(3px) scale(1.07,.9); } 100% { transform: translateY(0) scale(1,1); } }
+@keyframes fk-wobble { 0%,100% { transform: rotate(-4deg); } 25% { transform: rotate(4deg); } 50% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+
+/* income — подкидывает монетку */
+.finik-svg[data-emotion="income"] .p-coin { animation: fk-toss 1s ease-in-out infinite; }
+@keyframes fk-toss { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-14px) rotate(180deg); } }
+/* thinking — лёгкий наклон головы */
+.finik-svg[data-emotion="thinking"] .f-body { animation: fk-tilt 2.2s ease-in-out infinite; }
+@keyframes fk-tilt { 0%,100% { transform: rotate(-2deg); } 50% { transform: rotate(3deg); } }
+
+/* Финик в пустом состоянии — по центру, крупно */
+.finik-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .finik-svg .f-body, .finik-svg .leg, .finik-svg .p-coin, .finik-walker { animation: none !important; }
+}
+.finik-walk-host { overflow: visible; }

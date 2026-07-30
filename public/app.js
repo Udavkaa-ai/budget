@@ -680,7 +680,7 @@ async function loadBudget() {
     if (total === 0) {
       document.getElementById('budget-total-bar').innerHTML =
         `<span>Итого за день</span><span class="total-amount">${fmt(0)}</span>`;
-      list.innerHTML = '<div class="empty-state">Пока нет расходов за этот день — добавьте первый</div>';
+      list.innerHTML = '<div class="empty-state finik-empty">' + finik('record', 'finik-lg') + '<span>Пока нет расходов за этот день — добавьте первый</span></div>';
       return;
     }
 
@@ -709,7 +709,7 @@ async function loadBudget() {
       const udata = byUser[userName];
       filteredTotal = udata?.total || 0;
       if (!udata || udata.expenses.length === 0) {
-        list.innerHTML = '<div class="empty-state">Пока нет расходов за этот день — добавьте первый</div>';
+        list.innerHTML = '<div class="empty-state finik-empty">' + finik('record', 'finik-lg') + '<span>Пока нет расходов за этот день — добавьте первый</span></div>';
       } else {
         for (const exp of udata.expenses) {
           list.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showUser: false }));
@@ -769,7 +769,7 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
     <g class="arm-l"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
     <g class="arm-r"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/></g>
     <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
-    <ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/>
+    <g class="leg leg-l"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g><g class="leg leg-r"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
     <rect x="72" y="132" width="56" height="44" rx="12" fill="url(#fk-belly)"/>
     <line x1="82" y1="145" x2="118" y2="145" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
     <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
@@ -801,9 +801,53 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
 function ensureFinikDefs() {
   if (!document.querySelector('.finik-defs')) document.body.insertAdjacentHTML('beforeend', FINIK_DEFS);
 }
-// Возвращает HTML маскота с заданной эмоцией. size: 'finik-sm' | 'finik-md'
+// Возвращает HTML маскота с заданной эмоцией. size: 'finik-sm' | 'finik-md' | 'finik-lg'
 function finik(emotion = 'idle', size = 'finik-sm') {
   return `<div class="finik ${size}">${FINIK_SVG.replace('data-emotion="idle"', `data-emotion="${emotion}"`)}</div>`;
+}
+
+// Гуляющий Финик на верхней границе кнопок в контейнере [data-finik-walk]
+function mountWalkers() {
+  document.querySelectorAll('[data-finik-walk]').forEach(host => {
+    if (host.querySelector('.finik-walker')) return;
+    host.classList.add('finik-walk-host');
+    host.insertAdjacentHTML('afterbegin',
+      `<div class="finik finik-walker">${FINIK_SVG.replace('data-emotion="idle"', 'data-emotion="walk"')}</div>`);
+  });
+}
+
+// Интерактив: глаза следят за курсором (в спокойных состояниях) + клик = радость
+function finikActivate() {
+  if (window.__finikActive) return;
+  window.__finikActive = true;
+
+  let raf = 0, ev = null;
+  const track = () => {
+    raf = 0; if (!ev) return;
+    document.querySelectorAll('.finik-svg').forEach(svg => {
+      const emo = svg.getAttribute('data-emotion');
+      if (emo !== 'idle' && emo !== 'walk') { svg.style.removeProperty('--fk-px'); svg.style.removeProperty('--fk-py'); return; }
+      const r = svg.getBoundingClientRect();
+      if (!r.width) return;
+      const dx = Math.max(-3, Math.min(3, (ev.clientX - (r.left + r.width / 2)) / (r.width / 2) * 3));
+      const dy = Math.max(-2.5, Math.min(2.5, (ev.clientY - (r.top + r.height * 0.46)) / (r.height / 2) * 3));
+      svg.style.setProperty('--fk-px', dx.toFixed(1) + 'px');
+      svg.style.setProperty('--fk-py', dy.toFixed(1) + 'px');
+    });
+  };
+  window.addEventListener('pointermove', e => { ev = e; if (!raf) raf = requestAnimationFrame(track); }, { passive: true });
+
+  // тап по Финику — короткая радость, потом возврат к своей эмоции
+  document.addEventListener('click', e => {
+    const wrap = e.target.closest('.finik');
+    if (!wrap || wrap.classList.contains('finik-walker')) return;
+    const svg = wrap.querySelector('.finik-svg');
+    if (!svg || svg.dataset.reacting) return;
+    const base = svg.getAttribute('data-emotion') || 'idle';
+    svg.dataset.reacting = '1';
+    svg.setAttribute('data-emotion', 'goal');
+    setTimeout(() => { svg.setAttribute('data-emotion', base); delete svg.dataset.reacting; }, 1500);
+  });
 }
 
 // ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
@@ -2939,6 +2983,8 @@ async function initApp() {
   initRecurring();
   initChat();
   ensureFinikDefs();
+  mountWalkers();
+  finikActivate();
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
@@ -3860,7 +3906,7 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
       <text x="${l160x}" y="${l160y}" text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">160%</text>
     </svg>
     <div class="bablometr-verdict-row">
-      ${finik(pctFmt <= 70 ? 'income' : pctFmt <= 90 ? 'idle' : 'overspend', 'finik-sm')}
+      ${finik(pctFmt <= 70 ? 'income' : pctFmt <= 90 ? 'idle' : 'overspend', 'finik-md')}
       <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
     </div>
     <div class="bablometr-stats">
