@@ -4409,7 +4409,7 @@ function renderRecurring() {
         <div class="rec-sub">${recScheduleLabel(i)} · ${esc(i.category)}${i.user ? ' · ' + esc(i.user) : ''}${i.active ? '' : ' · выкл'}</div>
       </span>
       <span class="rec-amt ${i.active ? '' : 'off'}">${fmt(i.amount)}</span>
-      <span class="rec-actions"><button class="rec-del" data-del="${i.id}" title="Удалить">🗑</button></span>
+      <span class="rec-actions"><button class="rec-del" data-del="${i.id}" title="Удалить" aria-label="Удалить платёж">🗑</button></span>
     </div>`).join('') : '<div class="rec-empty">Пока пусто. Добавьте подписку, аренду, проездной или что-то ежедневное.</div>'}
   </div>`;
 

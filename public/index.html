@@ -84,7 +84,7 @@
     <div class="topbar-right">
       <span id="topbar-family" class="family-chip hidden"></span>
       <span id="topbar-user" class="user-chip"></span>
-      <button id="btn-logout" class="icon-btn" title="Выйти">⎋</button>
+      <button id="btn-logout" aria-label="Выйти" class="icon-btn" title="Выйти">⎋</button>
     </div>
   </header>
 
@@ -96,9 +96,9 @@
     <div id="screen-budget" class="screen active">
 
       <div class="nav-date-row">
-        <button id="budget-prev" class="icon-btn">◀</button>
+        <button id="budget-prev" aria-label="Предыдущий" class="icon-btn">◀</button>
         <span id="budget-date-label" class="nav-date-label"></span>
-        <button id="budget-next" class="icon-btn">▶</button>
+        <button id="budget-next" aria-label="Следующий" class="icon-btn">▶</button>
       </div>
 
       <div class="filter-bar">
@@ -114,9 +114,9 @@
     <!-- ── SUMMARY ───────────────────────────────────────────────────── -->
     <div id="screen-summary" class="screen">
       <div class="nav-date-row">
-        <button id="summary-prev" class="icon-btn">◀</button>
+        <button id="summary-prev" aria-label="Предыдущий" class="icon-btn">◀</button>
         <span id="summary-month-label" class="nav-date-label"></span>
-        <button id="summary-next" class="icon-btn">▶</button>
+        <button id="summary-next" aria-label="Следующий" class="icon-btn">▶</button>
       </div>
       <div class="summary-toolbar">
         <button id="btn-summary-compare" class="btn-compare">Сравнить</button>
@@ -146,9 +146,9 @@
         <div class="speed-chart-header">
           <span class="speed-chart-title">📈 Скорость трат</span>
           <div class="speed-chart-nav">
-            <button id="speed-chart-prev" class="icon-btn">◀</button>
+            <button id="speed-chart-prev" aria-label="Предыдущий" class="icon-btn">◀</button>
             <span id="speed-chart-month-label"></span>
-            <button id="speed-chart-next" class="icon-btn">▶</button>
+            <button id="speed-chart-next" aria-label="Следующий" class="icon-btn">▶</button>
           </div>
         </div>
         <div id="speed-chart-container"><div class="loading">Загрузка...</div></div>
@@ -190,9 +190,9 @@
     <!-- ── CHART ──────────────────────────────────────────────────────── -->
     <div id="screen-chart" class="screen">
       <div class="nav-date-row">
-        <button id="chart-prev" class="icon-btn">◀</button>
+        <button id="chart-prev" aria-label="Предыдущий" class="icon-btn">◀</button>
         <span id="chart-month-label" class="nav-date-label"></span>
-        <button id="chart-next" class="icon-btn">▶</button>
+        <button id="chart-next" aria-label="Следующий" class="icon-btn">▶</button>
       </div>
       <div id="chart-container" class="chart-container chart-interactive">
         <div class="loading">Загрузка...</div>
@@ -201,7 +201,7 @@
 
       <!-- Fullscreen overlay -->
       <div id="chart-fullscreen" class="chart-fullscreen hidden">
-        <button id="chart-fs-close" class="chart-fs-close">✕</button>
+        <button id="chart-fs-close" aria-label="Закрыть" class="chart-fs-close">✕</button>
         <canvas id="main-chart-fs"></canvas>
       </div>
 
@@ -475,8 +475,8 @@
     <div class="analysis-sheet-header">
       <span class="sheet-title">Финансовый анализ</span>
       <div class="analysis-header-actions">
-        <button id="analysis-share" class="icon-btn analysis-share-btn hidden" title="Поделиться">⬆</button>
-        <button id="analysis-close" class="icon-btn">✕</button>
+        <button id="analysis-share" aria-label="Поделиться" class="icon-btn analysis-share-btn hidden" title="Поделиться">⬆</button>
+        <button id="analysis-close" aria-label="Закрыть" class="icon-btn">✕</button>
       </div>
     </div>
     <div id="analysis-body" class="analysis-body"></div>
@@ -488,13 +488,13 @@
     <div class="sheet-handle"></div>
     <div class="analysis-sheet-header">
       <span class="sheet-title">💬 Чат с ИИ-советником</span>
-      <button id="chat-close" class="icon-btn">✕</button>
+      <button id="chat-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
     <div class="chat-privacy">🔒 ИИ получает только обезличенную сводку (суммы по категориям и участникам), не отдельные покупки.</div>
     <div id="chat-messages" class="chat-messages"></div>
     <div class="chat-input-row">
       <textarea id="chat-input" class="chat-input" rows="1" placeholder="Спросите про бюджет…"></textarea>
-      <button id="chat-send" class="chat-send">↑</button>
+      <button id="chat-send" aria-label="Отправить" class="chat-send">↑</button>
     </div>
   </div>
 
@@ -504,7 +504,7 @@
     <div class="sheet-handle"></div>
     <div class="analysis-sheet-header">
       <span class="sheet-title">💄 Кандидаты в «Красоту»</span>
-      <button id="beauty-close" class="icon-btn">✕</button>
+      <button id="beauty-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
     <div id="beauty-body" class="analysis-body"></div>
   </div>
@@ -513,9 +513,9 @@
   <div id="cal-overlay" class="cal-overlay hidden"></div>
   <div id="cal-modal" class="cal-modal hidden">
     <div class="cal-header">
-      <button id="cal-prev" class="icon-btn">◀</button>
+      <button id="cal-prev" aria-label="Предыдущий" class="icon-btn">◀</button>
       <span id="cal-month-label" class="cal-month-label"></span>
-      <button id="cal-next" class="icon-btn">▶</button>
+      <button id="cal-next" aria-label="Следующий" class="icon-btn">▶</button>
     </div>
     <div class="cal-weekdays">
       <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
@@ -529,7 +529,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-header">
       <span class="sheet-title">Добавить расход</span>
-      <button id="sheet-close" class="icon-btn">✕</button>
+      <button id="sheet-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
     <div class="sheet-body">
       <div class="add-tabs">
@@ -587,7 +587,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-header">
       <span id="goal-modal-title" class="sheet-title">Новая копилка</span>
-      <button id="goal-modal-close" class="icon-btn">✕</button>
+      <button id="goal-modal-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
     <div class="sheet-body">
       <div id="goal-add-form">
@@ -621,7 +621,7 @@
     <div class="sheet-handle"></div>
     <div class="sheet-header">
       <span id="rec-modal-title" class="sheet-title">Новый платёж</span>
-      <button id="rec-modal-close" class="icon-btn">✕</button>
+      <button id="rec-modal-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
     <div class="sheet-body">
       <div class="form-group">
@@ -682,7 +682,7 @@
         <strong>Вечернее напоминание</strong>
         <div id="reminder-body"></div>
       </div>
-      <button id="reminder-close" class="icon-btn">✕</button>
+      <button id="reminder-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
   </div>
 
@@ -697,7 +697,7 @@
 <div id="admin-panel" class="admin-panel hidden">
   <div class="admin-panel-header">
     <span class="admin-panel-title">🛡 Администрирование</span>
-    <button id="btn-close-admin" class="icon-btn">✕</button>
+    <button id="btn-close-admin" aria-label="Закрыть" class="icon-btn">✕</button>
   </div>
   <div id="admin-panel-nav" class="admin-panel-nav"></div>
   <div id="admin-panel-body" class="admin-panel-body">
