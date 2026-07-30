@@ -7,7 +7,7 @@ import Svg, {
 // Маскот «Финик» — семейный бухгалтер. Эмоции 1:1 с вебом (public/app.js).
 export type FinikEmotion =
   | 'idle' | 'record' | 'income' | 'overspend' | 'grumpy' | 'scold' | 'goal'
-  | 'thinking' | 'walk' | 'spy' | 'fix' | 'inspect';
+  | 'thinking' | 'walk' | 'spy' | 'fix' | 'inspect' | 'wave' | 'plus';
 
 const AG = Animated.createAnimatedComponent(G);
 
@@ -31,11 +31,14 @@ const FEATURES: Record<FinikEmotion, Feat> = {
   spy:       { mouth: 'smirk', browDy: -2, props: ['shades'] },
   fix:       { mouth: 'focus', armR: -26, props: ['wrench'] },
   inspect:   { mouth: 'flat', browRdy: -4, armR: -40, props: ['coin', 'magnifier'] },
+  wave:      { mouth: 'grin', cheeks: true, browDy: -3, armR: -78 },
+  plus:      { mouth: 'smile', armR: -40, props: ['plus'] },
 };
 
 const DUR: Record<FinikEmotion, number> = {
   idle: 1700, walk: 250, record: 1700, income: 430, overspend: 260, grumpy: 1700,
   scold: 150, goal: 360, thinking: 1100, spy: 1700, fix: 500, inspect: 2400,
+  wave: 500, plus: 1700,
 };
 
 function motionStyle(emotion: FinikEmotion, v: Animated.Value) {
@@ -50,6 +53,7 @@ function motionStyle(emotion: FinikEmotion, v: Animated.Value) {
     case 'thinking':  return { transform: [{ rotate: rot(-2, 3) }] };
     case 'inspect':   return { transform: [{ rotate: rot(0, 3) }] };
     case 'fix':       return { transform: [{ rotate: rot(-2, 3) }] };
+    case 'wave':      return { transform: [{ rotate: rot(-4, 4) }] };
     case 'walk':      return { transform: [{ translateY: y(0, -4) }] };
     default:          return { transform: [{ scale: s(1, 1.03) }] }; // дыхание
   }
@@ -141,8 +145,8 @@ export function Finik({
           </G>
         )}
 
-        <G transform={`rotate(${f.armL ?? 0} 50 112)`}><Ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0" /></G>
-        <G transform={`rotate(${f.armR ?? 0} 150 112)`}><Ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0" /></G>
+        <G transform={`rotate(${f.armL ?? 0} 50 112)`}><Ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0" /><Circle cx="46" cy="147" r="9" fill="#8E76F5" /></G>
+        <G transform={`rotate(${f.armR ?? 0} 150 112)`}><Ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0" /><Circle cx="154" cy="147" r="9" fill="#8E76F5" /></G>
 
         <Path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fkBody)" />
         <Ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4" /><Ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4" />
@@ -185,6 +189,7 @@ export function Finik({
         {has('shades') && (<G><Rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f" /><Rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f" /><Line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" strokeWidth="6" /><Rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /><Rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /></G>)}
         {has('wrench') && (<G transform="rotate(28 168 150)"><Rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4" /><Path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6" /><Circle cx="168" cy="123" r="5" fill="#F1EDFF" /></G>)}
         {has('magnifier') && (<G><Circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" strokeWidth="4" /><Rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)" /></G>)}
+        {has('plus') && (<G><Circle cx="168" cy="98" r="18" fill="#5947E0" /><Rect x="158" y="93.5" width="20" height="9" rx="4.5" fill="#fff" /><Rect x="163.5" y="88" width="9" height="20" rx="4.5" fill="#fff" /></G>)}
       </Svg>
     </Animated.View>
   );

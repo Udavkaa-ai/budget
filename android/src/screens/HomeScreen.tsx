@@ -444,13 +444,7 @@ export default function HomeScreen() {
           accessibilityRole="button"
           onPress={() => { haptics.medium(); addSheetRef.current?.expand(); }}
         >
-          <LinearGradient
-            colors={t.gradient}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={styles.fabInner}
-          >
-            <Ionicons name="add" size={30} color="#fff" />
-          </LinearGradient>
+          <Finik emotion="plus" size={64} interactive={false} />
         </TouchableOpacity>
 
         <SuccessFlash token={addedFlash} label="Расход добавлен" />
@@ -487,7 +481,7 @@ const styles = StyleSheet.create({
   itemDesc:   { fontSize: font.md, fontWeight: '500' },
   itemMeta:   { fontSize: font.sm, marginTop: 2 },
   itemAmt:    { fontSize: font.md, fontWeight: '700' },
-  fab:        { position: 'absolute', bottom: 24, right: 24, width: 60, height: 60, borderRadius: 30, elevation: 8, shadowColor: '#5947E0', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
+  fab:        { position: 'absolute', bottom: 18, right: 16, width: 68, height: 72, alignItems: 'center', justifyContent: 'center' },
   fabInner:   { flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
   modalBox:   { borderRadius: radius.lg, padding: spacing.lg },

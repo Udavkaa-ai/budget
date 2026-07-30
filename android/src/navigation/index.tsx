@@ -1,4 +1,5 @@
 import React from 'react';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import SummaryScreen from '../screens/SummaryScreen';
 import ChartScreen from '../screens/ChartScreen';
 import GoalsScreen from '../screens/GoalsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import { FinikWander } from '../components/FinikWander';
 
 const Tab = createBottomTabNavigator();
 
@@ -33,6 +35,7 @@ export function AppNavigator() {
   const t = useTheme();
   const blocks = useBlocks();
   return (
+    <View style={{ flex: 1 }}>
     <Tab.Navigator
       screenListeners={{ tabPress: () => haptics.select() }}
       screenOptions={{
@@ -80,5 +83,7 @@ export function AppNavigator() {
         />
       )}
     </Tab.Navigator>
+    <FinikWander />
+    </View>
   );
 }
