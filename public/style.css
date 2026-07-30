@@ -2947,3 +2947,24 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
   .finik-svg .f-body, .finik-svg .leg, .finik-svg .p-coin, .finik-walker { animation: none !important; }
 }
 .finik-walk-host { overflow: visible; }
+
+/* ── Финик: угрюмый и «вы чего, транжиры!» ── */
+.finik-svg[data-emotion="grumpy"] .m-smile { opacity: 0; }
+.finik-svg[data-emotion="grumpy"] .m-frown { opacity: 1; }
+.finik-svg[data-emotion="grumpy"] .brow-l { transform: rotate(16deg); }
+.finik-svg[data-emotion="grumpy"] .brow-r { transform: translateY(-3px) rotate(-16deg); }
+
+.finik-svg[data-emotion="scold"] .m-smile { opacity: 0; }
+.finik-svg[data-emotion="scold"] .m-frown { opacity: 1; }
+.finik-svg[data-emotion="scold"] .brow-l { transform: rotate(16deg); }
+.finik-svg[data-emotion="scold"] .brow-r { transform: translateY(-3px) rotate(-16deg); }
+.finik-svg[data-emotion="scold"] .f-body { animation: fk-shake .34s ease-in-out infinite; }
+.finik-svg[data-emotion="scold"] .arm-l { animation: fk-wave-l .4s ease-in-out infinite; transform-origin: 72px 8px; }
+.finik-svg[data-emotion="scold"] .arm-r { animation: fk-wave-r .4s ease-in-out infinite; transform-origin: 8px 8px; }
+@keyframes fk-shake { 0%,100% { transform: translateX(-2px) rotate(-2deg); } 50% { transform: translateX(2px) rotate(2deg); } }
+@keyframes fk-wave-l { 0%,100% { transform: rotate(42deg); } 50% { transform: rotate(72deg); } }
+@keyframes fk-wave-r { 0%,100% { transform: rotate(-42deg); } 50% { transform: rotate(-72deg); } }
+
+/* барометр: Финик слева, вердикт по центру */
+.bablometr-verdict-row { position: relative; min-height: 92px; }
+.bablometr-verdict-row .bar-finik { position: absolute; left: 8px; bottom: -4px; width: 82px; }
