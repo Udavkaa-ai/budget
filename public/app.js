@@ -789,6 +789,7 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
     <path class="mouth m-frown" d="M88 132 Q100 123 112 132" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
     <ellipse class="mouth m-focus" cx="100" cy="128" rx="5" ry="4" fill="#3A2E80"/>
     <line class="mouth m-flat" x1="90" y1="128" x2="110" y2="128" stroke="#3A2E80" stroke-width="4" stroke-linecap="round"/>
+    <path class="mouth m-smirk" d="M89 128 Q100 133 113 126" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
     <g class="prop p-coin"><circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="170" y="110" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
     <g class="prop p-pencil"><rect x="150" y="150" width="8" height="34" rx="3" fill="#FFC24B" transform="rotate(24 154 167)"/><path d="M150 182 l8 0 l-4 8 Z" fill="#3A2E80" transform="rotate(24 154 167)"/></g>
     <g class="prop p-sweat"><path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7"/></g>
@@ -796,6 +797,10 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
   <g class="prop p-ledger"><rect x="120" y="150" width="46" height="34" rx="5" fill="#fff" stroke="#DED3FF" stroke-width="2" transform="rotate(-8 143 167)"/><line x1="128" y1="160" x2="158" y2="158" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/><line x1="128" y1="168" x2="158" y2="166" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/></g>
   <g class="prop sparkle" fill="#FFC24B"><path d="M40 60 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z"/><path d="M168 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3"/></g>
   <g class="prop p-think" fill="#5947E0"><circle class="t-dot" cx="150" cy="70" r="4"/><circle class="t-dot" cx="164" cy="58" r="5.5"/><circle class="t-dot" cx="180" cy="44" r="7"/></g>
+  <g class="prop p-shades"><rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f"/><rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f"/><line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" stroke-width="6"/><rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/><rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/></g>
+  <g class="prop p-wrench" transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g>
+  <g class="prop p-magnifier"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
+  <g class="prop p-hearts" fill="#FF5C87"><path class="heart" d="M60 96 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q0 7 -10 13 q-10 -6 -10 -13 Z"/><path class="heart" d="M124 92 a4 4 0 0 1 8 0 a4 4 0 0 1 8 0 q0 5 -8 10 q-8 -5 -8 -10 Z"/></g>
 </svg>`;
 
 function ensureFinikDefs() {
@@ -837,17 +842,50 @@ function finikActivate() {
   };
   window.addEventListener('pointermove', e => { ev = e; if (!raf) raf = requestAnimationFrame(track); }, { passive: true });
 
-  // тап по Финику — короткая радость, потом возврат к своей эмоции
+  // тап по Финику — одна из 4 случайных реакций
+  const TAPS = ['fk-tap-jump', 'fk-tap-spin', 'fk-tap-wobble', 'fk-tap-hearts'];
   document.addEventListener('click', e => {
     const wrap = e.target.closest('.finik');
-    if (!wrap || wrap.classList.contains('finik-walker')) return;
+    if (!wrap || wrap.classList.contains('finik-walker') || wrap.classList.contains('finik-wander')) return;
     const svg = wrap.querySelector('.finik-svg');
     if (!svg || svg.dataset.reacting) return;
-    const base = svg.getAttribute('data-emotion') || 'idle';
+    const cls = TAPS[Math.floor(Math.random() * TAPS.length)];
     svg.dataset.reacting = '1';
-    svg.setAttribute('data-emotion', 'goal');
-    setTimeout(() => { svg.setAttribute('data-emotion', base); delete svg.dataset.reacting; }, 1500);
+    svg.classList.add(cls);
+    setTimeout(() => { svg.classList.remove(cls); delete svg.dataset.reacting; }, 1150);
   });
+
+  // idle-фиджеты: каждые 5–20с спокойные Финики делают случайное микродействие
+  const FIDGETS = ['fk-do-stretch', 'fk-do-look', 'fk-do-coin', 'fk-do-nod'];
+  const fidgetTick = () => {
+    document.querySelectorAll('.finik-svg[data-emotion="idle"]').forEach(svg => {
+      if (svg.dataset.reacting || svg.dataset.fidget) return;
+      if (Math.random() > 0.6) return; // не все и не каждый тик
+      const cls = FIDGETS[Math.floor(Math.random() * FIDGETS.length)];
+      svg.dataset.fidget = '1';
+      svg.classList.add(cls);
+      setTimeout(() => { svg.classList.remove(cls); delete svg.dataset.fidget; }, 1900);
+    });
+    setTimeout(fidgetTick, 5000 + Math.random() * 15000);
+  };
+  setTimeout(fidgetTick, 4000);
+}
+
+// Иногда Финик просто проходит по нижней панели слева направо
+function finikWander() {
+  const app = document.getElementById('app');
+  const spawn = () => {
+    const visible = app && !app.classList.contains('hidden') && !document.hidden;
+    if (visible && !document.querySelector('.finik-wander')) {
+      const el = document.createElement('div');
+      el.className = 'finik finik-wander';
+      el.innerHTML = FINIK_SVG.replace('data-emotion="idle"', 'data-emotion="walk"');
+      el.addEventListener('animationend', () => el.remove());
+      document.body.appendChild(el);
+    }
+    setTimeout(spawn, 30000 + Math.random() * 45000);
+  };
+  setTimeout(spawn, 12000 + Math.random() * 15000);
 }
 
 // ─── AI ANALYSIS ─────────────────────────────────────────────────────────────
@@ -2985,6 +3023,7 @@ async function initApp() {
   ensureFinikDefs();
   mountWalkers();
   finikActivate();
+  finikWander();
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
