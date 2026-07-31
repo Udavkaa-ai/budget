@@ -21,7 +21,7 @@ type Feat = {
 const FEATURES: Record<FinikEmotion, Feat> = {
   idle:      { mouth: 'smile' },
   walk:      { mouth: 'smile' },
-  record:    { mouth: 'focus', armR: 24, props: ['ledger', 'pencil'] },
+  record:    { mouth: 'focus', armR: -46, props: ['board', 'pencil'] },
   income:    { mouth: 'grin', cheeks: true, browDy: -3, armR: -38, props: ['coin', 'sparkle'] },
   overspend: { mouth: 'frown', browAngle: 14, browRdy: -4, armR: -58, props: ['sweat'] },
   grumpy:    { mouth: 'frown', browAngle: 16, browRdy: -3 },
@@ -32,7 +32,7 @@ const FEATURES: Record<FinikEmotion, Feat> = {
   fix:       { mouth: 'focus', armR: -26, props: ['wrench'] },
   inspect:   { mouth: 'flat', browRdy: -4, armR: -40, props: ['coin', 'magnifier'] },
   wave:      { mouth: 'grin', cheeks: true, browDy: -3, armR: -78 },
-  plus:      { mouth: 'smile', armL: 52, armR: -52, props: ['plus'] },
+  plus:      { mouth: 'smile', armL: 34, armR: -34, props: ['plus'] },
 };
 
 const DUR: Record<FinikEmotion, number> = {
@@ -181,7 +181,8 @@ export function Finik({
         {f.mouth === 'smirk' && <Path d="M89 128 Q100 133 113 126" stroke="#3A2E80" strokeWidth="4" fill="none" strokeLinecap="round" />}
 
         {has('coin') && (<G><Circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" strokeWidth="2.5" /><SvgText x="170" y="110" textAnchor="middle" fontSize="15" fontWeight="900" fill="#8a5a00">₽</SvgText></G>)}
-        {has('pencil') && (<G><Rect x="150" y="150" width="8" height="34" rx="3" fill="#FFC24B" transform="rotate(24 154 167)" /><Path d="M150 182 l8 0 l-4 8 Z" fill="#3A2E80" transform="rotate(24 154 167)" /></G>)}
+        {has('pencil') && (<G transform="rotate(-32 164 116)"><Rect x="160" y="102" width="7" height="28" rx="3" fill="#FFC24B" /><Path d="M160 100 l7 0 l-3.5 -8 Z" fill="#3A2E80" /></G>)}
+        {has('board') && (<G><Rect x="150" y="58" width="60" height="58" rx="6" fill="#F6F3FF" stroke="#B9A9F0" strokeWidth="3" /><SvgText x="163" y="80" fontSize="13" fontWeight="800" fill="#5947E0">₽</SvgText><Line x1="176" y1="76" x2="203" y2="76" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" /><Line x1="159" y1="93" x2="203" y2="93" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" /><Path d="M159 108 l12 -7 l9 4 l16 -11" stroke="#34C7A0" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" /></G>)}
         {has('ledger') && (<G><Rect x="120" y="150" width="46" height="34" rx="5" fill="#fff" stroke="#DED3FF" strokeWidth="2" transform="rotate(-8 143 167)" /><Line x1="128" y1="160" x2="158" y2="158" stroke="#C9BBF5" strokeWidth="2.5" transform="rotate(-8 143 167)" /><Line x1="128" y1="168" x2="158" y2="166" stroke="#C9BBF5" strokeWidth="2.5" transform="rotate(-8 143 167)" /></G>)}
         {has('sweat') && <Path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7" />}
         {has('sparkle') && (<G fill="#FFC24B"><Path d="M40 60 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z" /><Path d="M168 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3" /></G>)}
@@ -189,7 +190,7 @@ export function Finik({
         {has('shades') && (<G><Rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f" /><Rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f" /><Line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" strokeWidth="6" /><Rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /><Rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /></G>)}
         {has('wrench') && (<G transform="rotate(28 168 150)"><Rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4" /><Path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6" /><Circle cx="168" cy="123" r="5" fill="#F1EDFF" /></G>)}
         {has('magnifier') && (<G><Circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" strokeWidth="4" /><Rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)" /></G>)}
-        {has('plus') && (<G><Circle cx="100" cy="150" r="34" fill="#5947E0" /><Rect x="80" y="143" width="40" height="14" rx="7" fill="#fff" /><Rect x="93" y="130" width="14" height="40" rx="7" fill="#fff" /><Circle cx="72" cy="166" r="11" fill="#8E76F5" /><Circle cx="128" cy="166" r="11" fill="#8E76F5" /></G>)}
+        {has('plus') && (<G transform="rotate(38 100 148)"><Circle cx="100" cy="148" r="33" fill="#5947E0" /><Rect x="81" y="141" width="38" height="14" rx="7" fill="#fff" /><Rect x="93" y="129" width="14" height="38" rx="7" fill="#fff" /></G>)}
       </Svg>
     </Animated.View>
   );
