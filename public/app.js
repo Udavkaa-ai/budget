@@ -771,9 +771,12 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
     <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
     <g class="leg leg-l"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g><g class="leg leg-r"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
     <rect x="72" y="143" width="56" height="40" rx="12" fill="url(#fk-belly)"/>
-    <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
-    <line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
-    <line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <g class="belly-lines">
+      <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+      <line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+      <line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g class="belly-plus"><rect x="85" y="158" width="30" height="10" rx="5" fill="#5947E0"/><rect x="95" y="148" width="10" height="30" rx="5" fill="#5947E0"/><circle class="point-hand" cx="70" cy="150" r="9" fill="#8E76F5"/><circle class="point-hand" cx="130" cy="150" r="9" fill="#8E76F5"/></g>
     <ellipse class="cheek" cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8"/><ellipse class="cheek" cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8"/>
     <line x1="92" y1="96" x2="108" y2="96" stroke="#FFC24B" stroke-width="4"/>
     <circle cx="79" cy="97" r="19" fill="#FFFFFF"/><circle cx="121" cy="97" r="19" fill="#FFFFFF"/>
