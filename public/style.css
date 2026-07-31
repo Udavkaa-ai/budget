@@ -3049,3 +3049,5 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 .finik-wander.rtl { animation-name: fk-cross-rtl; }
 @keyframes fk-cross { 0% { transform: translateX(-56px) scaleX(1); } 100% { transform: translateX(calc(100vw + 16px)) scaleX(1); } }
 @keyframes fk-cross-rtl { 0% { transform: translateX(calc(100vw + 16px)) scaleX(-1); } 100% { transform: translateX(-56px) scaleX(-1); } }
+
+.login-finik-cap { text-align: center; color: var(--text-muted); font-size: 14px; font-weight: 600; margin: 0 0 10px; }

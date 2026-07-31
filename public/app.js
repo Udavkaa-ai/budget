@@ -811,13 +811,17 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
 function ensureFinikDefs() {
   if (!document.querySelector('.finik-defs')) document.body.insertAdjacentHTML('beforeend', FINIK_DEFS);
 }
+// Показывать ли маскота (по умолчанию — да; выключается в настройках)
+function finikEnabled() { return localStorage.getItem('finik_enabled') !== '0'; }
 // Возвращает HTML маскота с заданной эмоцией. size: 'finik-sm' | 'finik-md' | 'finik-lg'
 function finik(emotion = 'idle', size = 'finik-sm', extra = '') {
+  if (!finikEnabled()) return '';
   return `<div class="finik ${size} ${extra}">${FINIK_SVG.replace('data-emotion="idle"', `data-emotion="${emotion}"`)}</div>`;
 }
 
 // Гуляющий Финик на верхней границе кнопок в контейнере [data-finik-walk]
 function mountWalkers() {
+  if (!finikEnabled()) return;
   document.querySelectorAll('[data-finik-walk]').forEach(host => {
     if (host.querySelector('.finik-walker')) return;
     host.classList.add('finik-walk-host');
@@ -878,6 +882,7 @@ function finikActivate() {
 
 // Иногда Финик просто проходит по нижней панели слева направо
 function finikWander() {
+  if (!finikEnabled()) return;
   const app = document.getElementById('app');
   let dir = 0; // чередуем: слева-направо, затем справа-налево
   const spawn = () => {
@@ -3037,10 +3042,22 @@ async function initApp() {
   mountWalkers();
   finikActivate();
   finikWander();
-  const loginFinik = document.getElementById('login-finik');
-  if (loginFinik) loginFinik.innerHTML = finik('wave', 'finik-hero');
-  const fabAdd = document.getElementById('fab-add');
-  if (fabAdd) { fabAdd.classList.add('fab--finik'); fabAdd.setAttribute('aria-label', 'Добавить расход'); fabAdd.innerHTML = finik('plus'); }
+  if (finikEnabled()) {
+    const loginFinik = document.getElementById('login-finik');
+    if (loginFinik) loginFinik.innerHTML = finik('wave', 'finik-hero');
+    const cap = document.getElementById('login-finik-cap');
+    if (cap) cap.style.display = 'block';
+    const fabAdd = document.getElementById('fab-add');
+    if (fabAdd) { fabAdd.classList.add('fab--finik'); fabAdd.setAttribute('aria-label', 'Добавить расход'); fabAdd.innerHTML = finik('plus'); }
+  }
+  const finikToggle = document.getElementById('finik-toggle');
+  if (finikToggle) {
+    finikToggle.checked = finikEnabled();
+    finikToggle.addEventListener('change', () => {
+      localStorage.setItem('finik_enabled', finikToggle.checked ? '1' : '0');
+      location.reload();
+    });
+  }
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
   loadSettings();       // run in background
