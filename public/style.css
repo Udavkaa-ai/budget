@@ -3029,10 +3029,12 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 .finik-svg[data-emotion="wave"] .arm-r { transform-origin: 8px 8px; animation: fk-wavehi .5s ease-in-out infinite; }
 @keyframes fk-wavehi { 0%,100% { transform: rotate(-54deg); } 50% { transform: rotate(-90deg); } }
 
-/* plus — держит большой плюсик двумя руками */
-.finik-svg[data-emotion="plus"] .p-plus { opacity: 1; }
-.finik-svg[data-emotion="plus"] .arm-l { transform: rotate(34deg); }
-.finik-svg[data-emotion="plus"] .arm-r { transform: rotate(-34deg); }
+/* plus — плюсик на пузе, показывает на него лапами */
+.belly-plus { opacity: 0; }
+.finik-svg[data-emotion="plus"] .belly-lines { opacity: 0; }
+.finik-svg[data-emotion="plus"] .belly-plus { opacity: 1; }
+/* задние руки прячем — «показывают» только две передние лапки на пузе */
+.finik-svg[data-emotion="plus"] .arm-l, .finik-svg[data-emotion="plus"] .arm-r { opacity: 0; }
 
 /* приветственный Финик на логине */
 .finik-hero { width: 132px; margin: 0 auto 6px; }
