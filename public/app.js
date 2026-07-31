@@ -791,7 +791,8 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
     <line class="mouth m-flat" x1="90" y1="128" x2="110" y2="128" stroke="#3A2E80" stroke-width="4" stroke-linecap="round"/>
     <path class="mouth m-smirk" d="M89 128 Q100 133 113 126" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
     <g class="prop p-coin"><circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="170" y="110" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
-    <g class="prop p-pencil"><rect x="150" y="150" width="8" height="34" rx="3" fill="#FFC24B" transform="rotate(24 154 167)"/><path d="M150 182 l8 0 l-4 8 Z" fill="#3A2E80" transform="rotate(24 154 167)"/></g>
+    <g class="prop p-pencil"><g transform="rotate(-32 164 116)"><rect x="160" y="102" width="7" height="28" rx="3" fill="#FFC24B"/><path d="M160 100 l7 0 l-3.5 -8 Z" fill="#3A2E80"/></g></g>
+    <g class="prop p-board"><rect x="150" y="58" width="60" height="58" rx="6" fill="#F6F3FF" stroke="#B9A9F0" stroke-width="3"/><text x="163" y="80" font-size="13" font-weight="800" fill="#5947E0">₽</text><line x1="176" y1="76" x2="203" y2="76" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><line x1="159" y1="93" x2="203" y2="93" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><path d="M159 108 l12 -7 l9 4 l16 -11" stroke="#34C7A0" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
     <g class="prop p-sweat"><path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7"/></g>
   </g>
   <g class="prop p-ledger"><rect x="120" y="150" width="46" height="34" rx="5" fill="#fff" stroke="#DED3FF" stroke-width="2" transform="rotate(-8 143 167)"/><line x1="128" y1="160" x2="158" y2="158" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/><line x1="128" y1="168" x2="158" y2="166" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/></g>
@@ -801,7 +802,7 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="id
   <g class="prop p-wrench" transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g>
   <g class="prop p-magnifier"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
   <g class="prop p-hearts" fill="#FF5C87"><path class="heart" d="M60 96 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q0 7 -10 13 q-10 -6 -10 -13 Z"/><path class="heart" d="M124 92 a4 4 0 0 1 8 0 a4 4 0 0 1 8 0 q0 5 -8 10 q-8 -5 -8 -10 Z"/></g>
-  <g class="prop p-plus"><g class="plus-badge"><circle cx="100" cy="150" r="34" fill="#5947E0"/><rect x="80" y="143" width="40" height="14" rx="7" fill="#fff"/><rect x="93" y="130" width="14" height="40" rx="7" fill="#fff"/></g><circle cx="72" cy="166" r="11" fill="#8E76F5"/><circle cx="128" cy="166" r="11" fill="#8E76F5"/></g>
+  <g class="prop p-plus"><g class="plus-badge" transform="rotate(38 100 148)"><circle cx="100" cy="148" r="33" fill="#5947E0"/><rect x="81" y="141" width="38" height="14" rx="7" fill="#fff"/><rect x="93" y="129" width="14" height="38" rx="7" fill="#fff"/></g></g>
 </svg>`;
 
 function ensureFinikDefs() {
