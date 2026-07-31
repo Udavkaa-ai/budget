@@ -24,6 +24,7 @@
   <div class="login-container">
     <div class="login-logo">
       <div id="login-finik"></div>
+      <p id="login-finik-cap" class="login-finik-cap" style="display:none">Привет! Я Финик — ваш семейный бухгалтер 👋</p>
       <h1>Семейный бюджет</h1>
       <p>Совместный учёт расходов</p>
     </div>
@@ -300,6 +301,18 @@
           </span>
           <span class="rec-entry-chev">›</span>
         </button>
+
+        <div class="settings-section">
+          <div class="settings-title">Оформление</div>
+          <label class="toggle-row">
+            <span class="toggle-label">🧮 Маскот Финик</span>
+            <span class="toggle-wrap">
+              <input type="checkbox" id="finik-toggle" />
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+          <div class="settings-hint">Виртуальный бухгалтер, который реагирует на ваши деньги. Выключите, если мешает.</div>
+        </div>
 
         <div class="settings-section" id="push-settings-section">
           <div class="settings-title">Уведомления</div>
