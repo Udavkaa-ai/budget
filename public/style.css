@@ -2841,10 +2841,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 
 .finik-svg[data-emotion="record"] .m-smile { opacity: 0; }
 .finik-svg[data-emotion="record"] .m-focus { opacity: 1; }
-.finik-svg[data-emotion="record"] .p-ledger, .finik-svg[data-emotion="record"] .p-pencil { opacity: 1; }
-.finik-svg[data-emotion="record"] .p-pencil { animation: fk-write .5s ease-in-out infinite; }
-.finik-svg[data-emotion="record"] .pupil { transform: translateY(3px); }
-.finik-svg[data-emotion="record"] .arm-r { transform: rotate(24deg); }
+.finik-svg[data-emotion="record"] .p-board, .finik-svg[data-emotion="record"] .p-pencil { opacity: 1; }
+.finik-svg[data-emotion="record"] .p-pencil { animation: fk-write .45s ease-in-out infinite; }
+.finik-svg[data-emotion="record"] .pupil { transform: translate(3px, -2px); }
+.finik-svg[data-emotion="record"] .arm-r { transform: rotate(-46deg); }
 
 .finik-svg[data-emotion="overspend"] .f-body { animation: fk-wobble .5s ease-in-out infinite; }
 .finik-svg[data-emotion="overspend"] .m-smile { opacity: 0; }
@@ -2880,7 +2880,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 @keyframes fk-jump { 0%,100% { transform: translateY(0) scale(1); } 40% { transform: translateY(-20px) scale(1.03); } 55% { transform: translateY(-20px); } }
 @keyframes fk-wobble { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
 @keyframes fk-wag { 0%,100% { transform: rotate(-58deg); } 50% { transform: rotate(-72deg); } }
-@keyframes fk-write { 0%,100% { transform: rotate(24deg) translate(0,0); } 50% { transform: rotate(24deg) translate(-2px,2px); } }
+@keyframes fk-write { 0%,100% { transform: translate(0,0); } 50% { transform: translate(2px,-2px); } }
 @keyframes fk-sweat { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(16px); opacity: 0; } }
 @keyframes fk-fall { 0% { transform: translateY(-8px) rotate(0); opacity: 1; } 100% { transform: translateY(60px) rotate(220deg); opacity: 0; } }
 @keyframes fk-think { 0%,100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-4px); opacity: 1; } }
@@ -3031,8 +3031,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 
 /* plus — держит большой плюсик двумя руками */
 .finik-svg[data-emotion="plus"] .p-plus { opacity: 1; }
-.finik-svg[data-emotion="plus"] .arm-l { transform: rotate(52deg); }
-.finik-svg[data-emotion="plus"] .arm-r { transform: rotate(-52deg); }
+.finik-svg[data-emotion="plus"] .arm-l { transform: rotate(34deg); }
+.finik-svg[data-emotion="plus"] .arm-r { transform: rotate(-34deg); }
 
 /* приветственный Финик на логине */
 .finik-hero { width: 132px; margin: 0 auto 6px; }
