@@ -32,7 +32,7 @@ const FEATURES: Record<FinikEmotion, Feat> = {
   fix:       { mouth: 'focus', armR: -26, props: ['wrench'] },
   inspect:   { mouth: 'flat', browRdy: -4, armR: -40, props: ['coin', 'magnifier'] },
   wave:      { mouth: 'grin', cheeks: true, browDy: -3, armR: -78 },
-  plus:      { mouth: 'smile', armL: 34, armR: -34, props: ['plus'] },
+  plus:      { mouth: 'smile' },
 };
 
 const DUR: Record<FinikEmotion, number> = {
@@ -117,6 +117,7 @@ export function Finik({
   };
 
   const f = FEATURES[shown] ?? FEATURES.idle;
+  const plusPose = shown === 'plus';
   const browL = `translate(0 ${f.browDy ?? 0}) rotate(${f.browAngle ?? 0} 76 75)`;
   const browR = `translate(0 ${(f.browDy ?? 0) + (f.browRdy ?? 0)}) rotate(${-(f.browAngle ?? 0)} 124 75)`;
   const has = (p: string) => f.props?.includes(p);
@@ -145,16 +146,24 @@ export function Finik({
           </G>
         )}
 
-        <G transform={`rotate(${f.armL ?? 0} 50 112)`}><Ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0" /><Circle cx="46" cy="147" r="9" fill="#8E76F5" /></G>
-        <G transform={`rotate(${f.armR ?? 0} 150 112)`}><Ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0" /><Circle cx="154" cy="147" r="9" fill="#8E76F5" /></G>
+        {!plusPose && <G transform={`rotate(${f.armL ?? 0} 50 112)`}><Ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0" /><Circle cx="46" cy="147" r="9" fill="#8E76F5" /></G>}
+        {!plusPose && <G transform={`rotate(${f.armR ?? 0} 150 112)`}><Ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0" /><Circle cx="154" cy="147" r="9" fill="#8E76F5" /></G>}
 
         <Path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fkBody)" />
         <Ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4" /><Ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4" />
 
         <Rect x="72" y="143" width="56" height="40" rx="12" fill="url(#fkBelly)" />
-        <Line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" />
-        <Line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" />
-        <Line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" />
+        {!plusPose && (<>
+          <Line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" />
+          <Line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" />
+          <Line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" strokeWidth="3" strokeLinecap="round" />
+        </>)}
+        {plusPose && (<G>
+          <Rect x="85" y="158" width="30" height="10" rx="5" fill="#5947E0" />
+          <Rect x="95" y="148" width="10" height="30" rx="5" fill="#5947E0" />
+          <Circle cx="70" cy="150" r="9" fill="#8E76F5" />
+          <Circle cx="130" cy="150" r="9" fill="#8E76F5" />
+        </G>)}
 
         {f.cheeks && (<><Ellipse cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8" /><Ellipse cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8" /></>)}
 
@@ -190,7 +199,6 @@ export function Finik({
         {has('shades') && (<G><Rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f" /><Rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f" /><Line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" strokeWidth="6" /><Rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /><Rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e" /></G>)}
         {has('wrench') && (<G transform="rotate(28 168 150)"><Rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4" /><Path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6" /><Circle cx="168" cy="123" r="5" fill="#F1EDFF" /></G>)}
         {has('magnifier') && (<G><Circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" strokeWidth="4" /><Rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)" /></G>)}
-        {has('plus') && (<G transform="rotate(38 100 148)"><Circle cx="100" cy="148" r="33" fill="#5947E0" /><Rect x="81" y="141" width="38" height="14" rx="7" fill="#fff" /><Rect x="93" y="129" width="14" height="38" rx="7" fill="#fff" /></G>)}
       </Svg>
     </Animated.View>
   );
