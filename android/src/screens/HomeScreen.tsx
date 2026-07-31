@@ -18,6 +18,7 @@ import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../off
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { Finik } from '../components/Finik';
+import { useFinikEnabled } from '../finik';
 import PagerView from 'react-native-pager-view';
 import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
@@ -86,6 +87,7 @@ function buildRows(expenses: (Expense & { pending?: boolean })[], userFilter: 'a
 
 export default function HomeScreen() {
   const t = useTheme();
+  const finikOn = useFinikEnabled();
   const { user } = useAuth();
   const { cats, icon: catIcon2 } = useCategories();
   const addSheetRef = useRef<BottomSheet>(null);
@@ -435,16 +437,22 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* FAB — градиент как у веб-кнопок */}
+        {/* FAB — Финик с плюсиком, либо обычная «+» если маскот выключен */}
         <TouchableOpacity
           ref={fabTarget}
           activeOpacity={0.85}
-          style={styles.fab}
+          style={finikOn ? styles.fab : styles.fabBtn}
           accessibilityLabel="Добавить расход"
           accessibilityRole="button"
           onPress={() => { haptics.medium(); addSheetRef.current?.expand(); }}
         >
-          <Finik emotion="plus" size={64} interactive={false} />
+          {finikOn ? (
+            <Finik emotion="plus" size={64} interactive={false} />
+          ) : (
+            <LinearGradient colors={t.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabInner}>
+              <Ionicons name="add" size={30} color="#fff" />
+            </LinearGradient>
+          )}
         </TouchableOpacity>
 
         <SuccessFlash token={addedFlash} label="Расход добавлен" />
@@ -482,6 +490,7 @@ const styles = StyleSheet.create({
   itemMeta:   { fontSize: font.sm, marginTop: 2 },
   itemAmt:    { fontSize: font.md, fontWeight: '700' },
   fab:        { position: 'absolute', bottom: 18, right: 16, width: 68, height: 72, alignItems: 'center', justifyContent: 'center' },
+  fabBtn:     { position: 'absolute', bottom: 24, right: 24, width: 60, height: 60, borderRadius: 30, elevation: 8, shadowColor: '#5947E0', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
   fabInner:   { flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
   modalBox:   { borderRadius: radius.lg, padding: spacing.lg },

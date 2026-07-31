@@ -19,6 +19,7 @@ import { PinPad } from '../components/PinPad';
 import { Field, PrimaryButton } from '../components/UI';
 import { RecurringScreen } from './RecurringScreen';
 import { Finik } from '../components/Finik';
+import { useFinikEnabled, setFinikEnabled } from '../finik';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
@@ -33,6 +34,7 @@ export default function SettingsScreen() {
   const { user, logout, onLoginSuccess } = useAuth();
   const premium = usePremium();
   const blocks = useBlocks();
+  const finikOn = useFinikEnabled();
   const themeMode = useThemeMode();
   const lockEnabled = useLockEnabled();
   const hasPinSet = useHasPin();
@@ -749,6 +751,19 @@ export default function SettingsScreen() {
           </View>
           <Text style={{ color: '#fff', fontSize: 22 }}>›</Text>
         </TouchableOpacity>
+
+        {/* Маскот */}
+        <Card>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: t.text }}>🧮 Маскот Финик</Text>
+              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                Виртуальный бухгалтер, который реагирует на ваши деньги
+              </Text>
+            </View>
+            <Switch value={finikOn} onValueChange={setFinikEnabled} trackColor={{ true: t.primary }} />
+          </View>
+        </Card>
 
         {/* Data */}
         <Card>

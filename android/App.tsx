@@ -26,6 +26,7 @@ import { useAuth } from './src/hooks/useAuth';
 import { initClassifier } from './src/classifier';
 import { importSeed } from './src/classifier/db';
 import { initPremium } from './src/premium';
+import { initFinik } from './src/finik';
 import { initBlocks } from './src/blocks';
 import { crowd, api } from './src/api/client';
 
@@ -39,6 +40,7 @@ Notifications.setNotificationHandler({
 
 initClassifier().catch(console.error);
 initPremium().catch(console.error);
+initFinik().catch(console.error);
 initBlocks().catch(console.error);
 initThemeMode().catch(console.error);
 initAppLock().catch(console.error);

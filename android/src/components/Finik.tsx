@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, View, ViewStyle } from 'react-native';
 import Svg, {
   Defs, LinearGradient, RadialGradient, Stop, G, Path, Ellipse, Circle, Rect, Line, Text as SvgText,
 } from 'react-native-svg';
+import { useFinikEnabled } from '../finik';
 
 // Маскот «Финик» — семейный бухгалтер. Эмоции 1:1 с вебом (public/app.js).
 export type FinikEmotion =
@@ -66,6 +67,7 @@ const TAPS: FinikEmotion[] = ['goal', 'income', 'inspect', 'spy'];
 export function Finik({
   emotion = 'idle', size = 120, style, interactive = true,
 }: { emotion?: FinikEmotion; size?: number; style?: ViewStyle; interactive?: boolean }) {
+  const enabled = useFinikEnabled();
   const v = useRef(new Animated.Value(0)).current;
   const blink = useRef(new Animated.Value(0)).current;
   const [fx, setFx] = useState<FinikEmotion | null>(null);
@@ -203,8 +205,10 @@ export function Finik({
     </Animated.View>
   );
 
+  if (!enabled) return null; // маскот выключен в настройках
+
   const box: ViewStyle = { width: size, height: size * 210 / 200 };
   return interactive
-    ? <Pressable onPress={onPress} style={[box, style]}>{svg}</Pressable>
+    ? <Pressable onPress={onPress} android_ripple={null} style={[box, style]}>{svg}</Pressable>
     : <View style={[box, style]}>{svg}</View>;
 }

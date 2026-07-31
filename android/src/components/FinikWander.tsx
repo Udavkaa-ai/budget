@@ -3,6 +3,7 @@ import { Animated, Dimensions, Easing, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Finik } from './Finik';
 import { navigationRef } from '../navigation';
+import { isFinikEnabled } from '../finik';
 
 // Экраны, где Финики уже есть — там снизу не гуляем (чтобы их не стало трое)
 const BUSY = new Set(['Home', 'Goals']);
@@ -23,6 +24,7 @@ export function FinikWander() {
     let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     const cross = () => {
+      if (!isFinikEnabled()) return; // маскот выключен
       const route = navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
       if (route && BUSY.has(route)) return; // на «занятых» экранах не выходим
       const rtl = count.current % 2 === 1;

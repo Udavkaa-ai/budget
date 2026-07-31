@@ -11,6 +11,7 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { setServerUrl, setToken, passwordLogin, api } from '../api/client';
 import { Field, PrimaryButton } from '../components/UI';
 import { Finik } from '../components/Finik';
+import { useFinikEnabled } from '../finik';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -29,6 +30,7 @@ interface Props {
 
 export default function AuthScreen({ onLoginSuccess }: Props) {
   const t = useTheme();
+  const finikOn = useFinikEnabled();
   const [serverUrl, setServerUrlState] = useState(DEFAULT_SERVER);
   const [loading, setLoading] = useState(false);
   // Сразу показываем экран входа (сервер уже прописан), а не ввод адреса
@@ -100,9 +102,14 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
         <View style={styles.inner}>
-          <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
-            <Finik emotion="wave" size={128} />
-          </View>
+          {finikOn && (
+            <View style={{ alignItems: 'center', marginBottom: spacing.sm }}>
+              <Finik emotion="wave" size={128} />
+              <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: -2 }}>
+                Привет! Я Финик — ваш семейный бухгалтер 👋
+              </Text>
+            </View>
+          )}
           <Text style={[styles.title, { color: t.text }]}>{IS_DEMO ? 'Бюджет · Демо' : 'Семейный бюджет'}</Text>
           <Text style={[styles.sub, { color: t.textMuted }]}>
             {IS_DEMO ? 'Демо-режим: вход по паролю' : (step === 'url' ? 'Введите адрес вашего сервера' : 'Выберите способ входа')}
