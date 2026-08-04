@@ -126,7 +126,7 @@ export function Finik({
 
   const svg = (
     <Animated.View style={[{ flex: 1 }, motionStyle(shown, v)]}>
-      <Svg viewBox="0 0 200 210" width="100%" height="100%">
+      <Svg viewBox="-6 0 220 210" width="100%" height="100%">
         <Defs>
           <LinearGradient id="fkBody" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor="#9B80FF" /><Stop offset="1" stopColor="#5947E0" />
@@ -207,7 +207,9 @@ export function Finik({
 
   if (!enabled) return null; // маскот выключен в настройках
 
-  const box: ViewStyle = { width: size, height: size * 210 / 200 };
+  // viewBox расширен до 220×210, чтобы доска (поза record) и правые пропсы
+  // не обрезались — соотношение сторон бокса должно совпадать с viewBox.
+  const box: ViewStyle = { width: size, height: size * 210 / 220 };
   return interactive
     ? <Pressable onPress={onPress} android_ripple={null} style={[box, style]}>{svg}</Pressable>
     : <View style={[box, style]}>{svg}</View>;
