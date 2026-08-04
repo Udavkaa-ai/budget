@@ -1398,8 +1398,30 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   // Planned income total
   const plannedInc = Object.values(incomes).reduce((s, v) => s + v, 0) || settings.plannedMonthly || 0;
 
-  // Spending pace: expected spend by now vs actual
-  const expectedByNow = isCurrentMon && plannedInc > 0 ? Math.round(plannedInc * daysElapsed / daysInMonth) : null;
+  // Spending pace — вердикт считаем в коде, чтобы ИИ не пересчитывал (модель регулярно
+  // делит на 31 вместо дней прошло и объявляет «месяц почти закончился, темп низкий»).
+  const paceBase = settings.plannedMonthly || Object.values(catLimits).reduce((s, v) => s + v, 0) || plannedInc || 0;
+  const paceBlock = (() => {
+    if (!isCurrentMon) return `Прошло дней: ${daysInMonth} из ${daysInMonth} (месяц завершён)`;
+    if (paceBase <= 0) return `Прошло дней: ${daysElapsed} из ${daysInMonth} — месяц НЕ завершён, впереди ещё ${daysInMonth - daysElapsed} дн. (плановый бюджет не задан — темп оценить нельзя)`;
+    const daysLeft    = daysInMonth - daysElapsed;
+    const expectedNow = Math.round(paceBase * daysElapsed / daysInMonth);
+    const paceRatio   = expectedNow > 0 ? Math.round(cur.total / expectedNow * 100) : 100;
+    const dailyActual = Math.round(cur.total / daysElapsed);
+    const dailyPlan   = Math.round(paceBase / daysInMonth);
+    const projected   = Math.round(cur.total / daysElapsed * daysInMonth);
+    const projVsPlan  = Math.round(projected / paceBase * 100);
+    const verdict = paceRatio >= 115
+      ? `⚠️ ОПЕРЕЖЕНИЕ ГРАФИКА — потрачено ${paceRatio}% от нормы на этот день (на ${(cur.total - expectedNow).toLocaleString('ru')} ₽ больше ожидаемого), есть риск перерасхода`
+      : paceRatio <= 85
+        ? `отставание от графика — ${paceRatio}% от нормы на этот день (пока укладываемся в план)`
+        : `в графике — ${paceRatio}% от нормы на этот день`;
+    return `Прошло дней: ${daysElapsed} из ${daysInMonth} — месяц НЕ завершён, впереди ещё ${daysLeft} дн.
+Потрачено к этому дню: ${cur.total.toLocaleString('ru')} ₽; норма к ${daysElapsed}-му дню при равномерном расходовании ~${expectedNow.toLocaleString('ru')} ₽.
+Вердикт по темпу: ${verdict}.
+Средний расход: ${dailyActual.toLocaleString('ru')} ₽/день (плановый равномерный: ${dailyPlan.toLocaleString('ru')} ₽/день).
+Прогноз до конца месяца при текущем темпе: ~${projected.toLocaleString('ru')} ₽ = ${projVsPlan}% планового бюджета (${paceBase.toLocaleString('ru')} ₽)${daysElapsed < 7 ? '. NB: в начале месяца прогноз грубый (единичная крупная покупка искажает) — опирайся прежде всего на сравнение «потрачено vs норма к этому дню»' : ''}.`;
+  })();
 
   // Savings analysis
   const sumLimits    = Object.values(catLimits).reduce((s, v) => s + v, 0);
@@ -1420,7 +1442,9 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
 
   // Build report text for the AI
   const reportText = `Семейный бюджет — ${cur.monthName}
-Дней прошло: ${daysElapsed} из ${daysInMonth}${!isCurrentMon ? ' (месяц завершён)' : ''}${expectedByNow !== null ? `\nТемп трат: ${cur.total.toLocaleString('ru')} ₽ (ожидалось к этому дню ~${expectedByNow.toLocaleString('ru')} ₽ по плановому бюджету)` : ''}
+
+=== ТЕМП ТРАТ ===
+${paceBlock}
 
 === ДОХОДЫ ===
 Плановый доход за месяц: ${plannedInc.toLocaleString('ru')} ₽

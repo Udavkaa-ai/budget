@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Семейный бюджет",
+    "name": "ФИНИК",
     "slug": "family-budget",
     "version": "2.21.0",
     "orientation": "portrait",
@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#123B6D"
+      "backgroundColor": "#ECE6FF"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -17,7 +17,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#123B6D"
+        "backgroundColor": "#ECE6FF"
       },
       "package": "com.familybudget.app",
       "versionCode": 16,
