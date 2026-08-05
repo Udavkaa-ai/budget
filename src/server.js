@@ -1402,8 +1402,9 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   // делит на 31 вместо дней прошло и объявляет «месяц почти закончился, темп низкий»).
   const paceBase = settings.plannedMonthly || Object.values(catLimits).reduce((s, v) => s + v, 0) || plannedInc || 0;
   const paceBlock = (() => {
-    if (!isCurrentMon) return `Прошло дней: ${daysInMonth} из ${daysInMonth} (месяц завершён)`;
-    if (paceBase <= 0) return `Прошло дней: ${daysElapsed} из ${daysInMonth} — месяц НЕ завершён, впереди ещё ${daysInMonth - daysElapsed} дн. (плановый бюджет не задан — темп оценить нельзя)`;
+    if (!isCurrentMon) return `Месяц завершён — прошло все ${daysInMonth} дн.`;
+    const dayLine = `СЕГОДНЯ ${daysElapsed}-й календарный день месяца (из ${daysInMonth}). Прошло ровно ${daysElapsed} дн. — это ЕДИНСТВЕННОЕ верное число прошедших дней, бери только его.`;
+    if (paceBase <= 0) return `${dayLine} Плановый бюджет не задан — темп оценить нельзя.`;
     const daysLeft    = daysInMonth - daysElapsed;
     const expectedNow = Math.round(paceBase * daysElapsed / daysInMonth);
     const paceRatio   = expectedNow > 0 ? Math.round(cur.total / expectedNow * 100) : 100;
@@ -1412,15 +1413,19 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
     const projected   = Math.round(cur.total / daysElapsed * daysInMonth);
     const projVsPlan  = Math.round(projected / paceBase * 100);
     const verdict = paceRatio >= 115
-      ? `⚠️ ОПЕРЕЖЕНИЕ ГРАФИКА — потрачено ${paceRatio}% от нормы на этот день (на ${(cur.total - expectedNow).toLocaleString('ru')} ₽ больше ожидаемого), есть риск перерасхода`
+      ? `ОПЕРЕЖЕНИЕ ГРАФИКА — потрачено ${paceRatio}% от нормы на этот день (на ${(cur.total - expectedNow).toLocaleString('ru')} ₽ больше ожидаемого), есть риск перерасхода`
       : paceRatio <= 85
         ? `отставание от графика — ${paceRatio}% от нормы на этот день (пока укладываемся в план)`
         : `в графике — ${paceRatio}% от нормы на этот день`;
-    return `Прошло дней: ${daysElapsed} из ${daysInMonth} — месяц НЕ завершён, впереди ещё ${daysLeft} дн.
-Потрачено к этому дню: ${cur.total.toLocaleString('ru')} ₽; норма к ${daysElapsed}-му дню при равномерном расходовании ~${expectedNow.toLocaleString('ru')} ₽.
-Вердикт по темпу: ${verdict}.
-Средний расход: ${dailyActual.toLocaleString('ru')} ₽/день (плановый равномерный: ${dailyPlan.toLocaleString('ru')} ₽/день).
-Прогноз до конца месяца при текущем темпе: ~${projected.toLocaleString('ru')} ₽ = ${projVsPlan}% планового бюджета (${paceBase.toLocaleString('ru')} ₽)${daysElapsed < 7 ? '. NB: в начале месяца прогноз грубый (единичная крупная покупка искажает) — опирайся прежде всего на сравнение «потрачено vs норма к этому дню»' : ''}.`;
+    // Все цифры уже посчитаны в коде. ИИ должен пересказать их своими словами,
+    // НЕ пересчитывая (модель регулярно берёт «10» из графика выплат «аванс к 10-му»
+    // и делит на него, вместо реального числа прошедших дней).
+    return `${dayLine}
+Впереди ещё ${daysLeft} дн.
+Потрачено на сегодня: ${cur.total.toLocaleString('ru')} ₽; норма к ${daysElapsed}-му дню при равномерном темпе ~${expectedNow.toLocaleString('ru')} ₽.
+Темп (готово, не пересчитывай): ${paceRatio}% от нормы на этот день — ${verdict}.
+Средний расход в день (готово, = потрачено ÷ ${daysElapsed} дн., не пересчитывай): ${dailyActual.toLocaleString('ru')} ₽/день при плановом ${dailyPlan.toLocaleString('ru')} ₽/день.
+Прогноз расходов до конца месяца при этом темпе (готово, не пересчитывай): ~${projected.toLocaleString('ru')} ₽ = ${projVsPlan}% планового бюджета (${paceBase.toLocaleString('ru')} ₽)${daysElapsed < 7 ? '. NB: в начале месяца прогноз грубый — опирайся прежде всего на «потрачено vs норма к этому дню»' : ''}.`;
   })();
 
   // Savings analysis
@@ -1443,7 +1448,7 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
   // Build report text for the AI
   const reportText = `Семейный бюджет — ${cur.monthName}
 
-=== ТЕМП ТРАТ ===
+ТЕМП ТРАТ (готовые цифры — перескажи их своими словами в «Общей картине», НЕ вставляй эти строки дословно и НЕ пересчитывай числа):
 ${paceBlock}
 
 === ДОХОДЫ ===
