@@ -24,6 +24,7 @@ import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import { openHelp } from '../help';
+import { RUSTORE_URL, openRuStoreListing } from '../rateApp';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
@@ -380,10 +381,22 @@ export default function SettingsScreen() {
   const inviteFamily = async () => {
     setBusy(true);
     try {
+      // link — это ссылка на ВЕБ-версию с кодом (origin/?invite=code): открывается
+      // в браузере на любом устройстве, код подставляется автоматически.
       const { link, code } = await invites.create();
-      await Share.share({
-        message: `Присоединяйся к нашему семейному бюджету!\n${link}\n\nИли введи код в приложении: ${code}`,
-      });
+      const android = `Присоединяйся к нашему семейному бюджету в ФИНИК! 🟣\n\nУстанови приложение из RuStore:\n${RUSTORE_URL}\n\nи введи код приглашения: ${code}\n\nНет Android? Открой веб-версию: ${link}`;
+      const web = `Присоединяйся к нашему семейному бюджету в ФИНИК! 🟣\n\nОткрой веб-версию (работает в браузере на любом устройстве):\n${link}\n\nКод приглашения уже в ссылке. Если попросит — введи вручную: ${code}`;
+      const iphone = `Присоединяйся к нашему семейному бюджету в ФИНИК! 🟣\n\nНа iPhone приложение работает через браузер. Открой ссылку в Safari:\n${link}\n\nМожно добавить на экран «Домой»: кнопка «Поделиться» → «На экран «Домой»» — будет как обычное приложение.\n\nКод (если попросит): ${code}`;
+      Alert.alert(
+        'Пригласить в семью',
+        'Кого приглашаете? Для Android — приложение из RuStore. Для iPhone и компьютера — веб-версия, она открывается прямо в браузере.',
+        [
+          { text: '📱 Android — RuStore', onPress: () => { void Share.share({ message: android }); } },
+          { text: '🍎 iPhone — веб-версия', onPress: () => { void Share.share({ message: iphone }); } },
+          { text: '💻 Компьютер — веб-версия', onPress: () => { void Share.share({ message: web }); } },
+          { text: 'Отмена', style: 'cancel' },
+        ],
+      );
     } catch (e) {
       Alert.alert('Ошибка', String(e));
     } finally {
@@ -537,6 +550,9 @@ export default function SettingsScreen() {
             <Text style={{ color: t.text }}>👨‍👩‍👧 Пригласить в семью</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: -2, marginBottom: 2 }}>
+            Android — приложение из RuStore · iPhone и компьютер — веб-версия в браузере
+          </Text>
           <TouchableOpacity style={styles.row} onPress={() => setJoinVisible(true)}>
             <Text style={{ color: t.text }}>🔑 Ввести код приглашения</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
@@ -832,6 +848,10 @@ export default function SettingsScreen() {
         {/* Guide & Help */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Помощь</Text>
+          <TouchableOpacity style={styles.row} onPress={() => openRuStoreListing()}>
+            <Text style={{ color: t.text }}>⭐ Оценить приложение в RuStore</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.row} onPress={() => openHelp()}>
             <Text style={{ color: t.text }}>❓ Помощь и частые вопросы</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
@@ -845,7 +865,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.21.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.23.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

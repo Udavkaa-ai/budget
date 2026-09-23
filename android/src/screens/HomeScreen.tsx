@@ -18,6 +18,7 @@ import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../off
 import { DayPickerModal } from '../components/Pickers';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { Finik } from '../components/Finik';
+import { noteUsefulAction } from '../rateApp';
 import { useFinikEnabled } from '../finik';
 import PagerView from 'react-native-pager-view';
 import { SuccessFlash } from '../components/SuccessFlash';
@@ -461,7 +462,7 @@ export default function HomeScreen() {
           <AddExpenseSheet
             ref={addSheetRef}
             user={user}
-            onAdded={() => { setAddedFlash(n => n + 1); loadWindow(); }}
+            onAdded={() => { setAddedFlash(n => n + 1); loadWindow(); void noteUsefulAction(); }}
           />
         )}
     </SafeAreaView>
