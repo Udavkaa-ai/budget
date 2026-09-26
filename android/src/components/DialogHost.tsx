@@ -64,10 +64,12 @@ export function DialogHost() {
                 <Pressable
                   key={i}
                   onPress={() => press(b)}
-                  style={({ pressed }) => [styles.option, { backgroundColor: pressed ? t.primarySoft : t.surface2, borderColor: t.border }]}
+                  style={({ pressed }) => [styles.option, b.primary
+                    ? { backgroundColor: t.primaryStrong, borderColor: t.primaryStrong, opacity: pressed ? 0.85 : 1 }
+                    : { backgroundColor: pressed ? t.primarySoft : t.surface2, borderColor: t.border }]}
                   accessibilityRole="button"
                 >
-                  <Text style={[styles.optionText, { color: b.style === 'destructive' ? t.danger : t.text }]}>{b.text}</Text>
+                  <Text style={[styles.optionText, { color: b.primary ? '#fff' : b.style === 'destructive' ? t.danger : t.text }]}>{b.text}</Text>
                 </Pressable>
               ))}
               {cancel && (

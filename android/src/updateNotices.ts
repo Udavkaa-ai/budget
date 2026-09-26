@@ -19,8 +19,8 @@ function showWebVersion() {
     `Откройте ${WEB_URL.replace('https://', '')} на компьютере, iPhone или любом телефоне и войдите тем же аккаунтом — там та же семья и те же расходы.\n\nНа iPhone веб-версию можно добавить на экран «Домой»: «Поделиться» → «На экран „Домой“».`,
     [
       { text: 'Понятно', style: 'cancel' },
+      { text: 'Открыть сайт', primary: true, onPress: () => { Linking.openURL(WEB_URL).catch(() => {}); } },
       { text: 'Поделиться ссылкой', onPress: () => { Share.share({ message: `ФИНИК — наш семейный бюджет в браузере: ${WEB_URL}` }).catch(() => {}); } },
-      { text: 'Открыть сайт', onPress: () => { Linking.openURL(WEB_URL).catch(() => {}); } },
     ],
   );
 }

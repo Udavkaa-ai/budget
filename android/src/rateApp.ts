@@ -32,7 +32,7 @@ function askNow() {
     'Если приложение помогает вести семейный бюджет — поставьте, пожалуйста, оценку в RuStore. Это очень поможет проекту 🟣',
     [
       { text: 'Не сейчас',      style: 'cancel',      onPress: () => { void snooze(); } },
-      { text: '⭐ Оценить в RuStore', onPress: () => { void markDone(); void openRuStoreListing(); } },
+      { text: '⭐ Оценить в RuStore', primary: true, onPress: () => { void markDone(); void openRuStoreListing(); } },
       { text: 'Больше не спрашивать', style: 'destructive', onPress: () => { void markNever(); } },
     ],
     { cancelable: true, onDismiss: () => { void snooze(); } },

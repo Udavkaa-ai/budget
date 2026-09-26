@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 // Тематический диалог вместо системного Alert.alert (белое окно Android не
 // вписывается в дизайн и не знает тёмную тему). Та же сигнатура, что у
 // Alert.alert, поэтому вызывается откуда угодно, в том числе вне компонентов.
-export type DialogButton = { text?: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' };
+export type DialogButton = { text?: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive'; primary?: boolean };
 export type DialogState = { id: number; title: string; message?: string; buttons: DialogButton[]; cancelable: boolean; onDismiss?: () => void } | null;
 
 let current: DialogState = null;
