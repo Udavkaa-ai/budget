@@ -33,7 +33,7 @@ export function FinikWander() {
       x.setValue(rtl ? W + 40 : -70);
       Animated.timing(x, {
         toValue: rtl ? -70 : W + 40,
-        duration: 9000, easing: Easing.linear, useNativeDriver: true,
+        duration: 7000, easing: Easing.linear, useNativeDriver: true, // бегом, а не прогулкой
       }).start(({ finished }) => { if (finished && alive) setWalk(w => ({ ...w, on: false })); });
     };
     const schedule = (delay: number) => {

@@ -1,0 +1,270 @@
+// Риг Финика: плавные анимации по частям — корпус, руки, стопы, брови,
+// веки, зрачки, рот. Всё здесь — чистые функции-воркелеты без импортов RN:
+// они считаются на UI-потоке Reanimated и 1:1 переиспользуются в веб-превью.
+//
+// Идея: у эмоции есть набор числовых параметров (Rig). При смене эмоции каждое
+// число плавно перетекает к новому значению (экспоненциальное сглаживание),
+// поэтому переходы без рывков. Движение задают двое «часов»: A (быстрые
+// движения: шаги, мах, тряска) и B (медленные: дыхание, «хмф», взгляд).
+// Фазы накапливаются, а не считаются как t·f, — смена темпа тоже без скачков.
+
+export type FinikEmotion =
+  | 'idle' | 'record' | 'income' | 'overspend' | 'grumpy' | 'scold' | 'goal'
+  | 'thinking' | 'walk' | 'spy' | 'fix' | 'inspect' | 'wave' | 'plus';
+
+export type Rig = {
+  fA: number; fB: number; blink: number;   // скорости часов (Гц); моргание вкл/выкл
+  breath: number;                          // дыхание: squash/stretch на B
+  hop: number; hopSquash: number;          // подпрыгивание на A, сплющивание при приземлении
+  stepBob: number;                         // корпус качается на каждом шаге (2×A)
+  huff: number;                            // «хмф!» — резкий выдох раз в цикл B
+  shakeX: number;                          // тряска вбок на A
+  tilt: number; tiltA: number; tiltPhA: number; tiltB: number; // наклон: база, на A (+фаза), на B
+  armL: number; armLA: number; armLPh: number; armLA2: number; armLB: number;
+  armR: number; armRA: number; armRPh: number; armRA2: number; armRB: number;
+  shrug: number;                           // руки вздрагивают вместе с «хмф»
+  step: number; stride: number;            // шаг: подъём стоп и вынос вперёд
+  tap: number;                             // нетерпеливо стучит правой ногой
+  browAngle: number; browDy: number; browRdy: number; browTremble: number;
+  twitch: number;                          // скептически вскидывает правую бровь раз в цикл B
+  lid: number;                             // прикрытые веки 0..1
+  lookX: number; lookY: number; lookAmp: number; eyeRoll: number; // взгляд, блуждание, закатывание глаз
+  talk: number;                            // рот «говорит» (открывается на A)
+  anger: number; sweat: number; cheeks: number;
+  mSmile: number; mGrin: number; mFrown: number; mFocus: number;
+  mFlat: number; mSmirk: number; mYell: number;
+};
+
+const PI = Math.PI;
+
+const BASE: Rig = {
+  fA: 1, fB: 0.3, blink: 1,
+  breath: 0, hop: 0, hopSquash: 0, stepBob: 0, huff: 0, shakeX: 0,
+  tilt: 0, tiltA: 0, tiltPhA: 0, tiltB: 0,
+  armL: 0, armLA: 0, armLPh: 0, armLA2: 0, armLB: 0,
+  armR: 0, armRA: 0, armRPh: 0, armRA2: 0, armRB: 0, shrug: 0,
+  step: 0, stride: 0, tap: 0,
+  browAngle: 0, browDy: 0, browRdy: 0, browTremble: 0, twitch: 0,
+  lid: 0, lookX: 0, lookY: 0, lookAmp: 0, eyeRoll: 0,
+  talk: 0, anger: 0, sweat: 0, cheeks: 0,
+  mSmile: 0, mGrin: 0, mFrown: 0, mFocus: 0, mFlat: 0, mSmirk: 0, mYell: 0,
+};
+
+const T = (o: Partial<Rig>): Rig => ({ ...BASE, ...o });
+
+// Руки, в которых что-то держится (доска, монета, ключ), не качаем — иначе
+// предмет «отвалится» от лапы; такие эмоции живут наклоном корпуса.
+export const TARGETS: Record<FinikEmotion, Rig> = {
+  idle:  T({ breath: 0.022, lookAmp: 1.2, mSmile: 1 }),
+  plus:  T({ breath: 0.022, mSmile: 1 }),
+  spy:   T({ breath: 0.02, browDy: -2, lookX: -2, lookAmp: 2.5, mSmirk: 1 }),
+
+  // Бег по нижнему меню: шаги с выносом стоп, руки работают, корпус
+  // наклонён вперёд и покачивается на каждом шаге.
+  walk:  T({ fA: 2.3, step: 7, stride: 8, stepBob: 3, tilt: 5, tiltA: 1.5,
+             armLA: 28, armLPh: PI, armRA: 28, lookX: 3, mSmile: 1 }),
+
+  // Привет: лапа высоко и машет, корпус качается в противовес и пружинит.
+  wave:  T({ fA: 2.2, fB: 0.4, armR: -145, armRA: 20, armL: 6, armLB: 3,
+             tiltA: 3, tiltPhA: PI, hop: 2, hopSquash: 0.02, breath: 0.01,
+             cheeks: 1, mGrin: 1, browDy: -3, lookY: -0.5 }),
+
+  // Недовольный: руки в боки, полуприкрытые веки, взгляд искоса, стучит ногой;
+  // раз в ~3 с — «хмф!» с закатыванием глаз, потом скептически вскидывает бровь.
+  grumpy: T({ fA: 2.0, fB: 0.33, armL: 26, armR: -26, shrug: 6, huff: 0.06, tap: 5,
+              tiltB: 1.2, breath: 0.012, browAngle: 18, browDy: 2, twitch: 1,
+              lid: 0.42, lookX: 4.5, lookY: 1, eyeRoll: 5, mFrown: 1 }),
+
+  // Ругается за перерасход: грозит лапой, другая в боку, весь трясётся в такт,
+  // рот «говорит», брови дрожат, над головой пульсирует знак злости.
+  scold: T({ fA: 2.4, fB: 0.5, armR: -118, armRA: 14, armL: 30, armLA2: 3,
+             shakeX: 1.4, tiltA: 1.2, browAngle: 20, browDy: 3, browTremble: 1.5,
+             lid: 0.22, lookY: 1.5, talk: 1, anger: 1, mYell: 1 }),
+
+  overspend: T({ fA: 1.9, fB: 0.8, tiltA: 3, armR: -58, armRA: 4, sweat: 1, lid: 0.1,
+                 browAngle: 14, browRdy: -4, lookX: -2, lookAmp: 2, mFrown: 1 }),
+  income: T({ fA: 1.16, hop: 9, hopSquash: 0.04, armR: -38, cheeks: 1, mGrin: 1, browDy: -3 }),
+  goal:   T({ fA: 1.39, hop: 18, hopSquash: 0.05, armL: 48, armR: -48, armLA: 10, armRA: 10,
+              armRPh: PI, cheeks: 1, mGrin: 1, browDy: -4 }),
+  record: T({ breath: 0.02, armR: -46, lookX: 3, lookY: -2, mFocus: 1 }),
+  thinking: T({ fA: 0.45, tilt: 0.5, tiltA: 2.5, armR: -72, browRdy: -4, lookX: 3, lookY: -4, mFlat: 1 }),
+  fix:    T({ fA: 1.0, tilt: 0.5, tiltA: 2.5, armR: -26, lookX: 3, lookY: 2, mFocus: 1 }),
+  inspect:T({ fA: 0.2, fB: 0.25, tilt: 1.5, tiltA: 1.5, armR: -40, browRdy: -4, lookX: 4, lookAmp: 2, mFlat: 1 }),
+};
+
+// Предметы в лапах/вокруг — дискретно по эмоции (пот и знак злости — плавно в риге).
+export const PROPS: Record<FinikEmotion, string[]> = {
+  idle: [], plus: [], walk: [], wave: [], grumpy: [], scold: [], overspend: [],
+  record: ['board', 'pencil'], income: ['coin', 'sparkle'], goal: ['confetti', 'sparkle'],
+  thinking: ['think'], spy: ['shades'], fix: ['wrench'], inspect: ['coin', 'magnifier'],
+};
+
+// ─── Аффинные матрицы [a, b, c, d, e, f] (формат нативного пропа matrix) ──────
+
+export function mMul(m: number[], n: number[]): number[] {
+  'worklet';
+  return [
+    m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
+    m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
+    m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5],
+  ];
+}
+export function mT(x: number, y: number): number[] {
+  'worklet';
+  return [1, 0, 0, 1, x, y];
+}
+export function mR(deg: number, cx: number, cy: number): number[] {
+  'worklet';
+  const r = (deg * PI) / 180, c = Math.cos(r), s = Math.sin(r);
+  return [c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy];
+}
+export function mS(sx: number, sy: number, cx: number, cy: number): number[] {
+  'worklet';
+  return [sx, 0, 0, sy, cx - sx * cx, cy - sy * cy];
+}
+
+// ─── Состояние и шаг анимации ───────────────────────────────────────────────
+
+export type RigState = {
+  cur: Rig;       // текущие (сглаженные) параметры
+  vel: Rig;       // их скорости (пружина)
+  A: number; B: number;
+  blinkIn: number; // секунд до следующего моргания
+  blinkT: number;  // секунд с начала моргания, −1 — не моргает
+};
+
+export function initState(rig: Rig): RigState {
+  'worklet';
+  const cur: Record<string, number> = {};
+  const vel: Record<string, number> = {};
+  for (const k in rig) { cur[k] = (rig as Record<string, number>)[k]; vel[k] = 0; }
+  return { cur: cur as Rig, vel: vel as Rig, A: 0, B: 0, blinkIn: 2 + Math.random() * 2, blinkT: -1 };
+}
+
+// Фазы заворачиваем по 200π: все множители фаз в computePose кратны 0.01,
+// поэтому и sin(k·A) остаются непрерывными на переходе.
+const WRAP = 200 * PI;
+
+export function stepRig(st: RigState, tgt: Rig, dtRaw: number): RigState {
+  'worklet';
+  const dt = Math.min(Math.max(dtRaw, 0), 0.05);
+  // Критически задемпфированная пружина (точное решение — устойчиво при любом
+  // dt): плавный разгон и торможение без перелёта. Корпус/руки/лицо ~0.4 с,
+  // рот быстрее, чтобы два рта не «двоились».
+  const eBody = Math.exp(-11 * dt), eMouth = Math.exp(-24 * dt);
+  const cur: Record<string, number> = {};
+  const vel: Record<string, number> = {};
+  const c = st.cur as Record<string, number>;
+  const v = st.vel as Record<string, number>;
+  const t = tgt as Record<string, number>;
+  for (const k in t) {
+    const isMouth = k.length > 1 && k[0] === 'm' && k[1] >= 'A' && k[1] <= 'Z';
+    const w = isMouth ? 24 : 11, e = isMouth ? eMouth : eBody;
+    const x0 = c[k] === undefined ? t[k] : c[k];
+    const v0 = v[k] === undefined ? 0 : v[k];
+    const y0 = x0 - t[k];
+    const q = v0 + w * y0;
+    cur[k] = t[k] + (y0 + q * dt) * e;
+    vel[k] = (v0 - w * q * dt) * e;
+  }
+  let A = st.A + 2 * PI * cur.fA * dt;
+  let B = st.B + 2 * PI * cur.fB * dt;
+  if (A > WRAP) A -= WRAP;
+  if (B > WRAP) B -= WRAP;
+
+  let blinkIn = st.blinkIn - dt;
+  let blinkT = st.blinkT >= 0 ? st.blinkT + dt : -1;
+  if (blinkT > 0.2) blinkT = -1;
+  if (blinkIn <= 0) {
+    if (cur.blink > 0.5) blinkT = 0;
+    blinkIn = 2.6 + Math.random() * 3.2;
+  }
+  return { cur: cur as Rig, vel: vel as Rig, A, B, blinkIn, blinkT };
+}
+
+export type Pose = {
+  bodyM: number[]; shadowM: number[]; armLM: number[]; armRM: number[];
+  footLM: number[]; footRM: number[]; browLM: number[]; browRM: number[];
+  pupilsM: number[]; lidM: number[]; yellM: number[]; angerM: number[]; sweatM: number[];
+  angerO: number; sweatO: number; cheeksO: number;
+  mSmile: number; mGrin: number; mFrown: number; mFocus: number;
+  mFlat: number; mSmirk: number; mYell: number;
+};
+
+export function computePose(st: RigState): Pose {
+  'worklet';
+  const p = st.cur, A = st.A, B = st.B;
+  const sA = Math.sin(A), cA = Math.cos(A);
+  const huffS = Math.pow(Math.max(0, Math.sin(B)), 8);        // короткий пик раз в цикл B
+  const twitchS = Math.pow(Math.max(0, Math.sin(B + 2.2)), 10); // ещё один, со сдвигом
+
+  // Корпус. Прыжок уносит и стопы; покачивание при шаге — только корпус.
+  const hopY = -p.hop * (0.5 - 0.5 * cA);
+  const bobY = -p.stepBob * (0.5 - 0.5 * Math.cos(2 * A));
+  const tx = p.shakeX * sA;
+  const rot = p.tilt + p.tiltA * Math.sin(A + p.tiltPhA) + p.tiltB * Math.sin(B);
+  const sy = 1 + p.breath * Math.sin(B) - p.hopSquash * cA - p.huff * huffS;
+  const sx = 1 - p.breath * 0.5 * Math.sin(B) + p.hopSquash * 0.6 * cA + p.huff * 0.6 * huffS;
+  const bodyM = mMul(mT(tx, hopY + bobY), mMul(mR(rot, 100, 192), mS(sx, sy, 100, 192)));
+
+  // Тень сжимается, когда Финик в воздухе.
+  const k = 1 - Math.min(0.4, -hopY / 40);
+  const shadowM = mMul(mT(tx * 0.5, 0), mS(k, k, 100, 196));
+
+  // Руки вращаются от плеч.
+  const armL = p.armL + p.armLA * Math.sin(A + p.armLPh) + p.armLA2 * Math.sin(2 * A)
+    + p.armLB * Math.sin(B) + p.shrug * huffS;
+  const armR = p.armR + p.armRA * Math.sin(A + p.armRPh) + p.armRA2 * Math.sin(2 * A)
+    + p.armRB * Math.sin(B) - p.shrug * huffS;
+
+  // Стопы: при шаге поднимаются и выносятся вперёд; правая может стучать
+  // (затихает на время «хмф»).
+  const tapEnv = 1 - Math.min(1, huffS * 3);
+  // Степень >1 — нулевая скорость в момент касания: стопа мягко встаёт на пол.
+  const liftL = p.step * Math.pow(Math.max(0, sA), 1.6);
+  const liftR = p.step * Math.pow(Math.max(0, -sA), 1.6) + p.tap * tapEnv * Math.pow(Math.max(0, sA), 1.5);
+
+  // Брови: дрожь от злости и скептический подъём правой.
+  const tremble = p.browTremble * Math.sin(2 * A + 0.5);
+  const tw = p.twitch * twitchS;
+  const browLM = mMul(mT(0, p.browDy), mR(p.browAngle + tremble, 76, 75));
+  const browRM = mMul(mT(0, p.browDy + p.browRdy - 7 * tw),
+    mR(-p.browAngle - tremble + tw * (p.browAngle + 8), 124, 75));
+
+  // Зрачки: взгляд + медленное блуждание + закатывание глаз на «хмф».
+  let dx = p.lookX + p.lookAmp * Math.sin(B * 0.7) - p.eyeRoll * 0.4 * huffS;
+  let dy = p.lookY + p.lookAmp * 0.5 * Math.sin(B * 1.3 + 1) - p.eyeRoll * huffS;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len > 6) { dx = (dx / len) * 6; dy = (dy / len) * 6; }
+
+  // Веки: базовое прикрытие + моргание.
+  let blinkAmt = 0;
+  if (st.blinkT >= 0) blinkAmt = st.blinkT < 0.08 ? st.blinkT / 0.08 : Math.max(0, 1 - (st.blinkT - 0.08) / 0.11);
+  const lid = Math.min(1, Math.max(p.lid, blinkAmt));
+
+  // Рот «говорит» с неровным ритмом, как реальная речь.
+  const open = p.talk * (0.5 + 0.5 * Math.sin(A * 1.8)) * (0.6 + 0.4 * Math.sin(A * 0.55 + 1));
+  const yellM = mS(1 - 0.12 * open, 0.3 + 0.7 * open, 100, 129);
+
+  // Знак злости пульсирует; капля пота стекает.
+  const pulse = 1 + 0.18 * Math.sin(2 * A);
+  const s = (B / (2 * PI)) % 1;
+  const sweatO = p.sweat * (s < 0.2 ? s / 0.2 : 1 - (s - 0.2) / 0.8);
+
+  return {
+    bodyM, shadowM,
+    armLM: mR(armL, 50, 112), armRM: mR(armR, 150, 112),
+    footLM: mT(-p.stride * cA, hopY - liftL), footRM: mT(p.stride * cA, hopY - liftR),
+    browLM, browRM,
+    pupilsM: mT(dx, dy),
+    lidM: mT(0, lid * 39),
+    yellM,
+    angerM: mMul(mT(152, 64), mS(pulse, pulse, 0, 0)),
+    sweatM: mT(0, 16 * s),
+    angerO: p.anger * (0.75 + 0.25 * Math.sin(2 * A)),
+    sweatO,
+    cheeksO: p.cheeks,
+    mSmile: p.mSmile, mGrin: p.mGrin, mFrown: p.mFrown, mFocus: p.mFocus,
+    mFlat: p.mFlat, mSmirk: p.mSmirk, mYell: p.mYell,
+  };
+}
