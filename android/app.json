@@ -2,14 +2,14 @@
   "expo": {
     "name": "ФИНИК",
     "slug": "family-budget",
-    "version": "2.25.2",
+    "version": "2.25.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ECE6FF"
+      "backgroundColor": "#EDEAFD"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -17,7 +17,8 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ECE6FF"
+        "backgroundImage": "./assets/adaptive-icon-bg.png",
+        "backgroundColor": "#EDEAFD"
       },
       "package": "com.familybudget.app",
       "versionCode": 23,
