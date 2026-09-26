@@ -440,8 +440,8 @@ async function sendSupportMessage() {
 
 async function refreshSupportBadge() {
   try {
-    const list = await apiJson('GET', '/api/admin/support');
-    const n = Array.isArray(list) ? list.filter(m => !m.read).length : 0;
+    const r = await apiJson('GET', '/api/admin/support/threads');
+    const n = r?.unread || 0;
     const b = document.getElementById('admin-support-badge');
     if (b) { b.textContent = n; b.classList.toggle('hidden', !n); }
   } catch { /* не критично */ }
@@ -453,74 +453,193 @@ async function isPushSubscribed() {
 
 const supTime = iso => new Date(iso).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-// Переписки поддержки в админ-панели: по одной на пользователя, свежие сверху
-async function renderAdminSupport(box) {
-  const list = await apiJson('GET', '/api/admin/support').catch(() => []);
-  const msgs = Array.isArray(list) ? list : [];               // новые — первыми
-  const threads = new Map();
-  for (const m of msgs) { if (!threads.has(m.login)) threads.set(m.login, []); threads.get(m.login).push(m); }
-  const isQ = m => m.from !== 'admin';
-  const unread = msgs.filter(m => isQ(m) && !m.read).length;
-  const pushOn = await isPushSubscribed();
-  const bubble = m => `
-    <div class="sup-bubble sup-bubble--${isQ(m) ? 'them' : 'me'}${isQ(m) && !m.read ? ' unread' : ''}">
-      <div class="sup-bubble-text">${esc(m.text)}</div>
-      <div class="sup-bubble-meta">${isQ(m) ? esc(m.name) : 'Вы'} · ${supTime(m.createdAt)}${isQ(m) ? '' : (m.seen ? ' · прочитано' : ' · доставлено')}
-        <button class="sup-del" data-id="${esc(m.id)}" aria-label="Удалить сообщение">✕</button></div>
-    </div>`;
-  box.innerHTML = `
-    <div class="admin-support">
-      <div class="settings-title">Поддержка${unread ? ` <span class="count-badge">${unread}</span>` : ''}</div>
-      <button class="btn btn-secondary btn-full admin-support-push" ${pushOn ? 'disabled' : ''}>${pushOn ? 'Уведомления о сообщениях приходят на это устройство' : 'Получать уведомления о новых сообщениях'}</button>
-      ${threads.size ? [...threads.entries()].map(([login, arr]) => {
-        const who = arr.find(isQ) || arr[0];
-        const tUnread = arr.filter(m => isQ(m) && !m.read);
-        return `
-        <div class="sup-thread${tUnread.length ? ' unread' : ''}" data-login="${esc(login)}">
-          <div class="sup-thread-head">
-            <strong>${esc(who.name)}</strong><span>${esc(login)} · ${esc(who.platform || 'web')}${who.appVersion ? ' ' + esc(who.appVersion) : ''}</span>
-            ${tUnread.length ? `<button class="btn btn-ghost sup-mark" data-ids="${tUnread.map(m => esc(m.id)).join(',')}">Прочитано</button>` : ''}
-          </div>
-          <div class="sup-bubbles">${arr.slice().reverse().map(bubble).join('')}</div>
-          ${arr[0].hiddenForUser ? '<p class="settings-hint sup-closed">Пользователь закрыл диалог — ответ начнёт у него новую переписку.</p>' : ''}
-          <div class="sup-reply">
-            <textarea rows="2" maxlength="4000" placeholder="Ответить: ${esc(who.name)}"></textarea>
-            <button class="btn btn-primary sup-send">Ответить</button>
-          </div>
+// ─── МЕССЕНДЖЕР ПОДДЕРЖКИ (для администратора) ───────────────────────────────
+// Отдельный экран: слева список чатов (ник, последнее сообщение, время,
+// непрочитанные, поиск), справа/поверх — переписка с полем ответа. На узком
+// экране список и чат сменяют друг друга, на широком стоят рядом.
+const inbox = { threads: [], login: null, filter: 'all', q: '', timer: null };
+const AVATAR_COLORS = ['#5947E0', '#1597A8', '#C94F97', '#17915C', '#E8A21F', '#2F7AE0', '#D8662E'];
+const avatarColor = str => AVATAR_COLORS[[...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % AVATAR_COLORS.length];
+const initials = name => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+function chatTime(iso) {
+  const d = new Date(iso), now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'вчера';
+  return d.toLocaleDateString('ru', { day: 'numeric', month: 'short' });
+}
+const dayLabel = iso => {
+  const d = new Date(iso), now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Сегодня';
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'Вчера';
+  return d.toLocaleDateString('ru', { day: 'numeric', month: 'long', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
+};
+const platformLabel = t => `${t.platform === 'android' ? 'Android' : 'Веб'}${t.appVersion ? ' ' + t.appVersion : ''}`;
+
+async function openInbox(login = null) {
+  const el = document.getElementById('support-inbox');
+  el.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  await loadInboxThreads();
+  updateInboxBell();
+  if (login) openInboxChat(login);
+  else if (window.matchMedia('(min-width: 760px)').matches && inbox.threads[0]) openInboxChat(inbox.threads[0].login);
+  clearInterval(inbox.timer);
+  inbox.timer = setInterval(async () => { await loadInboxThreads(); if (inbox.login) loadInboxChat(inbox.login, true); }, 15000);
+}
+function closeInbox() {
+  document.getElementById('support-inbox').classList.add('hidden');
+  document.body.style.overflow = '';
+  clearInterval(inbox.timer);
+  inbox.login = null;
+  refreshSupportBadge();
+}
+
+async function loadInboxThreads() {
+  const r = await apiJson('GET', '/api/admin/support/threads').catch(() => null);
+  inbox.threads = r?.threads || [];
+  const total = document.querySelector('#support-inbox .inbox-total');
+  total.textContent = r?.unread || 0; total.classList.toggle('hidden', !r?.unread);
+  const b = document.getElementById('admin-support-badge');
+  if (b) { b.textContent = r?.unread || 0; b.classList.toggle('hidden', !r?.unread); }
+  renderInboxList();
+}
+
+function renderInboxList() {
+  const box = document.querySelector('#support-inbox .inbox-chats');
+  const q = inbox.q.trim().toLowerCase();
+  const list = inbox.threads.filter(t => (inbox.filter !== 'unread' || t.unread) &&
+    (!q || [t.name, t.login, t.familyName].some(v => String(v || '').toLowerCase().includes(q))));
+  if (!list.length) {
+    box.innerHTML = `<div class="inbox-none">${inbox.threads.length ? 'Ничего не нашлось' : 'Сообщений пока нет'}</div>`;
+    return;
+  }
+  box.innerHTML = list.map(t => `
+    <button class="inbox-row${t.unread ? ' unread' : ''}${t.login === inbox.login ? ' active' : ''}" data-login="${esc(t.login)}">
+      <span class="inbox-ava" style="background:${avatarColor(t.login)}">${esc(initials(t.name))}</span>
+      <span class="inbox-row-main">
+        <span class="inbox-row-top"><b>${esc(t.name || t.login)}</b><time>${chatTime(t.last.createdAt)}</time></span>
+        <span class="inbox-row-bottom">
+          <span class="inbox-preview">${t.last.from === 'admin' ? '<i>Вы:</i> ' : ''}${esc(t.last.text)}</span>
+          ${t.unread ? `<span class="count-badge">${t.unread}</span>` : t.closed ? '<span class="inbox-closed">закрыт</span>' : ''}
+        </span>
+        <span class="inbox-row-meta">${esc(t.familyName || t.login)} · ${esc(platformLabel(t))}</span>
+      </span>
+    </button>`).join('');
+  box.querySelectorAll('.inbox-row').forEach(r => r.addEventListener('click', () => openInboxChat(r.dataset.login)));
+}
+
+async function openInboxChat(login) {
+  inbox.login = login;
+  document.getElementById('support-inbox').classList.add('chat-open');
+  renderInboxList();
+  await loadInboxChat(login);
+  const t = inbox.threads.find(x => x.login === login);
+  if (t?.unread) {
+    await apiJson('POST', `/api/admin/support/thread/${encodeURIComponent(login)}/read`);
+    t.unread = 0; renderInboxList(); loadInboxThreads();
+  }
+}
+
+async function loadInboxChat(login, silent = false) {
+  const pane = document.querySelector('#support-inbox .inbox-chat');
+  const t = inbox.threads.find(x => x.login === login) || { login, name: login };
+  const r = await apiJson('GET', `/api/admin/support/thread/${encodeURIComponent(login)}`).catch(() => null);
+  const msgs = r?.messages || [];
+  if (inbox.login !== login) return;
+  const draft = pane.querySelector('.inbox-compose textarea')?.value || '';
+  const log = pane.querySelector('.inbox-log');
+  const atBottom = !log || log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  if (silent && log && log.dataset.count === String(msgs.length)) return;
+  let lastDay = '';
+  pane.innerHTML = `
+    <header class="inbox-head inbox-chat-head">
+      <button class="icon-btn inbox-back" aria-label="К списку чатов">‹</button>
+      <span class="inbox-ava" style="background:${avatarColor(login)}">${esc(initials(t.name))}</span>
+      <div class="inbox-chat-who"><b>${esc(t.name || login)}</b><span>${esc(login)}${t.familyName ? ' · ' + esc(t.familyName) : ''} · ${esc(platformLabel(t))}</span></div>
+      <button class="icon-btn inbox-del" aria-label="Удалить переписку" title="Удалить переписку">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>
+      </button>
+    </header>
+    <div class="inbox-log" data-count="${msgs.length}">
+      ${msgs.map(m => {
+        const day = dayLabel(m.createdAt);
+        const sep = day !== lastDay ? `<div class="inbox-day">${day}</div>` : '';
+        lastDay = day;
+        const me = m.from === 'admin';
+        return `${sep}<div class="inbox-msg ${me ? 'me' : 'them'}">
+          <div class="inbox-msg-text">${esc(m.text)}</div>
+          <div class="inbox-msg-meta">${new Date(m.createdAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}${me ? (m.seen ? ' · прочитано' : ' · доставлено') : ''}</div>
         </div>`;
-      }).join('') : '<p class="settings-hint">Сообщений пока нет.</p>'}
+      }).join('')}
+      ${t.closed ? '<div class="inbox-day">Пользователь закрыл диалог — ответ начнёт новую переписку</div>' : ''}
+    </div>
+    <div class="inbox-compose">
+      <textarea rows="1" maxlength="4000" placeholder="Ответить: ${esc(t.name || login)}"></textarea>
+      <button class="inbox-send" aria-label="Отправить"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-3-7z"/></svg></button>
     </div>`;
-  box.querySelector('.admin-support-push')?.addEventListener('click', async () => {
+  const newLog = pane.querySelector('.inbox-log');
+  if (!silent || atBottom) newLog.scrollTop = newLog.scrollHeight;
+  const ta = pane.querySelector('textarea');
+  ta.value = draft;
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
+  fit(); ta.addEventListener('input', fit);
+  const send = async () => {
+    const text = ta.value.trim();
+    if (!text) { ta.focus(); return; }
+    const btn = pane.querySelector('.inbox-send'); btn.disabled = true;
+    const res = await apiJson('POST', '/api/admin/support/reply', { login, text }).catch(() => ({ error: 'Нет соединения' }));
+    btn.disabled = false;
+    if (res?.error) { showToastError(res.error); return; }
+    ta.value = '';
+    await loadInboxThreads(); await loadInboxChat(login);
+  };
+  pane.querySelector('.inbox-send').addEventListener('click', send);
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+  pane.querySelector('.inbox-back').addEventListener('click', () => {
+    inbox.login = null;
+    document.getElementById('support-inbox').classList.remove('chat-open');
+    pane.innerHTML = '<div class="inbox-empty">Выберите чат слева</div>';
+    renderInboxList();
+  });
+  pane.querySelector('.inbox-del').addEventListener('click', async () => {
+    if (!(await uiConfirm('Удалить переписку?', `Все сообщения с ${t.name || login} будут удалены без возможности восстановления.`, { ok: 'Удалить', danger: true }))) return;
+    await apiJson('DELETE', `/api/admin/support/thread/${encodeURIComponent(login)}`);
+    pane.querySelector('.inbox-back').click();
+    loadInboxThreads();
+  });
+  if (!silent && window.matchMedia('(min-width: 760px)').matches) ta.focus();
+}
+
+async function updateInboxBell() {
+  const on = await isPushSubscribed();
+  document.querySelector('#support-inbox .inbox-bell')?.classList.toggle('on', on);
+}
+
+function initInbox() {
+  const el = document.getElementById('support-inbox');
+  if (!el || el.dataset.ready) return;
+  el.dataset.ready = '1';
+  document.getElementById('btn-open-inbox')?.addEventListener('click', () => openInbox());
+  el.querySelector('[data-act="close"]').addEventListener('click', closeInbox);
+  el.querySelector('.inbox-search').addEventListener('input', e => { inbox.q = e.target.value; renderInboxList(); });
+  el.querySelectorAll('.inbox-filters .pill').forEach(b => b.addEventListener('click', () => {
+    inbox.filter = b.dataset.filter;
+    el.querySelectorAll('.inbox-filters .pill').forEach(x => x.classList.toggle('active', x === b));
+    renderInboxList();
+  }));
+  el.querySelector('[data-act="push"]').addEventListener('click', async () => {
+    if (await isPushSubscribed()) { showToastSuccess('Уведомления о новых сообщениях уже приходят на это устройство'); return; }
     try {
       if (Notification.permission === 'default') await Notification.requestPermission();
       if (Notification.permission !== 'granted') { showToastError('Разрешите уведомления в браузере'); return; }
       await subscribeToPush();
-      showToastSuccess('Готово — сообщения поддержки будут приходить сюда');
-      renderAdminSupport(box);
+      showToastSuccess('Готово — новые сообщения будут приходить сюда');
+      updateInboxBell();
     } catch { showToastError('Не удалось включить уведомления'); }
   });
-  const rerender = () => { renderAdminSupport(box); refreshSupportBadge(); };
-  box.querySelectorAll('.sup-thread').forEach(th => {
-    const login = th.dataset.login;
-    const ta = th.querySelector('textarea');
-    th.querySelector('.sup-send').addEventListener('click', async () => {
-      const text = ta.value.trim();
-      if (!text) { ta.focus(); return; }
-      const res = await apiJson('POST', '/api/admin/support/reply', { login, text });
-      if (res?.error) { showToastError(res.error); return; }
-      showToastSuccess('Ответ отправлен');
-      rerender();
-    });
-    th.querySelector('.sup-mark')?.addEventListener('click', async e => {
-      await Promise.all(e.currentTarget.dataset.ids.split(',').map(id => apiJson('PATCH', `/api/admin/support/${encodeURIComponent(id)}`, { read: true })));
-      rerender();
-    });
-    const bubbles = th.querySelector('.sup-bubbles'); bubbles.scrollTop = bubbles.scrollHeight;
-  });
-  box.querySelectorAll('.sup-del').forEach(btn => btn.addEventListener('click', async () => {
-    await apiJson('DELETE', `/api/admin/support/${encodeURIComponent(btn.dataset.id)}`);
-    rerender();
-  }));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !el.classList.contains('hidden') && !document.querySelector('.ui-dialog')) closeInbox(); });
 }
 
 // ── Поддержка у пользователя: переписка и красная точка на вкладке «Настройки»
@@ -2471,7 +2590,13 @@ async function openAdminPanel(month, year) {
     <div id="admin-families-stat"></div>
   `;
 
-  renderAdminSupport(body.querySelector('#admin-support'));
+  (async () => {
+    const box = body.querySelector('#admin-support');
+    const r = await apiJson('GET', '/api/admin/support/threads').catch(() => null);
+    const n = r?.unread || 0, total = r?.threads?.length || 0;
+    box.innerHTML = `<button class="btn btn-secondary btn-full">Сообщения поддержки · ${total} ${plural(total, 'чат', 'чата', 'чатов')}${n ? ` <span class="count-badge">${n}</span>` : ''}</button>`;
+    box.querySelector('button').addEventListener('click', () => { closeAdminPanel(); openInbox(); });
+  })();
 
   // Load family names in parallel
   const familyIds = Object.keys(byFamily);
@@ -3274,10 +3399,10 @@ async function initApp() {
     window.history.replaceState({}, '', location.pathname);
     setTimeout(() => { navigate('settings'); setTimeout(() => document.getElementById('support-section')?.scrollIntoView({ block: 'center' }), 400); }, 300);
   }
-  // Пуш «новое сообщение в поддержку» ведёт сюда — сразу открываем админ-панель
+  // Пуш «новое сообщение в поддержку» ведёт сюда — сразу открываем мессенджер
   if (currentUser?.isAdmin && new URLSearchParams(location.search).get('admin') === 'support') {
     window.history.replaceState({}, '', location.pathname);
-    setTimeout(() => openAdminPanel(), 300);
+    setTimeout(() => openInbox(), 300);
   }
   initSocket();
   initCategoryGrid();
@@ -3695,6 +3820,7 @@ function setupEventListeners() {
 
   // Принудительное обновление у всех пользователей
   document.getElementById('btn-open-admin').addEventListener('click', () => openAdminPanel());
+  initInbox();
   document.getElementById('btn-support-close')?.addEventListener('click', closeSupportThread);
   document.getElementById('btn-support-send')?.addEventListener('click', sendSupportMessage);
   document.getElementById('btn-close-admin').addEventListener('click', () => closeAdminPanel());

@@ -1290,6 +1290,45 @@ export function closeSupportThread(login) {
   return n;
 }
 
+// Список чатов для мессенджера поддержки: по одному на пользователя, свежие сверху
+export function listSupportThreads() {
+  const map = new Map();
+  for (const m of listSupportMessages()) {            // новые — первыми
+    let t = map.get(m.login);
+    if (!t) {
+      t = { login: m.login, name: m.name, family: m.family, platform: '', appVersion: '',
+        last: { text: m.text, from: m.from, createdAt: m.createdAt }, unread: 0, count: 0, closed: !!m.hiddenForUser };
+      map.set(m.login, t);
+    }
+    t.count++;
+    if (m.from === 'user') {
+      if (!m.read) t.unread++;
+      if (!t.platform) { t.platform = m.platform || 'web'; t.appVersion = m.appVersion || ''; t.name = m.name; }
+    }
+  }
+  return [...map.values()];
+}
+
+export function markSupportThreadRead(login) {
+  let n = 0;
+  (data.supportMessages || []).forEach(m => { if (m.login === login && (m.from || 'user') === 'user' && !m.read) { m.read = true; n++; } });
+  if (n) debouncedSave();
+  return n;
+}
+
+export function deleteSupportThread(login) {
+  const before = (data.supportMessages || []).length;
+  data.supportMessages = (data.supportMessages || []).filter(m => m.login !== login);
+  if (data.supportMessages.length === before) return false;
+  debouncedSave();
+  return true;
+}
+
+// Вся переписка для админа (включая скрытую пользователем), от старых к новым
+export function getSupportThreadAdmin(login) {
+  return listSupportMessages().filter(m => m.login === login).reverse();
+}
+
 export function countUnseenSupportReplies(login) {
   return (data.supportMessages || []).filter(m => m.login === login && m.from === 'admin' && !m.seen).length;
 }
