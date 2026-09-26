@@ -779,12 +779,12 @@ const FINIK_SVG = `<svg class="finik-svg" viewBox="-6 0 220 210" data-emotion="i
     <g clip-path="url(#fk-pouch)">
       <path d="M146 76 Q164 112 160 156 Q154 184 118 194 L210 210 L210 60 Z" fill="${FK.sh}"/>
       <path d="M52 104 Q34 128 42 156 Q50 172 68 166 Q80 158 70 142 Q62 128 66 112 Q62 98 52 104 Z" fill="${FK.hi}" opacity="0.75"/>
+      <g data-p="bellyLines"><path d="M52 180 Q100 194 148 180" stroke="${FK.sh}" stroke-width="2.5" fill="none" stroke-dasharray="4 4" stroke-linecap="round"/></g>
     </g>
   </g>
   <g data-p="footL"><path d="M94 196 Q96 184 80 184 Q62 184 62 192 Q62 199 76 199 L90 199 Q94 199 94 196 Z" fill="${FK.shoe}"/><ellipse cx="70" cy="189" rx="4.5" ry="2.6" fill="${FK.shoeHi}"/></g>
   <g data-p="footR"><path d="M106 196 Q104 184 120 184 Q138 184 138 192 Q138 199 124 199 L110 199 Q106 199 106 196 Z" fill="${FK.shoe}"/><ellipse cx="130" cy="189" rx="4.5" ry="2.6" fill="${FK.shoeHi}"/></g>
   <g data-p="bodyFront">
-    <g data-p="bellyLines"><path d="M52 180 Q100 194 148 180" stroke="${FK.sh}" stroke-width="2.5" fill="none" stroke-dasharray="4 4" stroke-linecap="round"/></g>
     <g data-p="bellyPlus" style="display:none"><circle cx="100" cy="156" r="20" fill="${FK.gold}" stroke="${FK.goldSh}" stroke-width="3"/><rect x="89" y="152" width="22" height="8" rx="4" fill="#fff"/><rect x="96" y="145" width="8" height="22" rx="4" fill="#fff"/><circle cx="72" cy="160" r="9" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="2"/><circle cx="128" cy="160" r="9" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="2"/></g>
     <line x1="95" y1="58" x2="105" y2="45" stroke="${FK.goldSh}" stroke-width="4" stroke-linecap="round"/><line x1="105" y1="58" x2="95" y2="45" stroke="${FK.goldSh}" stroke-width="4" stroke-linecap="round"/>
     <circle cx="93" cy="40" r="7.5" fill="${FK.gold}"/><circle cx="107" cy="40" r="7.5" fill="${FK.gold}"/>
