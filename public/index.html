@@ -379,7 +379,15 @@
         <div class="settings-section">
           <div class="settings-title">О приложении</div>
           <div class="settings-info">
-            <div style="color:var(--text-muted);font-size:13px">Версия 2.15.2 W</div>
+            <div style="color:var(--text-muted);font-size:13px">Версия 2.16.0 W</div>
+          </div>
+        </div>
+
+        <div class="settings-section" id="help-section">
+          <div class="settings-title">Помощь</div>
+          <div class="help-actions">
+            <button id="btn-open-help" class="btn btn-outline btn-full">Вопросы и ответы</button>
+            <button id="btn-start-tour" class="btn btn-outline btn-full">Пройти вводный тур</button>
           </div>
         </div>
 
@@ -512,6 +520,37 @@
 
   <!-- Bottom Sheet (Add Expense) -->
   <div id="sheet-overlay" class="sheet-overlay hidden"></div>
+
+  <!-- Помощь: вопросы и ответы -->
+  <div id="help-overlay" class="sheet-overlay hidden"></div>
+  <div id="help-sheet" class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <span class="sheet-title" id="help-title">Вопросы и ответы</span>
+      <button id="help-close" aria-label="Закрыть" class="icon-btn sheet-x">✕</button>
+    </div>
+    <div class="sheet-body" id="help-body"></div>
+  </div>
+
+  <!-- Вводный тур -->
+  <div id="tour" class="tour hidden" role="dialog" aria-modal="true" aria-live="polite">
+    <div class="tour-spot"></div>
+    <div class="tour-card">
+      <div class="tour-card-top">
+        <div class="tour-finik"></div>
+        <div class="tour-text">
+          <div class="tour-step"></div>
+          <div class="tour-title"></div>
+        </div>
+      </div>
+      <p class="tour-body"></p>
+      <div class="tour-foot">
+        <div class="tour-dots"></div>
+        <button class="btn btn-secondary tour-skip">Пропустить</button>
+        <button class="btn btn-primary tour-next">Далее</button>
+      </div>
+    </div>
+  </div>
   <div id="add-sheet" class="bottom-sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-header">
@@ -519,49 +558,65 @@
       <button id="sheet-close" aria-label="Закрыть" class="icon-btn">✕</button>
     </div>
     <div class="sheet-body">
-      <div class="add-tabs">
-        <button id="tab-text" class="tab-btn active" data-tab="text">✍️ Текстом</button>
-        <button id="tab-form" class="tab-btn" data-tab="form">📋 Форма</button>
+      <div class="seg add-tabs" role="tablist">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button id="tab-text" class="seg-btn active" data-tab="text" role="tab">Текстом</button>
+        <button id="tab-form" class="seg-btn" data-tab="form" role="tab">Вручную</button>
       </div>
 
       <!-- Text input tab -->
       <div id="add-text-panel" class="add-panel">
-        <div class="hint-text">Напишите расходы в свободной форме, AI разберёт их автоматически</div>
-        <textarea id="expense-text" rows="4" placeholder="Пример: продукты 2300, вчера такси 450, кофе 180"></textarea>
-        <button id="btn-parse" class="btn btn-primary btn-full">🤖 Разобрать</button>
-        <div class="quick-input-btns">
-          <button id="btn-voice" class="btn btn-outline">🎤 Голос</button>
-          <button id="btn-photo" class="btn btn-outline">📷 Фото / чек</button>
-          <input type="file" id="photo-input" accept="image/*" style="display:none" />
+        <div class="ai-input">
+          <textarea id="expense-text" rows="3" placeholder="продукты 2300, вчера такси 450, кофе 180"></textarea>
+          <div class="ai-input-foot">
+            <span id="ai-input-hint" class="ai-input-hint">ИИ разберёт суммы, категории и даты</span>
+            <div class="ai-input-tools">
+              <button id="btn-voice" class="tool-btn" type="button" aria-label="Надиктовать голосом">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+              </button>
+              <button id="btn-photo" class="tool-btn" type="button" aria-label="Распознать фото чека">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.8l1.4-2h4.6l1.4 2h1.8A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
+        <div class="ai-examples" aria-label="Примеры">
+          <button type="button" class="chip-btn" data-example="кофе 180">кофе 180</button>
+          <button type="button" class="chip-btn" data-example="вчера такси 450">вчера такси 450</button>
+          <button type="button" class="chip-btn" data-example="аптека 640">аптека 640</button>
+        </div>
+        <input type="file" id="photo-input" accept="image/*" style="display:none" />
+        <button id="btn-parse" class="btn btn-primary btn-full">Разобрать</button>
         <div id="parse-result" class="parse-result hidden"></div>
       </div>
 
       <!-- Form tab -->
       <div id="add-form-panel" class="add-panel hidden">
+        <div class="amount-field">
+          <input type="number" id="form-amount" placeholder="0" min="1" inputmode="numeric" aria-label="Сумма, ₽" />
+          <span class="amount-cur">₽</span>
+        </div>
+        <div class="quick-amounts">
+          <button class="chip-btn quick-btn" data-amount="100">100</button>
+          <button class="chip-btn quick-btn" data-amount="200">200</button>
+          <button class="chip-btn quick-btn" data-amount="500">500</button>
+          <button class="chip-btn quick-btn" data-amount="1000">1 000</button>
+          <button class="chip-btn quick-btn" data-amount="2000">2 000</button>
+          <button class="chip-btn quick-btn" data-amount="5000">5 000</button>
+        </div>
         <div class="form-group">
           <label>Категория</label>
           <div id="category-grid" class="category-grid"></div>
         </div>
-        <div class="form-group">
-          <label>Сумма, ₽</label>
-          <input type="number" id="form-amount" placeholder="0" min="1" inputmode="numeric" />
-          <div class="quick-amounts">
-            <button class="quick-btn" data-amount="100">100</button>
-            <button class="quick-btn" data-amount="200">200</button>
-            <button class="quick-btn" data-amount="500">500</button>
-            <button class="quick-btn" data-amount="1000">1 000</button>
-            <button class="quick-btn" data-amount="2000">2 000</button>
-            <button class="quick-btn" data-amount="5000">5 000</button>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="form-description">Описание</label>
+            <input type="text" id="form-description" placeholder="Что купили?" />
           </div>
-        </div>
-        <div class="form-group">
-          <label>Описание (необязательно)</label>
-          <input type="text" id="form-description" placeholder="Что купили?" />
-        </div>
-        <div class="form-group">
-          <label>Дата</label>
-          <input type="date" id="form-date" />
+          <div class="form-group form-group--date">
+            <label for="form-date">Дата</label>
+            <input type="date" id="form-date" />
+          </div>
         </div>
         <button id="btn-add-form" class="btn btn-primary btn-full">Добавить расход</button>
       </div>

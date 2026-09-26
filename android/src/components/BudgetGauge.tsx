@@ -9,6 +9,14 @@ import { Finik, type FinikEmotion } from './Finik';
 
 const CX = 130, CY = 132, R = 96, MAX = 160, STROKE = 16;
 
+// Зоны — как в вебе и в ИИ-анализе: ≤85 экономим, 85–100 в графике,
+// 100–110 выше плана, >110 перерасход
+type Zone = 'good' | 'ok' | 'warn' | 'over';
+export function gaugeZone(pct: number): Zone {
+  return pct <= 85 ? 'good' : pct <= 100 ? 'ok' : pct <= 110 ? 'warn' : 'over';
+}
+const ZONE_TEXT: Record<Zone, string> = { good: 'Экономим', ok: 'В графике', warn: 'Выше плана', over: 'Перерасход' };
+
 // Точка на дуге: 0% слева (180°), максимум справа (0°)
 function polar(r: number, pct: number) {
   const a = Math.PI * (1 - Math.min(Math.max(pct, 0), MAX) / MAX);
@@ -50,18 +58,20 @@ export function BudgetGauge({ pct }: { pct: number }) {
   }, [pct]);
 
   const shown = Math.round(anim);
-  const color = pct <= 70 ? '#22c55e' : pct <= 100 ? '#f59e0b' : '#ef4444';
+  const status = gaugeZone(pct);
+  const color = { good: '#16a34a', ok: t.primary, warn: '#f59e0b', over: '#ef4444' }[status];
 
-  // Финик отражает статус: перерасход — сперва машет «вы чего, транжиры!», потом стоит угрюмый
-  const status = pct <= 70 ? 'good' : pct <= 100 ? 'ok' : 'over';
-  const [barEmo, setBarEmo] = useState<FinikEmotion>(status === 'over' ? 'scold' : status === 'good' ? 'income' : 'idle');
+  // Финик отражает статус: выше плана — волнуется, перерасход — сперва машет
+  // «вы чего, транжиры!», потом стоит угрюмый
+  const calmEmo = (z: Zone): FinikEmotion => z === 'good' ? 'income' : z === 'warn' ? 'overspend' : 'idle';
+  const [barEmo, setBarEmo] = useState<FinikEmotion>(status === 'over' ? 'scold' : calmEmo(status));
   useEffect(() => {
     if (status === 'over') {
       setBarEmo('scold');
       const id = setTimeout(() => setBarEmo('grumpy'), 2300);
       return () => clearTimeout(id);
     }
-    setBarEmo(status === 'good' ? 'income' : 'idle');
+    setBarEmo(calmEmo(status));
   }, [status]);
   const tip = polar(R - STROKE / 2 - 12, anim);
   // Направление стрелки и перпендикуляр — чтобы основание было конусом, а не точкой
@@ -83,6 +93,9 @@ export function BudgetGauge({ pct }: { pct: number }) {
           <LinearGradient id="gAmber" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0" stopColor="#fbbf24" /><Stop offset="1" stopColor="#f59e0b" />
           </LinearGradient>
+          <LinearGradient id="gViolet" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={t.primary} /><Stop offset="1" stopColor={t.primary} />
+          </LinearGradient>
           <LinearGradient id="gRed" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0" stopColor="#f87171" /><Stop offset="1" stopColor="#dc2626" />
           </LinearGradient>
@@ -91,12 +104,13 @@ export function BudgetGauge({ pct }: { pct: number }) {
         {/* Фон-дорожка с округлыми концами — задаёт единый аккуратный контур */}
         <Path d={arc(R, 0, MAX)} stroke={t.surface2} strokeWidth={STROKE + 4} fill="none" strokeLinecap="round" />
         {/* Зоны: стык встык (butt), концы прячутся за округлым фоном */}
-        <Path d={arc(R, 0, 70)}    stroke="url(#gGreen)" strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
-        <Path d={arc(R, 70, 100)}  stroke="url(#gAmber)" strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
-        <Path d={arc(R, 100, MAX)} stroke="url(#gRed)"   strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
+        <Path d={arc(R, 0, 85)}    stroke="url(#gGreen)"  strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
+        <Path d={arc(R, 85, 100)}  stroke="url(#gViolet)" strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
+        <Path d={arc(R, 100, 110)} stroke="url(#gAmber)"  strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
+        <Path d={arc(R, 110, MAX)} stroke="url(#gRed)"    strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
 
         {/* Засечки на границах зон */}
-        {[0, 70, 100, 160].map(v => {
+        {[0, 85, 100, 110, 160].map(v => {
           const a = polar(R + STROKE / 2 + 2, v), b = polar(R - STROKE / 2 - 2, v);
           return <SvgLine key={v} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={t.surface} strokeWidth={2} />;
         })}
@@ -110,20 +124,20 @@ export function BudgetGauge({ pct }: { pct: number }) {
         </G>
 
         {/* Подписи */}
-        {([[0, '0%'], [70, '70%'], [100, '100%'], [160, '160%']] as const).map(([v, lbl]) => {
+        {([[0, '0%'], [100, '100%'], [160, '160%']] as const).map(([v, lbl]) => {
           const p = polar(R + STROKE / 2 + 12, v);
           return <SvgText key={v} x={p.x} y={p.y + 3} fontSize={11} fontWeight="600" fill={t.textMuted} textAnchor="middle">{lbl}</SvgText>;
         })}
       </Svg>
 
       <Text style={{ fontSize: 38, fontWeight: '800', marginTop: 2, color }}>{shown}%</Text>
-      <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 0.5 }}>ФАКТ / ПЛАН</Text>
+      <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 0.5 }}>ОТ НОРМЫ ТРАТ НА СЕГОДНЯ</Text>
       <View style={{ alignSelf: 'stretch', minHeight: 84, marginTop: 4, alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ position: 'absolute', left: 8, bottom: -4 }}>
           <Finik emotion={barEmo} size={78} />
         </View>
-        <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700' }}>
-          {pct > 100 ? 'Перерасход 🔴' : pct > 90 ? 'На грани 🟡' : 'В норме 🟢'}
+        <Text style={{ color, fontSize: font.md, fontWeight: '800' }}>
+          {ZONE_TEXT[status]}
         </Text>
       </View>
     </View>

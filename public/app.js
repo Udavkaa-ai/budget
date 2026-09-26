@@ -835,6 +835,9 @@ async function loadBudget() {
 // ─── BOTTOM SHEET ─────────────────────────────────────────────────────────────
 
 function openSheet() {
+  const dateEl = document.getElementById('form-date');
+  if (!dateEl.value) dateEl.value = localIsoDate(new Date());
+  fitAmount();
   document.getElementById('add-sheet').classList.add('open');
   document.getElementById('sheet-overlay').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -1908,6 +1911,9 @@ let chartScreenCharts = [];
 let lastChartData = null;
 const kFmt = v => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}к` : String(Math.round(v));
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const MONTHS_GEN_ALL = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; };
 
 async function loadChart() {
   const gen = ++chartGen;
@@ -1958,6 +1964,16 @@ function renderChartCards(box, data) {
   const balNow = bal ? bal[Math.min(bal.length, lastDay) - 1] : 0;
   const C = { primary: cssVar('--primary'), faint: cssVar('--text-faint'), border: cssVar('--border'),
     danger: cssVar('--danger'), gold: cssVar('--gold'), surface: cssVar('--surface') };
+  // Перерасход: где накопительные траты выше линии плана. Если выше сейчас —
+  // находим начало текущего отрезка («выше плана с N числа»).
+  const planAt = d => Math.round(plan * d / dim);
+  const overDay = d => plan > 0 && cum[d - 1] != null && cum[d - 1] > planAt(d);
+  let overSince = 0;
+  if (overDay(lastDay)) { overSince = lastDay; while (overSince > 1 && overDay(overSince - 1)) overSince--; }
+  const overDays = days.filter(overDay).length;
+  const normDay = plan ? Math.round(plan / dim) : 0;
+  const dailyOver = days.filter(d => normDay && daily[d - 1] > normDay).length;
+  const maxDaily = Math.max(0, ...daily.filter(v => v != null));
 
   box.innerHTML = `
     <div class="card chart-card">
@@ -1975,7 +1991,9 @@ function renderChartCards(box, data) {
         <span><i class="lg-line"></i>Потрачено</span>
         ${plan ? '<span><i class="lg-dash"></i>План</span>' : ''}
         ${showProj ? '<span><i class="lg-dot"></i>Прогноз</span>' : ''}
+        ${overDays ? '<span><i class="lg-over"></i>Выше плана</span>' : ''}
       </div>
+      ${overSince ? `<div class="chart-alert">Траты выше плана с ${overSince} ${MONTHS_GEN_ALL[cm - 1]} — на ${fmt(cum[lastDay - 1] - planAt(lastDay))} больше нормы</div>` : ''}
       ${plan ? '' : '<p class="settings-hint">Укажите плановые расходы в настройках — появится линия плана.</p>'}
     </div>
     <div class="card chart-card">
@@ -1984,7 +2002,8 @@ function renderChartCards(box, data) {
       <div class="chart-box"><canvas id="ch-daily" aria-label="Траты по дням"></canvas></div>
       <div class="chart-legend">
         ${users.map((u, i) => `<span><i class="lg-sq" style="background:${series[i % series.length]}"></i>${esc(u)} · ${fmt(userTotals[i])}</span>`).join('')}
-        ${plan ? `<span><i class="lg-dash"></i>Норма ${fmt(Math.round(plan / dim))} в день</span>` : ''}
+        ${plan ? `<span><i class="lg-dash"></i>Норма ${fmt(normDay)} в день</span>` : ''}
+        ${dailyOver ? `<span><i class="lg-over-dot"></i>Выше нормы · ${dailyOver} ${plural(dailyOver, 'день', 'дня', 'дней')}</span>` : ''}
       </div>
     </div>
     ${bal ? `
@@ -2002,7 +2021,7 @@ function renderChartCards(box, data) {
     plugins: {
       legend: { display: false },
       tooltip: {
-        filter: it => it.parsed.y != null,
+        filter: it => it.parsed.y != null && !it.dataset.aux,
         callbacks: {
           title: it => `${it[0].label} ${MONTHS_SHORT[cm - 1]}`,
           label: ctx => ` ${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y))}`,
@@ -2022,14 +2041,20 @@ function renderChartCards(box, data) {
     type: 'line',
     data: { labels: days, datasets: [
       { label: 'Потрачено', data: cum, borderColor: C.primary, backgroundColor: withAlpha(C.primary, 0.12), fill: 'origin',
-        borderWidth: 3, tension: 0.25, pointRadius: days.map(d => isCur && d === lastDay ? 5 : 0),
-        pointBackgroundColor: C.primary, pointBorderColor: C.surface, pointBorderWidth: 2, pointHoverRadius: 5 },
-      ...(plan ? [{ label: 'План', data: days.map(d => Math.round(plan * d / dim)), borderColor: C.faint, borderDash: [6, 5],
+        borderWidth: 3, tension: 0.25, pointRadius: days.map(d => (isCur && d === lastDay) || d === overSince ? 5 : 0),
+        pointBackgroundColor: days.map(d => overDay(d) ? C.danger : C.primary), pointBorderColor: C.surface, pointBorderWidth: 2, pointHoverRadius: 5,
+        // участок выше плана — красным
+        segment: { borderColor: ctx => overDay(ctx.p1DataIndex + 1) && overDay(ctx.p0DataIndex + 1) ? C.danger : C.primary } },
+      ...(plan ? [{ label: 'План', data: days.map(planAt), borderColor: C.faint, borderDash: [6, 5],
         borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, fill: false }] : []),
       ...(showProj ? [{ label: 'Прогноз', data: days.map(d => d < lastDay ? null : Math.round(spent + perDay * (d - lastDay))),
-        borderColor: withAlpha(C.primary, 0.65), borderDash: [2, 5], borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 0, fill: false }] : []),
+        borderColor: withAlpha(projected > plan && plan ? C.danger : C.primary, 0.65), borderDash: [2, 5], borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 0, fill: false }] : []),
+      // невидимая копия траты: заливает красным зазор между тратами и планом (dataset 1 = план)
+      ...(overDays ? [{ label: 'over', aux: true, data: cum, borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, tension: 0.25,
+        fill: { target: 1, above: withAlpha(C.danger, 0.22), below: 'transparent' } }] : []),
     ] },
     options: base(),
+    plugins: overSince ? [overSincePlugin(overSince, C.danger, C.surface)] : [],
   }));
 
   // 2) По дням: столбики по участникам + дневная норма
@@ -2039,8 +2064,13 @@ function renderChartCards(box, data) {
     data: { labels: days, datasets: [
       ...users.map((u, i) => ({ type: 'bar', label: u, data: days.map(d => userDay(u, d)), backgroundColor: series[i % series.length],
         borderRadius: 3, borderSkipped: false, barPercentage: 0.82, categoryPercentage: 0.9, stack: 'day' })),
-      ...(plan ? [{ type: 'line', label: 'Норма в день', data: days.map(() => Math.round(plan / dim)), borderColor: C.faint,
+      ...(plan ? [{ type: 'line', label: 'Норма в день', data: days.map(() => normDay), borderColor: C.faint,
         borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, stack: 'norm' }] : []),
+      // красная точка над столбиком, если день дороже нормы
+      ...(dailyOver ? [{ type: 'line', label: 'over', aux: true, stack: 'over', showLine: false,
+        data: days.map(d => daily[d - 1] > normDay ? daily[d - 1] + maxDaily * 0.06 : null),
+        pointRadius: 4, pointHoverRadius: 4, pointBackgroundColor: C.danger, pointBorderColor: C.surface, pointBorderWidth: 2,
+        pointStyle: 'circle', clip: false }] : []),
     ] },
     options: dailyOpts,
   }));
@@ -2061,6 +2091,35 @@ function renderChartCards(box, data) {
       options: balOpts,
     }));
   }
+}
+
+// Флажок «с N» на дне, когда траты ушли выше плана: пунктир вниз до оси и подпись.
+function overSincePlugin(day, color, surface) {
+  return {
+    id: 'overSince',
+    afterDatasetsDraw(chart) {
+      const meta = chart.getDatasetMeta(0);
+      const pt = meta.data[day - 1];
+      if (!pt) return;
+      const { ctx, chartArea } = chart;
+      ctx.save();
+      ctx.strokeStyle = withAlpha(color, 0.55);
+      ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(pt.x, pt.y + 6); ctx.lineTo(pt.x, chartArea.bottom); ctx.stroke();
+      ctx.setLineDash([]);
+      const text = `с ${day}`;
+      ctx.font = '700 11px ' + getComputedStyle(document.body).fontFamily;
+      const w = ctx.measureText(text).width + 12, h = 18;
+      let x = pt.x - w / 2;
+      x = Math.max(chartArea.left, Math.min(chartArea.right - w, x));
+      const y = Math.max(chartArea.top, pt.y - h - 10);
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 9); ctx.fill();
+      ctx.fillStyle = surface; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
+      ctx.restore();
+    },
+  };
 }
 
 // ─── PLANNING (merged into summary screen) ────────────────────────────────────
@@ -2730,11 +2789,14 @@ function resetAddForm() {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('form-amount').value = '';
   document.getElementById('form-description').value = '';
-  document.getElementById('form-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('form-date').value = localIsoDate(new Date());
+  fitAmount();
   document.getElementById('parse-result').classList.add('hidden');
   document.getElementById('expense-text').value = '';
   document.querySelector('.sheet-title').textContent = 'Добавить расход';
   document.getElementById('btn-add-form').textContent = 'Добавить расход';
+  document.getElementById('add-sheet').classList.remove('is-editing');
+  setAiHint('');
   switchAddTab('text');
 }
 
@@ -2750,6 +2812,7 @@ function openEditExpense(exp) {
 
   // Pre-fill fields
   document.getElementById('form-amount').value = exp.amount;
+  fitAmount();
   document.getElementById('form-description').value = exp.description || '';
   // Convert DD.MM.YYYY → YYYY-MM-DD for date input
   if (exp.date) {
@@ -2759,6 +2822,7 @@ function openEditExpense(exp) {
 
   document.querySelector('.sheet-title').textContent = 'Редактировать расход';
   document.getElementById('btn-add-form').textContent = 'Сохранить изменения';
+  document.getElementById('add-sheet').classList.add('is-editing');
   switchAddTab('form');
   openSheet();
 }
@@ -2773,7 +2837,7 @@ async function parseText() {
 
   const btn = document.getElementById('btn-parse');
   btn.disabled = true;
-  btn.textContent = '⏳ Разбираю...';
+  btn.textContent = 'Разбираю…';
 
   const resultEl = document.getElementById('parse-result');
   resultEl.classList.add('hidden');
@@ -2794,7 +2858,7 @@ async function parseText() {
     showToastError('Ошибка AI-парсинга');
   } finally {
     btn.disabled = false;
-    btn.textContent = '🤖 Разобрать';
+    btn.textContent = 'Разобрать';
   }
 }
 
@@ -3021,8 +3085,8 @@ function initVoice() {
 function setVoiceBtn(recording) {
   const btn = document.getElementById('btn-voice');
   if (!btn) return;
-  btn.textContent = recording ? '🔴 Слушаю...' : '🎤 Голос';
   btn.classList.toggle('recording', recording);
+  setAiHint(recording ? 'Слушаю… говорите расходы' : '');
 }
 
 function toggleVoice() {
@@ -3058,7 +3122,8 @@ async function handlePhotoInput(file) {
   const resultEl = document.getElementById('parse-result');
   resultEl.classList.add('hidden');
   btn.disabled = true;
-  btn.textContent = '⏳ Читаю...';
+  btn.classList.add('busy');
+  setAiHint('Читаю чек…');
 
   try {
     const base64 = await fileToBase64(file);
@@ -3079,7 +3144,8 @@ async function handlePhotoInput(file) {
     showToastError('Ошибка обработки изображения');
   } finally {
     btn.disabled = false;
-    btn.textContent = '📷 Фото / чек';
+    btn.classList.remove('busy');
+    setAiHint('');
   }
 }
 
@@ -3194,6 +3260,7 @@ async function initApp() {
   }
   initPullToRefresh();
   navigate('budget');   // load content immediately, don't wait for settings
+  initHelpAndTour();
   loadSettings();       // run in background
   // Hide push section if browser doesn't support it
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -3439,6 +3506,16 @@ function setupEventListeners() {
   document.querySelectorAll('.quick-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.getElementById('form-amount').value = btn.dataset.amount;
+      fitAmount();
+    });
+  });
+  document.getElementById('form-amount').addEventListener('input', fitAmount);
+  // примеры ИИ-ввода: дописываем в поле через запятую
+  document.querySelectorAll('.ai-examples .chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ta = document.getElementById('expense-text');
+      ta.value = ta.value.trim() ? `${ta.value.trim().replace(/,$/, '')}, ${btn.dataset.example}` : btn.dataset.example;
+      ta.focus();
     });
   });
 
@@ -3628,6 +3705,8 @@ function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
 
   el.addEventListener('touchstart', e => {
     if (transitioning || e.touches.length > 1) return;
+    // по графику палец ведёт тултип по дням — экран не листаем
+    if (e.target.closest && e.target.closest('.chart-box, canvas, [data-noswipe]')) { active = false; return; }
     startX = lastX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     lastT = e.timeStamp; vx = 0;
@@ -3681,9 +3760,23 @@ function setupSwipe(el, { onLeft, onRight, canLeft, canRight }) {
   el.addEventListener('touchcancel', () => { active = false; snapBack(); }, { passive: true });
 }
 
+// крупная сумма растёт по ширине цифр, знак ₽ едет следом
+function fitAmount() {
+  const el = document.getElementById('form-amount');
+  if (el) el.style.width = `${Math.max(1, String(el.value || '0').length) + 0.6}ch`;
+}
+function localIsoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+
+// подсказка под полем ИИ-ввода: пустая строка возвращает текст по умолчанию
+function setAiHint(text) {
+  const el = document.getElementById('ai-input-hint');
+  if (el) el.textContent = text || 'ИИ разберёт суммы, категории и даты';
+}
+
 function switchAddTab(tab) {
   document.getElementById('tab-text').classList.toggle('active', tab === 'text');
   document.getElementById('tab-form').classList.toggle('active', tab === 'form');
+  document.querySelector('#add-sheet .seg')?.classList.toggle('seg--right', tab === 'form');
   document.getElementById('add-text-panel').classList.toggle('hidden', tab !== 'text');
   document.getElementById('add-form-panel').classList.toggle('hidden', tab !== 'form');
 }
@@ -4016,13 +4109,15 @@ async function loadSpeedometer() {
 
 // ─── Спидометр темпа трат ─────────────────────────────────────────────────────
 // Полукруг 180°, шкала 0–150% от нормы трат на сегодня. Зоны совпадают с
-// ИИ-анализом: ≤85% — экономим, 85–115% — в графике, >115% — перерасход.
+// ИИ-анализом: ≤85% — экономим, 85–100% — в графике, 100–110% — выше плана,
+// >110% — перерасход.
 // Стрелка — недодемпфированная пружина (разгон, лёгкий перелёт, успокоение);
 // при перерасходе мелко дрожит, за пределом шкалы бьётся об ограничитель.
-const GAUGE = { CX: 120, CY: 118, R: 90, SW: 14, MAX: 150, LOW: 85, HIGH: 115 };
+const GAUGE = { CX: 120, CY: 118, R: 90, SW: 14, MAX: 150, LOW: 85, PLAN: 100, HIGH: 110 };
 function gaugeZone(p) {
   if (p <= GAUGE.LOW)  return { key: 'good', color: cssVar('--success'), verdict: 'Экономим', emo: 'income' };
-  if (p <= GAUGE.HIGH) return { key: 'ok',   color: cssVar('--primary'), verdict: 'В графике', emo: 'idle' };
+  if (p <= GAUGE.PLAN) return { key: 'ok',   color: cssVar('--primary'), verdict: 'В графике', emo: 'idle' };
+  if (p <= GAUGE.HIGH) return { key: 'warn', color: cssVar('--warning'), verdict: 'Выше плана', emo: 'overspend' };
   return { key: 'over', color: cssVar('--danger'), verdict: 'Перерасход', emo: 'scold' };
 }
 // угол (градусы, математический, против часовой от +x) для значения шкалы
@@ -4038,7 +4133,7 @@ function gaugeArc(v1, v2, r) {
 }
 
 function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, ratio, daysElapsed, daysInMonth) {
-  const { CX, CY, R, SW, MAX, LOW, HIGH } = GAUGE;
+  const { CX, CY, R, SW, MAX, LOW, PLAN, HIGH } = GAUGE;
   const pct = Math.round(ratio * 100);
   const zone = gaugeZone(pct);
   const projected = daysElapsed > 0 ? Math.round(spent / daysElapsed * daysInMonth) : spent;
@@ -4067,7 +4162,7 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
     <div class="gauge">
       <svg viewBox="0 0 240 170" class="speedometer-svg" role="img" aria-label="Темп трат: ${pct}% от нормы, ${zone.verdict.toLowerCase()}">
         <path d="${gaugeArc(0, MAX, R)}" fill="none" stroke="${track}" stroke-width="${SW}" stroke-linecap="round"/>
-        ${zoneBand(1, LOW - 1.5, cssVar('--success'))}${zoneBand(LOW + 1.5, HIGH - 1.5, cssVar('--primary'))}${zoneBand(HIGH + 1.5, MAX - 1, cssVar('--danger'))}
+        ${zoneBand(1, LOW - 1.5, cssVar('--success'))}${zoneBand(LOW + 1.5, PLAN - 1.5, cssVar('--primary'))}${zoneBand(PLAN + 1.5, HIGH - 1.5, cssVar('--warning'))}${zoneBand(HIGH + 1.5, MAX - 1, cssVar('--danger'))}
         <path class="gauge-value" d="${gaugeArc(0, MAX, R)}" pathLength="100" fill="none" stroke="${zone.color}" stroke-width="${SW}" stroke-linecap="round" stroke-dasharray="0 100"/>
         ${ticks}
         <g class="gauge-clasp" stroke="${cssVar('--surface')}" stroke-width="1.6">
@@ -4225,7 +4320,8 @@ async function _renderSpeedChart(m, y, isCurrent, todayDay) {
     function ratioColor(v) {
       if (v === null) return withAlpha(cssVar('--text-faint'), 0.5);
       if (v <= GAUGE.LOW) return cssVar('--success');
-      if (v <= GAUGE.HIGH) return cssVar('--primary');
+      if (v <= GAUGE.PLAN) return cssVar('--primary');
+      if (v <= GAUGE.HIGH) return cssVar('--warning');
       return cssVar('--danger');
     }
 
@@ -4935,6 +5031,148 @@ function initRecurring() {
   document.getElementById('rec-modal-overlay').addEventListener('click', closeRecModal);
   document.getElementById('rec-save').addEventListener('click', recSaveModal);
   document.querySelectorAll('#rec-freq button').forEach(b => b.addEventListener('click', () => recSetFreq(b.dataset.freq)));
+}
+
+// ─── ПОМОЩЬ: ВОПРОСЫ И ОТВЕТЫ ─────────────────────────────────────────────────
+// Тексты держим в паре с android/src/components/HelpScreen.tsx (там — про приложение).
+const HELP_SECTIONS = [
+  { title: 'Начало работы', items: [
+    { q: 'Как внести расход?', a: 'Нажмите Финика с «+» внизу экрана. Во вкладке «Текстом» пишите как в мессенджере: «кофе 180, вчера такси 450» — ИИ сам разберёт суммы, категории и даты. Рядом с полем — микрофон (надиктовать) и камера (сфотографировать чек). Во вкладке «Вручную» — крупная сумма, быстрые суммы, категория и дата.' },
+    { q: 'Как посмотреть другой день или месяц?', a: 'Листайте экран пальцем влево-вправо или жмите стрелки ◀ ▶ у даты. На графиках палец не листает экран, а ведёт подсказку по дням — так удобно смотреть траты за конкретное число.' },
+    { q: 'Как исправить или удалить расход?', a: 'У своих расходов в ленте есть кнопки ✏️ и 🗑. Правка открывает то же окно ввода, уже заполненное.' },
+    { q: 'Как установить на телефон?', a: 'iPhone: откройте сайт в Safari → «Поделиться» → «На экран „Домой“». Android: меню браузера → «Установить приложение» — или скачайте ФИНИК из RuStore. Компьютер: значок установки в адресной строке Chrome/Edge.' },
+  ] },
+  { title: 'Семья', items: [
+    { q: 'Как добавить близких?', a: 'Настройки → «Пригласить партнёра» → отправьте ссылку. Открыть её можно с любого устройства: iPhone, Android или компьютера. После входа все видят общий бюджет в реальном времени.' },
+    { q: 'Что за фильтр «Все / Я / Партнёр»?', a: 'На экране «Бюджет» можно смотреть траты всей семьи вместе или каждого отдельно. Цвета участников одинаковые во всех графиках.' },
+  ] },
+  { title: 'Барометр и графики', items: [
+    { q: 'Что показывает барометр бюджета?', a: 'Сколько потрачено относительно нормы на сегодняшний день: если план 90 000 ₽ и прошла треть месяца, норма — 30 000 ₽. Зоны шкалы: до 85% — «Экономим» (зелёная), 85–100% — «В графике», 100–110% — «Выше плана» (жёлтая, Финик волнуется), больше 110% — «Перерасход» (красная, Финик ворчит). Золотая застёжка на шкале — отметка плана, 100%.' },
+    { q: 'Как читать график трат?', a: 'Верхний график — сколько потрачено с начала месяца (сплошная линия) против плана (пунктир), точками — прогноз до конца месяца. Где траты выше плана, линия и заливка становятся красными, а флажок «с N» отмечает день, когда начался перерасход. Ниже — траты по дням с дневной нормой: красная точка над столбиком — день дороже нормы.' },
+    { q: 'Где задать план?', a: 'Настройки → «Плановый бюджет». Лимиты по отдельным категориям — на экране «Цели».' },
+    { q: 'Конструктор аналитики', a: 'В Настройках можно скрыть блоки и вкладки, которыми не пользуетесь. Настройка своя на каждом устройстве.' },
+  ] },
+  { title: 'Приватность и поддержка', items: [
+    { q: 'Что даёт шифрование?', a: 'Настройки → «Приватность». Расходы шифруются прямо на устройстве, сервер хранит только непрозрачные данные. Ключ есть только у вас — сохраните его: без ключа данные не восстановить.' },
+    { q: 'Светлая и тёмная тема', a: 'Оформление следует теме телефона или компьютера — переключите её в системе, и ФИНИК подстроится.' },
+    { q: 'Как написать разработчику?', a: 'Настройки → «Поддержка». Сообщение придёт напрямую разработчику, а ответ появится там же — на вкладке «Настройки» загорится точка.' },
+  ] },
+];
+
+function renderHelp() {
+  const body = document.getElementById('help-body');
+  body.innerHTML = `
+    <p class="settings-hint">Коротко о том, как всё устроено. Нажмите на вопрос, чтобы раскрыть ответ.</p>
+    ${HELP_SECTIONS.map(sec => `
+      <div class="help-sec">
+        <div class="settings-title">${esc(sec.title)}</div>
+        ${sec.items.map(it => `
+          <details class="help-item"><summary>${esc(it.q)}</summary><p>${esc(it.a)}</p></details>`).join('')}
+      </div>`).join('')}
+    <button class="btn btn-outline btn-full" id="help-tour">Пройти вводный тур заново</button>`;
+  body.querySelector('#help-tour').addEventListener('click', () => { closeHelp(); startTour(); });
+}
+function openHelp() {
+  renderHelp();
+  document.getElementById('help-sheet').classList.add('open');
+  document.getElementById('help-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeHelp() {
+  document.getElementById('help-sheet').classList.remove('open');
+  document.getElementById('help-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+// ─── ВВОДНЫЙ ТУР ──────────────────────────────────────────────────────────────
+// Финик ведёт по реальным экранам и подсвечивает нужное. Шаг пропускается,
+// если его вкладка или блок скрыты конструктором аналитики.
+const TOUR_KEY = 'finik_tour_v1';
+const TOUR_STEPS = [
+  { emo: 'wave', title: 'Привет! Я Финик', body: 'Ваш семейный бухгалтер. Порадуюсь доходам, поворчу за перерасход и покажу за минуту, как тут всё устроено.' },
+  { screen: 'budget', target: '#fab-add', emo: 'plus', title: 'Внесите расход', body: 'Нажмите на меня. Пишите как в мессенджере — «кофе 180, вчера такси 450», диктуйте голосом или сфотографируйте чек. Есть и ручной ввод.' },
+  { screen: 'budget', target: '.nav-date-row', emo: 'walk', title: 'Листайте дни', body: 'Свайп по экрану влево-вправо или стрелки — предыдущий и следующий день. Под датой — траты всей семьи и каждого отдельно.' },
+  { screen: 'summary', target: '#summary-total-bar', emo: 'inspect', title: 'Итоги месяца', body: 'Сколько потрачено за месяц, разбивка по категориям, тепловая карта дней и ИИ-разбор с советами.' },
+  { screen: 'goals', target: '#bablometr-content .speedometer-svg', emo: 'overspend', title: 'Барометр бюджета', body: 'Стрелка — траты относительно нормы на сегодня. Зелёная зона — экономим, фиолетовая — в графике, жёлтая — выше плана, красная — перерасход. Я тоже подскажу настроением.' },
+  { screen: 'chart', target: '#chart-cards .chart-box--hero', emo: 'thinking', title: 'Графики', body: 'Траты против плана и прогноз до конца месяца. Где начался перерасход — видно красным. Ведите пальцем по графику, чтобы смотреть дни.' },
+  { screen: 'settings', target: '#invite-section', emo: 'wave', title: 'Позовите семью', body: 'Отправьте ссылку-приглашение — открыть можно на iPhone, Android или компьютере. Все вносят траты и видят общий бюджет сразу.' },
+  { screen: 'settings', target: '#support-section', emo: 'record', title: 'Поддержка', body: 'Нашли ошибку или есть идея — напишите прямо отсюда. Ответ разработчика придёт сюда же.' },
+  { emo: 'goal', title: 'Готово!', body: 'Вопросы и ответы и повтор тура — в Настройках, раздел «Помощь». Удачного планирования!' },
+];
+let tourIdx = 0, tourSteps = [];
+
+function tourVisible(step) {
+  if (step.screen && !document.querySelector(`.nav-btn[data-screen="${step.screen}"]`)?.offsetParent) return false;
+  return true;
+}
+
+function startTour() {
+  tourSteps = TOUR_STEPS.filter(tourVisible);
+  tourIdx = 0;
+  const el = document.getElementById('tour');
+  el.classList.remove('hidden');
+  el.querySelector('.tour-dots').innerHTML = tourSteps.map(() => '<i></i>').join('');
+  showTourStep();
+}
+
+function endTour() {
+  localStorage.setItem(TOUR_KEY, '1');
+  const el = document.getElementById('tour');
+  el.classList.add('hidden');
+  el.querySelector('.tour-finik').innerHTML = '';
+  navigate('budget');
+}
+
+async function showTourStep() {
+  const step = tourSteps[tourIdx];
+  const el = document.getElementById('tour');
+  const spot = el.querySelector('.tour-spot'), card = el.querySelector('.tour-card');
+  if (step.screen && currentScreen !== step.screen) { navigate(step.screen); await new Promise(r => setTimeout(r, 700)); }
+  let target = step.target ? document.querySelector(step.target) : null;
+  if (target && !target.offsetParent && target !== document.getElementById('fab-add')) target = null;
+  if (target) { target.scrollIntoView({ block: 'center', behavior: motionOK() ? 'smooth' : 'auto' }); await new Promise(r => setTimeout(r, motionOK() ? 380 : 30)); }
+
+  el.querySelector('.tour-finik').innerHTML = finikEnabled() ? finik(step.emo, 'finik-md') : '';
+  el.querySelector('.tour-step').textContent = `${tourIdx + 1} из ${tourSteps.length}`;
+  el.querySelector('.tour-title').textContent = step.title;
+  el.querySelector('.tour-body').textContent = step.body;
+  el.querySelector('.tour-next').textContent = tourIdx === tourSteps.length - 1 ? 'Начать' : 'Далее';
+  el.querySelector('.tour-skip').classList.toggle('hidden', tourIdx === tourSteps.length - 1);
+  el.querySelectorAll('.tour-dots i').forEach((d, i) => d.classList.toggle('on', i === tourIdx));
+
+  if (target) {
+    const r = target.getBoundingClientRect(), pad = 8;
+    Object.assign(spot.style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+    spot.classList.remove('tour-spot--none');
+    // карточка — с той стороны, где больше места
+    card.classList.toggle('tour-card--top', r.top + r.height / 2 > window.innerHeight / 2);
+  } else {
+    spot.classList.add('tour-spot--none');
+    card.classList.remove('tour-card--top');
+  }
+  card.classList.remove('tour-card--in'); void card.offsetWidth; card.classList.add('tour-card--in');
+}
+
+function initHelpAndTour() {
+  document.getElementById('btn-open-help').addEventListener('click', openHelp);
+  document.getElementById('btn-start-tour').addEventListener('click', startTour);
+  document.getElementById('help-close').addEventListener('click', closeHelp);
+  document.getElementById('help-overlay').addEventListener('click', closeHelp);
+  const el = document.getElementById('tour');
+  el.querySelector('.tour-skip').addEventListener('click', endTour);
+  el.querySelector('.tour-next').addEventListener('click', () => {
+    if (tourIdx >= tourSteps.length - 1) { endTour(); return; }
+    tourIdx++; showTourStep();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!el.classList.contains('hidden')) endTour();
+    else if (document.getElementById('help-sheet').classList.contains('open')) closeHelp();
+  });
+  // первый запуск — показываем тур один раз
+  let seen = false;
+  try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch { seen = true; }
+  if (!seen) setTimeout(startTour, 1200);
 }
 
 // ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
