@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 
 import * as E2E from './e2e.js';
+import { TARGETS as FK_TARGETS, PROPS as FK_PROPS, initState as fkInit, stepRig as fkStep, computePose as fkPose } from './finik-rig.js';
 
 const PLAN_CATEGORIES = [
   { key: 'Продукты',    icon: '🛒' },
@@ -751,61 +752,66 @@ function closeSheet() {
 }
 
 // ─── ФИНИК — маскот (переиспользуемый SVG с эмоциями) ────────────────────────
+// Разметка 1:1 с android/src/components/Finik.tsx. Позы и движения считает риг
+// (finik-rig.js — та же математика, что в приложении); драйвер ниже каждый кадр
+// задаёт частям [data-p] transform/opacity. Предметы [data-prop] — по эмоции.
 const FINIK_DEFS = `<svg class="finik-defs" width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
   <linearGradient id="fk-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9B80FF"/><stop offset="1" stop-color="#5947E0"/></linearGradient>
   <radialGradient id="fk-belly" cx="0.5" cy="0.4" r="0.7"><stop offset="0" stop-color="#F3EFFF"/><stop offset="1" stop-color="#DED3FF"/></radialGradient>
+  <clipPath id="fk-eye-l"><circle cx="79" cy="97" r="19"/></clipPath>
+  <clipPath id="fk-eye-r"><circle cx="121" cy="97" r="19"/></clipPath>
 </defs></svg>`;
 
-const FINIK_SVG = `<svg class="finik-svg" viewBox="0 0 200 210" data-emotion="idle" role="img" aria-label="Финик — помощник">
-  <ellipse cx="100" cy="196" rx="52" ry="9" fill="rgba(60,40,120,0.18)"/>
-  <g class="prop confetti">
-    <rect class="c-piece" x="60" y="30" width="7" height="10" rx="2" fill="#FF7AB3"/>
-    <rect class="c-piece" x="98" y="22" width="7" height="10" rx="2" fill="#34C7A0" style="animation-delay:.2s"/>
-    <rect class="c-piece" x="134" y="32" width="7" height="10" rx="2" fill="#FFC24B" style="animation-delay:.4s"/>
-    <rect class="c-piece" x="80" y="26" width="7" height="10" rx="2" fill="#8A6BFF" style="animation-delay:.55s"/>
-    <rect class="c-piece" x="118" y="26" width="7" height="10" rx="2" fill="#FF7AB3" style="animation-delay:.3s"/>
+const FK_INK = '#3A2E80';
+const FINIK_SVG = `<svg class="finik-svg" viewBox="-6 0 220 210" data-emotion="idle" role="img" aria-label="Финик — помощник">
+  <g data-p="shadow"><ellipse cx="100" cy="196" rx="52" ry="9" fill="rgba(60,40,120,0.18)"/></g>
+  <g data-prop="confetti" style="display:none">
+    <rect x="60" y="30" width="7" height="10" rx="2" fill="#FF7AB3"/><rect x="98" y="22" width="7" height="10" rx="2" fill="#34C7A0"/>
+    <rect x="134" y="32" width="7" height="10" rx="2" fill="#FFC24B"/><rect x="80" y="26" width="7" height="10" rx="2" fill="#8A6BFF"/>
+    <rect x="118" y="26" width="7" height="10" rx="2" fill="#FF7AB3"/>
   </g>
-  <g class="f-body">
-    <g class="arm-l"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="46" cy="147" r="9" fill="#8E76F5"/></g>
-    <g class="arm-r"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="154" cy="147" r="9" fill="#8E76F5"/></g>
+  <g data-p="bodyBack">
+    <g data-p="armL"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="46" cy="147" r="9" fill="#8E76F5"/></g>
+    <g data-p="armR"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="154" cy="147" r="9" fill="#8E76F5"/></g>
     <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
-    <g class="leg leg-l"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g><g class="leg leg-r"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
+  </g>
+  <g data-p="footL"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
+  <g data-p="footR"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
+  <g data-p="bodyFront">
     <rect x="72" y="143" width="56" height="40" rx="12" fill="url(#fk-belly)"/>
-    <g class="belly-lines">
+    <g data-p="bellyLines">
       <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
       <line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
       <line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
     </g>
-    <g class="belly-plus"><rect x="85" y="158" width="30" height="10" rx="5" fill="#5947E0"/><rect x="95" y="148" width="10" height="30" rx="5" fill="#5947E0"/><circle class="point-hand" cx="70" cy="150" r="9" fill="#8E76F5"/><circle class="point-hand" cx="130" cy="150" r="9" fill="#8E76F5"/></g>
-    <ellipse class="cheek" cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8"/><ellipse class="cheek" cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8"/>
+    <g data-p="bellyPlus" style="display:none"><rect x="85" y="158" width="30" height="10" rx="5" fill="#5947E0"/><rect x="95" y="148" width="10" height="30" rx="5" fill="#5947E0"/><circle cx="70" cy="150" r="9" fill="#8E76F5"/><circle cx="130" cy="150" r="9" fill="#8E76F5"/></g>
+    <g data-p="cheeks" opacity="0"><ellipse cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8"/><ellipse cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8"/></g>
     <line x1="92" y1="96" x2="108" y2="96" stroke="#FFC24B" stroke-width="4"/>
     <circle cx="79" cy="97" r="19" fill="#FFFFFF"/><circle cx="121" cy="97" r="19" fill="#FFFFFF"/>
-    <g class="pupil"><circle cx="79" cy="98" r="7.5" fill="#241C42"/><circle cx="82" cy="95" r="2.4" fill="#fff"/></g>
-    <g class="pupil"><circle cx="121" cy="98" r="7.5" fill="#241C42"/><circle cx="124" cy="95" r="2.4" fill="#fff"/></g>
-    <rect class="lid" x="60" y="79" width="38" height="19" rx="9" fill="url(#fk-body)"/>
-    <rect class="lid" x="102" y="79" width="38" height="19" rx="9" fill="url(#fk-body)"/>
+    <g data-p="pupils"><circle cx="79" cy="98" r="7.5" fill="#241C42"/><circle cx="82" cy="95" r="2.4" fill="#fff"/><circle cx="121" cy="98" r="7.5" fill="#241C42"/><circle cx="124" cy="95" r="2.4" fill="#fff"/></g>
+    <g clip-path="url(#fk-eye-l)"><g data-p="lidL"><rect x="58" y="36" width="42" height="41" fill="#8C74F7"/><line x1="58" y1="77" x2="100" y2="77" stroke="${FK_INK}" stroke-width="2.5"/></g></g>
+    <g clip-path="url(#fk-eye-r)"><g data-p="lidR"><rect x="100" y="36" width="42" height="41" fill="#8C74F7"/><line x1="100" y1="77" x2="142" y2="77" stroke="${FK_INK}" stroke-width="2.5"/></g></g>
     <circle cx="79" cy="97" r="19" fill="none" stroke="#FFC24B" stroke-width="4"/><circle cx="121" cy="97" r="19" fill="none" stroke="#FFC24B" stroke-width="4"/>
-    <g class="brow brow-l"><rect x="66" y="72" width="20" height="6" rx="3" fill="#3A2E80"/></g>
-    <g class="brow brow-r"><rect x="114" y="72" width="20" height="6" rx="3" fill="#3A2E80"/></g>
-    <path class="mouth m-smile" d="M88 126 Q100 136 112 126" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <path class="mouth m-grin" d="M86 124 Q100 142 114 124 Q100 132 86 124 Z" fill="#3A2E80"/>
-    <path class="mouth m-frown" d="M88 132 Q100 123 112 132" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <ellipse class="mouth m-focus" cx="100" cy="128" rx="5" ry="4" fill="#3A2E80"/>
-    <line class="mouth m-flat" x1="90" y1="128" x2="110" y2="128" stroke="#3A2E80" stroke-width="4" stroke-linecap="round"/>
-    <path class="mouth m-smirk" d="M89 128 Q100 133 113 126" stroke="#3A2E80" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <g class="prop p-coin"><circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="170" y="110" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
-    <g class="prop p-pencil"><g transform="rotate(-32 164 116)"><rect x="160" y="102" width="7" height="28" rx="3" fill="#FFC24B"/><path d="M160 100 l7 0 l-3.5 -8 Z" fill="#3A2E80"/></g></g>
-    <g class="prop p-board"><rect x="150" y="58" width="60" height="58" rx="6" fill="#F6F3FF" stroke="#B9A9F0" stroke-width="3"/><text x="163" y="80" font-size="13" font-weight="800" fill="#5947E0">₽</text><line x1="176" y1="76" x2="203" y2="76" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><line x1="159" y1="93" x2="203" y2="93" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><path d="M159 108 l12 -7 l9 4 l16 -11" stroke="#34C7A0" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
-    <g class="prop p-sweat"><path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7"/></g>
+    <g data-p="browL"><rect x="66" y="72" width="20" height="6" rx="3" fill="${FK_INK}"/></g>
+    <g data-p="browR"><rect x="114" y="72" width="20" height="6" rx="3" fill="${FK_INK}"/></g>
+    <g data-p="mSmile"><path d="M88 126 Q100 136 112 126" stroke="${FK_INK}" stroke-width="4" fill="none" stroke-linecap="round"/></g>
+    <g data-p="mGrin" opacity="0"><path d="M86 124 Q100 142 114 124 Q100 132 86 124 Z" fill="${FK_INK}"/></g>
+    <g data-p="mFrown" opacity="0"><path d="M88 132 Q100 123 112 132" stroke="${FK_INK}" stroke-width="4" fill="none" stroke-linecap="round"/></g>
+    <g data-p="mFocus" opacity="0"><ellipse cx="100" cy="128" rx="5" ry="4" fill="${FK_INK}"/></g>
+    <g data-p="mFlat" opacity="0"><line x1="90" y1="128" x2="110" y2="128" stroke="${FK_INK}" stroke-width="4" stroke-linecap="round"/></g>
+    <g data-p="mSmirk" opacity="0"><path d="M89 128 Q100 133 113 126" stroke="${FK_INK}" stroke-width="4" fill="none" stroke-linecap="round"/></g>
+    <g data-p="mYell" opacity="0"><g data-p="yell"><ellipse cx="100" cy="129" rx="9" ry="8" fill="${FK_INK}"/><ellipse cx="100" cy="134" rx="5" ry="2.6" fill="#FF8FB8"/></g></g>
+    <g data-p="anger" opacity="0"><path d="M-7 -2 Q-7 -7 -2 -7 M2 -7 Q7 -7 7 -2 M7 2 Q7 7 2 7 M-2 7 Q-7 7 -7 2" stroke="#FF4D5E" stroke-width="3" fill="none" stroke-linecap="round"/></g>
+    <g data-p="sweat" opacity="0"><path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7"/></g>
+    <g data-prop="coin" style="display:none"><circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="170" y="110" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
+    <g data-prop="pencil" style="display:none"><g transform="rotate(-32 164 116)"><rect x="160" y="102" width="7" height="28" rx="3" fill="#FFC24B"/><path d="M160 100 l7 0 l-3.5 -8 Z" fill="${FK_INK}"/></g></g>
+    <g data-prop="board" style="display:none"><rect x="150" y="58" width="60" height="58" rx="6" fill="#F6F3FF" stroke="#B9A9F0" stroke-width="3"/><text x="163" y="80" font-size="13" font-weight="800" fill="#5947E0">₽</text><line x1="176" y1="76" x2="203" y2="76" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><line x1="159" y1="93" x2="203" y2="93" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><path d="M159 108 l12 -7 l9 4 l16 -11" stroke="#34C7A0" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g data-prop="sparkle" style="display:none" fill="#FFC24B"><path d="M40 60 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z"/><path d="M168 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3"/></g>
+    <g data-prop="think" style="display:none" fill="#5947E0"><circle cx="150" cy="70" r="4"/><circle cx="164" cy="58" r="5.5"/><circle cx="180" cy="44" r="7"/></g>
+    <g data-prop="shades" style="display:none"><rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f"/><rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f"/><line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" stroke-width="6"/><rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/><rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/></g>
+    <g data-prop="wrench" style="display:none"><g transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g></g>
+    <g data-prop="magnifier" style="display:none"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
   </g>
-  <g class="prop p-ledger"><rect x="120" y="150" width="46" height="34" rx="5" fill="#fff" stroke="#DED3FF" stroke-width="2" transform="rotate(-8 143 167)"/><line x1="128" y1="160" x2="158" y2="158" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/><line x1="128" y1="168" x2="158" y2="166" stroke="#C9BBF5" stroke-width="2.5" transform="rotate(-8 143 167)"/></g>
-  <g class="prop sparkle" fill="#FFC24B"><path d="M40 60 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z"/><path d="M168 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3"/></g>
-  <g class="prop p-think" fill="#5947E0"><circle class="t-dot" cx="150" cy="70" r="4"/><circle class="t-dot" cx="164" cy="58" r="5.5"/><circle class="t-dot" cx="180" cy="44" r="7"/></g>
-  <g class="prop p-shades"><rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f"/><rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f"/><line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" stroke-width="6"/><rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/><rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/></g>
-  <g class="prop p-wrench" transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g>
-  <g class="prop p-magnifier"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
-  <g class="prop p-hearts" fill="#FF5C87"><path class="heart" d="M60 96 a5 5 0 0 1 10 0 a5 5 0 0 1 10 0 q0 7 -10 13 q-10 -6 -10 -13 Z"/><path class="heart" d="M124 92 a4 4 0 0 1 8 0 a4 4 0 0 1 8 0 q0 5 -8 10 q-8 -5 -8 -10 Z"/></g>
-  <g class="prop p-plus"><g class="plus-badge" transform="rotate(38 100 148)"><circle cx="100" cy="148" r="33" fill="#5947E0"/><rect x="81" y="141" width="38" height="14" rx="7" fill="#fff"/><rect x="93" y="129" width="14" height="38" rx="7" fill="#fff"/></g></g>
 </svg>`;
 
 function ensureFinikDefs() {
@@ -830,54 +836,140 @@ function mountWalkers() {
   });
 }
 
-// Интерактив: глаза следят за курсором (в спокойных состояниях) + клик = радость
+// ─── Драйвер анимаций: риг (finik-rig.js) → части SVG ───────────────────────
+// Один requestAnimationFrame на все видимые Финики. Эмоцию читаем из
+// data-emotion каждый кадр (временная — data-fx: тап/фиджет), поэтому любой код,
+// меняющий атрибут (барометр: «ругается» → «ворчит»), получает плавный переход.
+const FK_MAT = { shadow: 'shadowM', bodyBack: 'bodyM', bodyFront: 'bodyM', armL: 'armLM', armR: 'armRM',
+  footL: 'footLM', footR: 'footRM', browL: 'browLM', browR: 'browRM', pupils: 'pupilsM',
+  lidL: 'lidM', lidR: 'lidM', yell: 'yellM', anger: 'angerM', sweat: 'sweatM' };
+const FK_OP = { anger: 'angerO', sweat: 'sweatO', cheeks: 'cheeksO', mSmile: 'mSmile', mGrin: 'mGrin',
+  mFrown: 'mFrown', mFocus: 'mFocus', mFlat: 'mFlat', mSmirk: 'mSmirk', mYell: 'mYell' };
+const fkReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+const fkRigs = new WeakMap();
+const fkVisible = new Set();
+let fkRaf = 0, fkLast = 0, fkIO = null;
+
+const fkMat = m => `matrix(${m[0].toFixed(4)} ${m[1].toFixed(4)} ${m[2].toFixed(4)} ${m[3].toFixed(4)} ${m[4].toFixed(2)} ${m[5].toFixed(2)})`;
+const fkEmotion = svg => svg.dataset.fx || svg.getAttribute('data-emotion') || 'idle';
+function fkTarget(emo) {
+  const t = FK_TARGETS[emo] || FK_TARGETS.idle;
+  return fkReduced.matches ? { ...t, fA: 0, fB: 0, blink: 0 } : t; // «уменьшить движение» — замирает
+}
+
+function fkSet(r, node, attr, val) {
+  const key = node.dataset.p + attr;
+  if (r.last[key] !== val) { r.last[key] = val; node.setAttribute(attr, val); }
+}
+
+function fkApply(svg, r, pose, emo) {
+  if (r.emo !== emo) { // дискретное: предметы и плюсик на пузе
+    r.emo = emo;
+    const on = FK_PROPS[emo] || [];
+    r.props.forEach(n => { n.style.display = on.includes(n.dataset.prop) ? '' : 'none'; });
+    const plus = emo === 'plus';
+    r.p.bellyPlus.style.display = plus ? '' : 'none';
+    r.p.bellyLines.style.display = plus ? 'none' : '';
+    r.p.armL.style.display = r.p.armR.style.display = plus ? 'none' : '';
+  }
+  for (const k in FK_MAT) {
+    let m = pose[FK_MAT[k]];
+    if (k === 'pupils' && svg.__look && (emo === 'idle' || emo === 'walk')) {
+      m = [1, 0, 0, 1, m[4] + svg.__look[0], m[5] + svg.__look[1]]; // глаза следят за курсором
+    }
+    fkSet(r, r.p[k], 'transform', fkMat(m));
+  }
+  for (const k in FK_OP) fkSet(r, r.p[k], 'opacity', pose[FK_OP[k]].toFixed(3));
+}
+
+function fkRegister(svg) {
+  if (fkRigs.has(svg)) return;
+  const p = {};
+  svg.querySelectorAll('[data-p]').forEach(n => { p[n.dataset.p] = n; });
+  if (!p.bodyFront) return; // чужая/старая разметка
+  const emo = fkEmotion(svg);
+  const r = { p, props: [...svg.querySelectorAll('[data-prop]')], emo: null, last: {}, st: fkInit(fkTarget(emo)) };
+  fkRigs.set(svg, r);
+  fkApply(svg, r, fkPose(r.st), emo); // сразу правильная поза — без мигания до первого кадра
+  fkIO?.observe(svg);
+}
+
+function fkFrame(now) {
+  fkRaf = 0;
+  const dt = fkLast ? Math.min(0.05, (now - fkLast) / 1000) : 1 / 60;
+  fkLast = now;
+  for (const svg of fkVisible) {
+    if (!svg.isConnected) { fkVisible.delete(svg); fkIO?.unobserve(svg); continue; }
+    const r = fkRigs.get(svg);
+    if (!r) continue;
+    const emo = fkEmotion(svg);
+    r.st = fkStep(r.st, fkTarget(emo), dt);
+    fkApply(svg, r, fkPose(r.st), emo);
+  }
+  fkKick();
+}
+function fkKick() {
+  if (fkRaf || !fkVisible.size || document.hidden) { if (!fkVisible.size || document.hidden) fkLast = 0; return; }
+  fkRaf = requestAnimationFrame(fkFrame);
+}
+
 function finikActivate() {
   if (window.__finikActive) return;
   window.__finikActive = true;
 
+  // Видимость — через IntersectionObserver: анимируем только то, что на экране
+  fkIO = new IntersectionObserver(entries => {
+    for (const e of entries) e.isIntersecting ? fkVisible.add(e.target) : fkVisible.delete(e.target);
+    fkKick();
+  });
+  document.querySelectorAll('.finik-svg').forEach(fkRegister);
+  // Новые Финики появляются при перерисовке экранов — подхватываем до отрисовки
+  new MutationObserver(muts => {
+    for (const m of muts) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.classList.contains('finik-svg')) fkRegister(n);
+      else if (n.querySelector) n.querySelectorAll('.finik-svg').forEach(fkRegister);
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('visibilitychange', fkKick);
+
+  // Глаза следят за курсором (в спокойных состояниях) — смещение зрачков в единицах SVG
   let raf = 0, ev = null;
   const track = () => {
     raf = 0; if (!ev) return;
-    document.querySelectorAll('.finik-svg').forEach(svg => {
-      const emo = svg.getAttribute('data-emotion');
-      if (emo !== 'idle' && emo !== 'walk') { svg.style.removeProperty('--fk-px'); svg.style.removeProperty('--fk-py'); return; }
+    fkVisible.forEach(svg => {
       const r = svg.getBoundingClientRect();
       if (!r.width) return;
       const dx = Math.max(-3, Math.min(3, (ev.clientX - (r.left + r.width / 2)) / (r.width / 2) * 3));
       const dy = Math.max(-2.5, Math.min(2.5, (ev.clientY - (r.top + r.height * 0.46)) / (r.height / 2) * 3));
-      svg.style.setProperty('--fk-px', dx.toFixed(1) + 'px');
-      svg.style.setProperty('--fk-py', dy.toFixed(1) + 'px');
+      svg.__look = [dx, dy];
     });
   };
   window.addEventListener('pointermove', e => { ev = e; if (!raf) raf = requestAnimationFrame(track); }, { passive: true });
 
-  // тап по Финику — одна из 4 случайных реакций
-  const TAPS = ['fk-tap-jump', 'fk-tap-coin', 'fk-tap-wobble', 'fk-tap-hearts'];
+  // Тап по Финику — короткая смена эмоции (как в приложении), риг перетекает плавно
+  const TAPS = ['goal', 'income', 'inspect', 'spy'];
   document.addEventListener('click', e => {
     const wrap = e.target.closest('.finik');
     if (!wrap || wrap.classList.contains('finik-walker') || wrap.classList.contains('finik-wander') || wrap.closest('.fab')) return;
     const svg = wrap.querySelector('.finik-svg');
-    if (!svg || svg.dataset.reacting) return;
-    const cls = TAPS[Math.floor(Math.random() * TAPS.length)];
-    svg.dataset.reacting = '1';
-    svg.classList.add(cls);
-    setTimeout(() => { svg.classList.remove(cls); delete svg.dataset.reacting; }, 1150);
+    if (!svg || svg.dataset.fx) return;
+    svg.dataset.fx = TAPS[Math.floor(Math.random() * TAPS.length)];
+    setTimeout(() => { delete svg.dataset.fx; }, 1300);
   });
 
-  // idle-фиджеты: каждые 5–20с спокойные Финики делают случайное микродействие
-  const FIDGETS = ['fk-do-stretch', 'fk-do-look', 'fk-do-coin', 'fk-do-nod'];
+  // idle-фиджеты: раз в 6–16с спокойный Финик делает случайное микродействие
+  const FIDGETS = ['income', 'inspect', 'goal', 'spy'];
   const fidgetTick = () => {
-    document.querySelectorAll('.finik-svg[data-emotion="idle"]').forEach(svg => {
-      if (svg.dataset.reacting || svg.dataset.fidget) return;
-      if (Math.random() > 0.6) return; // не все и не каждый тик
-      const cls = FIDGETS[Math.floor(Math.random() * FIDGETS.length)];
-      svg.dataset.fidget = '1';
-      svg.classList.add(cls);
-      setTimeout(() => { svg.classList.remove(cls); delete svg.dataset.fidget; }, 1900);
+    if (!fkReduced.matches) fkVisible.forEach(svg => {
+      if (svg.dataset.fx || svg.getAttribute('data-emotion') !== 'idle') return;
+      if (svg.closest('.fab') || Math.random() > 0.6) return; // не все и не каждый тик
+      svg.dataset.fx = FIDGETS[Math.floor(Math.random() * FIDGETS.length)];
+      setTimeout(() => { delete svg.dataset.fx; }, 1500);
     });
-    setTimeout(fidgetTick, 5000 + Math.random() * 15000);
+    setTimeout(fidgetTick, 6000 + Math.random() * 10000);
   };
-  setTimeout(fidgetTick, 4000);
+  setTimeout(fidgetTick, 5000);
 }
 
 // Иногда Финик просто проходит по нижней панели слева направо
