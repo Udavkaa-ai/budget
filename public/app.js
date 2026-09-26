@@ -752,65 +752,70 @@ function closeSheet() {
 }
 
 // ─── ФИНИК — маскот (переиспользуемый SVG с эмоциями) ────────────────────────
-// Разметка 1:1 с android/src/components/Finik.tsx. Позы и движения считает риг
+// Финик-кошелёк. Разметка 1:1 с android/src/components/Finik.tsx. Позы и движения считает риг
 // (finik-rig.js — та же математика, что в приложении); драйвер ниже каждый кадр
 // задаёт частям [data-p] transform/opacity. Предметы [data-prop] — по эмоции.
 const FINIK_DEFS = `<svg class="finik-defs" width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
-  <linearGradient id="fk-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9B80FF"/><stop offset="1" stop-color="#5947E0"/></linearGradient>
-  <radialGradient id="fk-belly" cx="0.5" cy="0.4" r="0.7"><stop offset="0" stop-color="#F3EFFF"/><stop offset="1" stop-color="#DED3FF"/></radialGradient>
+  <clipPath id="fk-pouch"><path d="M50 70 C26 96 16 150 36 178 C56 199 144 199 164 178 C184 150 174 96 150 70 Q100 57 50 70 Z"/></clipPath>
   <clipPath id="fk-eye-l"><circle cx="79" cy="97" r="19"/></clipPath>
   <clipPath id="fk-eye-r"><circle cx="121" cy="97" r="19"/></clipPath>
 </defs></svg>`;
 
-const FK_INK = '#3A2E80';
+// Финик-кошелёк: плоская мультяшная палитра (фиолетовый + золото фермуара)
+const FK = { body: '#7A5CF0', hi: '#9B80FF', sh: '#5947E0', arm: '#5947E0', gold: '#FFC24B', goldSh: '#E8A21F',
+  goldHi: '#FFE9A8', glove: '#FFFFFF', gloveLine: '#D9CEFF', shoe: '#3A2E80', shoeHi: '#6A58D6', ink: '#2B2160' };
+const FK_POUCH = 'M50 70 C26 96 16 150 36 178 C56 199 144 199 164 178 C184 150 174 96 150 70 Q100 57 50 70 Z';
 const FINIK_SVG = `<svg class="finik-svg" viewBox="-6 0 220 210" data-emotion="idle" role="img" aria-label="Финик — помощник">
-  <g data-p="shadow"><ellipse cx="100" cy="196" rx="52" ry="9" fill="rgba(60,40,120,0.18)"/></g>
+  <g data-p="shadow"><ellipse cx="100" cy="197" rx="54" ry="8" fill="rgba(60,40,120,0.16)"/></g>
   <g data-prop="confetti" style="display:none">
-    <rect x="60" y="30" width="7" height="10" rx="2" fill="#FF7AB3"/><rect x="98" y="22" width="7" height="10" rx="2" fill="#34C7A0"/>
-    <rect x="134" y="32" width="7" height="10" rx="2" fill="#FFC24B"/><rect x="80" y="26" width="7" height="10" rx="2" fill="#8A6BFF"/>
-    <rect x="118" y="26" width="7" height="10" rx="2" fill="#FF7AB3"/>
+    <rect x="60" y="22" width="7" height="10" rx="2" fill="#FF7AB3"/><rect x="98" y="14" width="7" height="10" rx="2" fill="#34C7A0"/>
+    <rect x="134" y="24" width="7" height="10" rx="2" fill="#FFC24B"/><rect x="80" y="18" width="7" height="10" rx="2" fill="#8A6BFF"/>
+    <rect x="118" y="18" width="7" height="10" rx="2" fill="#FF7AB3"/>
   </g>
   <g data-p="bodyBack">
-    <g data-p="armL"><ellipse cx="46" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="46" cy="147" r="9" fill="#8E76F5"/></g>
-    <g data-p="armR"><ellipse cx="154" cy="128" rx="13" ry="20" fill="#7C63F0"/><circle cx="154" cy="147" r="9" fill="#8E76F5"/></g>
-    <path d="M100 58 C142 58 160 90 160 128 C160 172 134 192 100 192 C66 192 40 172 40 128 C40 90 58 58 100 58 Z" fill="url(#fk-body)"/>
-  </g>
-  <g data-p="footL"><ellipse cx="80" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
-  <g data-p="footR"><ellipse cx="120" cy="190" rx="13" ry="8" fill="#4A39C4"/></g>
-  <g data-p="bodyFront">
-    <rect x="72" y="143" width="56" height="40" rx="12" fill="url(#fk-belly)"/>
-    <g data-p="bellyLines">
-      <line x1="82" y1="155" x2="118" y2="155" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
-      <line x1="82" y1="164" x2="118" y2="164" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
-      <line x1="82" y1="173" x2="104" y2="173" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/>
+    <g data-p="armL"><path d="M42 112 Q14 116 14 140" stroke="${FK.arm}" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="14" cy="144" r="9" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="2"/><circle cx="7" cy="140" r="3.6" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="1.6"/></g>
+    <g data-p="armR"><path d="M158 112 Q186 116 186 140" stroke="${FK.arm}" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="186" cy="144" r="9" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="2"/><circle cx="193" cy="140" r="3.6" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="1.6"/></g>
+    <path d="${FK_POUCH}" fill="${FK.body}"/>
+    <g clip-path="url(#fk-pouch)">
+      <path d="M146 76 Q164 112 160 156 Q154 184 118 194 L210 210 L210 60 Z" fill="${FK.sh}"/>
+      <path d="M52 104 Q34 128 42 156 Q50 172 68 166 Q80 158 70 142 Q62 128 66 112 Q62 98 52 104 Z" fill="${FK.hi}" opacity="0.75"/>
     </g>
-    <g data-p="bellyPlus" style="display:none"><rect x="85" y="158" width="30" height="10" rx="5" fill="#5947E0"/><rect x="95" y="148" width="10" height="30" rx="5" fill="#5947E0"/><circle cx="70" cy="150" r="9" fill="#8E76F5"/><circle cx="130" cy="150" r="9" fill="#8E76F5"/></g>
-    <g data-p="cheeks" opacity="0"><ellipse cx="66" cy="112" rx="9" ry="6" fill="#FF8FB8"/><ellipse cx="134" cy="112" rx="9" ry="6" fill="#FF8FB8"/></g>
-    <line x1="92" y1="96" x2="108" y2="96" stroke="#FFC24B" stroke-width="4"/>
+  </g>
+  <g data-p="footL"><path d="M94 196 Q96 184 80 184 Q62 184 62 192 Q62 199 76 199 L90 199 Q94 199 94 196 Z" fill="${FK.shoe}"/><ellipse cx="70" cy="189" rx="4.5" ry="2.6" fill="${FK.shoeHi}"/></g>
+  <g data-p="footR"><path d="M106 196 Q104 184 120 184 Q138 184 138 192 Q138 199 124 199 L110 199 Q106 199 106 196 Z" fill="${FK.shoe}"/><ellipse cx="130" cy="189" rx="4.5" ry="2.6" fill="${FK.shoeHi}"/></g>
+  <g data-p="bodyFront">
+    <g data-p="bellyLines"><path d="M52 180 Q100 194 148 180" stroke="${FK.sh}" stroke-width="2.5" fill="none" stroke-dasharray="4 4" stroke-linecap="round"/></g>
+    <g data-p="bellyPlus" style="display:none"><circle cx="100" cy="156" r="20" fill="${FK.gold}" stroke="${FK.goldSh}" stroke-width="3"/><rect x="89" y="152" width="22" height="8" rx="4" fill="#fff"/><rect x="96" y="145" width="8" height="22" rx="4" fill="#fff"/><circle cx="72" cy="160" r="9" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="2"/><circle cx="128" cy="160" r="9" fill="${FK.glove}" stroke="${FK.gloveLine}" stroke-width="2"/></g>
+    <line x1="95" y1="58" x2="105" y2="45" stroke="${FK.goldSh}" stroke-width="4" stroke-linecap="round"/><line x1="105" y1="58" x2="95" y2="45" stroke="${FK.goldSh}" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="93" cy="40" r="7.5" fill="${FK.gold}"/><circle cx="107" cy="40" r="7.5" fill="${FK.gold}"/>
+    <circle cx="91" cy="37.5" r="2.4" fill="${FK.goldHi}"/><circle cx="105" cy="37.5" r="2.4" fill="${FK.goldHi}"/>
+    <path d="M40 69 Q100 51 160 69" stroke="${FK.goldSh}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M40 66 Q100 48 160 66" stroke="${FK.gold}" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M60 60 Q100 49 140 60" stroke="${FK.goldHi}" stroke-width="2.6" fill="none" stroke-linecap="round" opacity="0.9"/>
+    <g data-p="cheeks" opacity="0"><ellipse cx="60" cy="122" rx="9" ry="5.5" fill="#FF8FB8"/><ellipse cx="140" cy="122" rx="9" ry="5.5" fill="#FF8FB8"/></g>
     <circle cx="79" cy="97" r="19" fill="#FFFFFF"/><circle cx="121" cy="97" r="19" fill="#FFFFFF"/>
-    <g data-p="pupils"><circle cx="79" cy="98" r="7.5" fill="#241C42"/><circle cx="82" cy="95" r="2.4" fill="#fff"/><circle cx="121" cy="98" r="7.5" fill="#241C42"/><circle cx="124" cy="95" r="2.4" fill="#fff"/></g>
-    <g clip-path="url(#fk-eye-l)"><g data-p="lidL"><rect x="58" y="36" width="42" height="41" fill="#8C74F7"/><line x1="58" y1="77" x2="100" y2="77" stroke="${FK_INK}" stroke-width="2.5"/></g></g>
-    <g clip-path="url(#fk-eye-r)"><g data-p="lidR"><rect x="100" y="36" width="42" height="41" fill="#8C74F7"/><line x1="100" y1="77" x2="142" y2="77" stroke="${FK_INK}" stroke-width="2.5"/></g></g>
-    <circle cx="79" cy="97" r="19" fill="none" stroke="#FFC24B" stroke-width="4"/><circle cx="121" cy="97" r="19" fill="none" stroke="#FFC24B" stroke-width="4"/>
-    <g data-p="browL"><rect x="66" y="72" width="20" height="6" rx="3" fill="${FK_INK}"/></g>
-    <g data-p="browR"><rect x="114" y="72" width="20" height="6" rx="3" fill="${FK_INK}"/></g>
-    <g data-p="mSmile"><path d="M88 126 Q100 136 112 126" stroke="${FK_INK}" stroke-width="4" fill="none" stroke-linecap="round"/></g>
-    <g data-p="mGrin" opacity="0"><path d="M86 124 Q100 142 114 124 Q100 132 86 124 Z" fill="${FK_INK}"/></g>
-    <g data-p="mFrown" opacity="0"><path d="M88 132 Q100 123 112 132" stroke="${FK_INK}" stroke-width="4" fill="none" stroke-linecap="round"/></g>
-    <g data-p="mFocus" opacity="0"><ellipse cx="100" cy="128" rx="5" ry="4" fill="${FK_INK}"/></g>
-    <g data-p="mFlat" opacity="0"><line x1="90" y1="128" x2="110" y2="128" stroke="${FK_INK}" stroke-width="4" stroke-linecap="round"/></g>
-    <g data-p="mSmirk" opacity="0"><path d="M89 128 Q100 133 113 126" stroke="${FK_INK}" stroke-width="4" fill="none" stroke-linecap="round"/></g>
-    <g data-p="mYell" opacity="0"><g data-p="yell"><ellipse cx="100" cy="129" rx="9" ry="8" fill="${FK_INK}"/><ellipse cx="100" cy="134" rx="5" ry="2.6" fill="#FF8FB8"/></g></g>
+    <g data-p="pupils"><circle cx="79" cy="99" r="9" fill="${FK.ink}"/><circle cx="82.5" cy="95" r="3.2" fill="#fff"/><circle cx="76" cy="102.5" r="1.5" fill="#fff"/><circle cx="121" cy="99" r="9" fill="${FK.ink}"/><circle cx="124.5" cy="95" r="3.2" fill="#fff"/><circle cx="118" cy="102.5" r="1.5" fill="#fff"/></g>
+    <g clip-path="url(#fk-eye-l)"><g data-p="lidL"><rect x="58" y="36" width="42" height="41" fill="${FK.body}"/><line x1="58" y1="77" x2="100" y2="77" stroke="${FK.ink}" stroke-width="2.5"/></g></g>
+    <g clip-path="url(#fk-eye-r)"><g data-p="lidR"><rect x="100" y="36" width="42" height="41" fill="${FK.body}"/><line x1="100" y1="77" x2="142" y2="77" stroke="${FK.ink}" stroke-width="2.5"/></g></g>
+    <circle cx="79" cy="97" r="19" fill="none" stroke="${FK.ink}" stroke-width="2.6"/><circle cx="121" cy="97" r="19" fill="none" stroke="${FK.ink}" stroke-width="2.6"/>
+    <g data-p="browL"><rect x="66" y="71" width="20" height="6" rx="3" fill="${FK.ink}"/></g>
+    <g data-p="browR"><rect x="114" y="71" width="20" height="6" rx="3" fill="${FK.ink}"/></g>
+    <g data-p="mSmile"><path d="M86 126 Q100 139 114 126" stroke="${FK.ink}" stroke-width="4.5" fill="none" stroke-linecap="round"/></g>
+    <g data-p="mGrin" opacity="0"><path d="M84 124 Q100 146 116 124 Q100 131 84 124 Z" fill="${FK.ink}"/></g>
+    <g data-p="mFrown" opacity="0"><path d="M87 133 Q100 123 113 133" stroke="${FK.ink}" stroke-width="4.5" fill="none" stroke-linecap="round"/></g>
+    <g data-p="mFocus" opacity="0"><ellipse cx="100" cy="129" rx="5" ry="4" fill="${FK.ink}"/></g>
+    <g data-p="mFlat" opacity="0"><line x1="89" y1="129" x2="111" y2="129" stroke="${FK.ink}" stroke-width="4.5" stroke-linecap="round"/></g>
+    <g data-p="mSmirk" opacity="0"><path d="M88 129 Q100 134 114 126" stroke="${FK.ink}" stroke-width="4.5" fill="none" stroke-linecap="round"/></g>
+    <g data-p="mYell" opacity="0"><g data-p="yell"><ellipse cx="100" cy="130" rx="10" ry="9" fill="${FK.ink}"/><ellipse cx="100" cy="135.5" rx="5.5" ry="2.8" fill="#FF8FB8"/></g></g>
     <g data-p="anger" opacity="0"><path d="M-7 -2 Q-7 -7 -2 -7 M2 -7 Q7 -7 7 -2 M7 2 Q7 7 2 7 M-2 7 Q-7 7 -7 2" stroke="#FF4D5E" stroke-width="3" fill="none" stroke-linecap="round"/></g>
     <g data-p="sweat" opacity="0"><path d="M150 78 q6 9 0 14 q-6 -5 0 -14 Z" fill="#4FC3F7"/></g>
-    <g data-prop="coin" style="display:none"><circle cx="170" cy="104" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="170" y="110" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
-    <g data-prop="pencil" style="display:none"><g transform="rotate(-32 164 116)"><rect x="160" y="102" width="7" height="28" rx="3" fill="#FFC24B"/><path d="M160 100 l7 0 l-3.5 -8 Z" fill="${FK_INK}"/></g></g>
-    <g data-prop="board" style="display:none"><rect x="150" y="58" width="60" height="58" rx="6" fill="#F6F3FF" stroke="#B9A9F0" stroke-width="3"/><text x="163" y="80" font-size="13" font-weight="800" fill="#5947E0">₽</text><line x1="176" y1="76" x2="203" y2="76" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><line x1="159" y1="93" x2="203" y2="93" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><path d="M159 108 l12 -7 l9 4 l16 -11" stroke="#34C7A0" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
-    <g data-prop="sparkle" style="display:none" fill="#FFC24B"><path d="M40 60 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z"/><path d="M168 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3"/></g>
-    <g data-prop="think" style="display:none" fill="#5947E0"><circle cx="150" cy="70" r="4"/><circle cx="164" cy="58" r="5.5"/><circle cx="180" cy="44" r="7"/></g>
-    <g data-prop="shades" style="display:none"><rect x="59" y="86" width="40" height="23" rx="10" fill="#15111f"/><rect x="101" y="86" width="40" height="23" rx="10" fill="#15111f"/><line x1="99" y1="93" x2="101" y2="93" stroke="#15111f" stroke-width="6"/><rect x="63" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/><rect x="105" y="90" width="30" height="6" rx="3" fill="#4a3f6e"/></g>
-    <g data-prop="wrench" style="display:none"><g transform="rotate(28 168 150)"><rect x="163" y="120" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M168 112 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M162 116 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="168" cy="123" r="5" fill="#F1EDFF"/></g></g>
-    <g data-prop="magnifier" style="display:none"><circle cx="156" cy="100" r="17" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="168" y="112" width="8" height="22" rx="4" fill="#7a6a50" transform="rotate(42 172 123)"/></g>
+    <g data-prop="think" style="display:none" fill="#5947E0"><circle cx="160" cy="54" r="4"/><circle cx="173" cy="42" r="5.5"/><circle cx="189" cy="28" r="7"/></g>
+    <g data-prop="shades" style="display:none"><rect x="57" y="85" width="42" height="24" rx="11" fill="#15111f"/><rect x="101" y="85" width="42" height="24" rx="11" fill="#15111f"/><line x1="99" y1="92" x2="101" y2="92" stroke="#15111f" stroke-width="6"/><rect x="62" y="89" width="30" height="6" rx="3" fill="#4a3f6e"/><rect x="106" y="89" width="30" height="6" rx="3" fill="#4a3f6e"/></g>
+    <g data-prop="wrench" style="display:none"><g transform="rotate(20 196 118)"><rect x="191" y="88" width="10" height="42" rx="4" fill="#AEB6C4"/><path d="M196 80 a11 11 0 1 0 0 22 a11 11 0 1 0 0 -22 M190 84 h12 v9 h-12 Z" fill="#8892A6"/><circle cx="196" cy="91" r="5" fill="#F1EDFF"/></g></g>
+    <g data-prop="coin" style="display:none"><circle cx="186" cy="112" r="14" fill="#FFC24B" stroke="#E8A21F" stroke-width="2.5"/><text x="186" y="118" text-anchor="middle" font-size="15" font-weight="900" fill="#8a5a00">₽</text></g>
+    <g data-prop="magnifier" style="display:none"><circle cx="186" cy="112" r="18" fill="rgba(180,220,255,0.30)" stroke="#8892A6" stroke-width="4"/><rect x="178" y="128" width="8" height="20" rx="4" fill="#7a6a50" transform="rotate(20 182 138)"/></g>
+    <g data-prop="board" style="display:none"><g transform="translate(0 12)"><rect x="150" y="58" width="60" height="58" rx="6" fill="#F6F3FF" stroke="#B9A9F0" stroke-width="3"/><text x="163" y="80" font-size="13" font-weight="800" fill="#5947E0">₽</text><line x1="176" y1="76" x2="203" y2="76" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><line x1="159" y1="93" x2="203" y2="93" stroke="#C9BBF5" stroke-width="3" stroke-linecap="round"/><path d="M159 108 l12 -7 l9 4 l16 -11" stroke="#34C7A0" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g></g>
+    <g data-prop="sparkle" style="display:none" fill="#FFC24B"><path d="M30 52 l3 8 l8 3 l-8 3 l-3 8 l-3 -8 l-8 -3 l8 -3 Z"/><path d="M172 150 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z" fill="#FF7AB3"/></g>
   </g>
 </svg>`;
 
