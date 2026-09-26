@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
-import { api, invites, csv, pushSettings, support as supportApi, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
+import { api, invites, csv, pushSettings, support as supportApi, type SupportMessage, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
@@ -24,6 +24,8 @@ import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import Constants from 'expo-constants';
+import { useFocusEffect } from '@react-navigation/native';
+import { setSupportUnread } from '../supportStore';
 import { openHelp } from '../help';
 import { RUSTORE_URL, openRuStoreListing } from '../rateApp';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
@@ -99,6 +101,17 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [supportText, setSupportText] = useState('');
   const [supportBusy, setSupportBusy] = useState(false);
+  const [supportThread, setSupportThread] = useState<SupportMessage[]>([]);
+
+  // Переписка с поддержкой: при открытии настроек подгружаем и отмечаем ответы прочитанными
+  const loadSupportThread = React.useCallback(async () => {
+    try {
+      const r = await supportApi.thread();
+      setSupportThread(r.messages || []);
+      if (r.unread) { await supportApi.seen(); setSupportUnread(0); }
+    } catch { /* офлайн — покажем позже */ }
+  }, []);
+  useFocusEffect(React.useCallback(() => { loadSupportThread(); }, [loadSupportThread]));
   const [recurringVisible, setRecurringVisible] = useState(false);
 
   const [familyName, setFamilyName] = useState('');
@@ -388,7 +401,8 @@ export default function SettingsScreen() {
     try {
       await supportApi.send(text, Constants.expoConfig?.version ?? '');
       setSupportText('');
-      Alert.alert('Спасибо!', 'Сообщение отправлено разработчику.');
+      loadSupportThread();
+      Alert.alert('Спасибо!', 'Сообщение отправлено разработчику. Ответ появится здесь.');
     } catch (e) {
       Alert.alert('Не удалось отправить', String((e as Error)?.message ?? e));
     } finally {
@@ -884,8 +898,25 @@ export default function SettingsScreen() {
         <Card>
           <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Поддержка</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 20 }}>
-            Нашли ошибку, есть идея или вопрос? Напишите — сообщение придёт напрямую разработчику.
+            Нашли ошибку, есть идея или вопрос? Напишите — сообщение придёт напрямую разработчику, ответ появится здесь.
           </Text>
+          {supportThread.length > 0 && (
+            <View style={{ gap: 8, marginBottom: spacing.md }}>
+              {supportThread.map(m => {
+                const mine = m.from !== 'admin';
+                return (
+                  <View key={m.id} style={[styles.supBubble, mine
+                    ? { alignSelf: 'flex-end', backgroundColor: t.primary, borderBottomRightRadius: 6 }
+                    : { alignSelf: 'flex-start', backgroundColor: t.surface2, borderColor: t.border, borderWidth: 1, borderBottomLeftRadius: 6 }]}>
+                    <Text style={{ color: mine ? '#fff' : t.text, fontSize: font.sm, lineHeight: 20 }}>{m.text}</Text>
+                    <Text style={{ color: mine ? 'rgba(255,255,255,0.75)' : t.textMuted, fontSize: 11, marginTop: 3, alignSelf: mine ? 'flex-end' : 'flex-start' }}>
+                      {mine ? 'Вы' : 'Разработчик'} · {new Date(m.createdAt).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
           <TextInput
             style={[styles.input, styles.multiline, { height: 110, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
             value={supportText}
@@ -1043,5 +1074,6 @@ const styles = StyleSheet.create({
   modalTitle:   { fontSize: font.lg, fontWeight: '700', marginBottom: spacing.md },
   input:        { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md, marginBottom: spacing.md },
   multiline:    { height: 140, textAlignVertical: 'top' },
+  supBubble:    { maxWidth: '84%', paddingHorizontal: 12, paddingTop: 9, paddingBottom: 6, borderRadius: 16 },
   modalBtn:     { flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
 });

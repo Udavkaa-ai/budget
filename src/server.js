@@ -86,6 +86,11 @@ import {
   getBackup,
   deleteBackup,
   addSupportMessage,
+  addSupportReply,
+  getSupportThread,
+  countUnseenSupportReplies,
+  markSupportRepliesSeen,
+  getUserPushSubscriptions,
   listSupportMessages,
   setSupportMessageRead,
   deleteSupportMessage,
@@ -1007,6 +1012,38 @@ app.post('/api/support', authMiddleware, async (req, res) => {
       body: `${req.user.name}: ${text.length > 110 ? text.slice(0, 110) + '…' : text}`,
       url: '/?admin=support',
       tag: 'support',
+    }).catch(() => {});
+  }
+  res.json({ ok: true, id: msg.id });
+});
+
+// Своя переписка с поддержкой + число непрочитанных ответов
+app.get('/api/support', authMiddleware, (req, res) => {
+  res.json({ messages: getSupportThread(req.user.login), unread: countUnseenSupportReplies(req.user.login) });
+});
+app.get('/api/support/unread', authMiddleware, (req, res) => {
+  res.json({ unread: countUnseenSupportReplies(req.user.login) });
+});
+app.post('/api/support/seen', authMiddleware, (req, res) => {
+  markSupportRepliesSeen(req.user.login);
+  res.json({ ok: true });
+});
+
+// Ответ разработчика: попадает в переписку пользователя, пуш — только ему
+app.post('/api/admin/support/reply', authMiddleware, adminMiddleware, async (req, res) => {
+  const login = String(req.body?.login || '');
+  const text = String(req.body?.text || '').trim();
+  if (!login || text.length < 1) return res.status(400).json({ error: 'Пустой ответ' });
+  if (text.length > 4000) return res.status(400).json({ error: 'Ответ слишком длинный' });
+  const msg = addSupportReply(login, text, req.user.name);
+  if (!msg) return res.status(404).json({ error: 'Переписка не найдена' });
+  const subs = getUserPushSubscriptions(msg.name, login, msg.family);
+  if (subs.length) {
+    sendPushToSubscriptions(subs, {
+      title: '💬 Ответ от поддержки ФИНИК',
+      body: text.length > 120 ? text.slice(0, 120) + '…' : text,
+      url: '/?support=1',
+      tag: 'support-reply',
     }).catch(() => {});
   }
   res.json({ ok: true, id: msg.id });

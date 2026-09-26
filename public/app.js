@@ -430,6 +430,7 @@ async function sendSupportMessage() {
     if (res?.error) { showToastError(res.error); return; }
     ta.value = '';
     showToastSuccess('Сообщение отправлено разработчику — спасибо!');
+    loadSupportThread();
   } catch {
     showToastError('Не удалось отправить. Проверьте интернет');
   } finally {
@@ -450,26 +451,43 @@ async function isPushSubscribed() {
   try { return !!(await (await navigator.serviceWorker.ready).pushManager.getSubscription()); } catch { return false; }
 }
 
-// Блок «Сообщения поддержки» в админ-панели
+const supTime = iso => new Date(iso).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+// Переписки поддержки в админ-панели: по одной на пользователя, свежие сверху
 async function renderAdminSupport(box) {
   const list = await apiJson('GET', '/api/admin/support').catch(() => []);
-  const msgs = Array.isArray(list) ? list : [];
-  const unread = msgs.filter(m => !m.read).length;
+  const msgs = Array.isArray(list) ? list : [];               // новые — первыми
+  const threads = new Map();
+  for (const m of msgs) { if (!threads.has(m.login)) threads.set(m.login, []); threads.get(m.login).push(m); }
+  const isQ = m => m.from !== 'admin';
+  const unread = msgs.filter(m => isQ(m) && !m.read).length;
   const pushOn = await isPushSubscribed();
+  const bubble = m => `
+    <div class="sup-bubble sup-bubble--${isQ(m) ? 'them' : 'me'}${isQ(m) && !m.read ? ' unread' : ''}">
+      <div class="sup-bubble-text">${esc(m.text)}</div>
+      <div class="sup-bubble-meta">${isQ(m) ? esc(m.name) : 'Вы'} · ${supTime(m.createdAt)}${isQ(m) ? '' : (m.seen ? ' · прочитано' : ' · доставлено')}
+        <button class="sup-del" data-id="${esc(m.id)}" aria-label="Удалить сообщение">✕</button></div>
+    </div>`;
   box.innerHTML = `
     <div class="admin-support">
-      <div class="settings-title">Сообщения поддержки${unread ? ` <span class="count-badge">${unread}</span>` : ''}</div>
+      <div class="settings-title">Поддержка${unread ? ` <span class="count-badge">${unread}</span>` : ''}</div>
       <button class="btn btn-secondary btn-full admin-support-push" ${pushOn ? 'disabled' : ''}>${pushOn ? 'Уведомления о сообщениях приходят на это устройство' : 'Получать уведомления о новых сообщениях'}</button>
-      ${msgs.length ? msgs.map(m => `
-        <div class="support-msg${m.read ? '' : ' unread'}" data-id="${esc(m.id)}">
-          <div class="support-msg-head"><strong>${esc(m.name)}</strong><span>${esc(m.login)} · ${esc(m.platform)}${m.appVersion ? ' ' + esc(m.appVersion) : ''}</span></div>
-          <time class="support-msg-time">${new Date(m.createdAt).toLocaleString('ru')}</time>
-          <div class="support-msg-text">${esc(m.text)}</div>
-          <div class="support-msg-actions">
-            <button class="btn btn-ghost sm-read">${m.read ? 'Отметить непрочитанным' : 'Прочитано'}</button>
-            <button class="btn btn-ghost sm-del">Удалить</button>
+      ${threads.size ? [...threads.entries()].map(([login, arr]) => {
+        const who = arr.find(isQ) || arr[0];
+        const tUnread = arr.filter(m => isQ(m) && !m.read);
+        return `
+        <div class="sup-thread${tUnread.length ? ' unread' : ''}" data-login="${esc(login)}">
+          <div class="sup-thread-head">
+            <strong>${esc(who.name)}</strong><span>${esc(login)} · ${esc(who.platform || 'web')}${who.appVersion ? ' ' + esc(who.appVersion) : ''}</span>
+            ${tUnread.length ? `<button class="btn btn-ghost sup-mark" data-ids="${tUnread.map(m => esc(m.id)).join(',')}">Прочитано</button>` : ''}
           </div>
-        </div>`).join('') : '<p class="settings-hint">Сообщений пока нет.</p>'}
+          <div class="sup-bubbles">${arr.slice().reverse().map(bubble).join('')}</div>
+          <div class="sup-reply">
+            <textarea rows="2" maxlength="4000" placeholder="Ответить: ${esc(who.name)}"></textarea>
+            <button class="btn btn-primary sup-send">Ответить</button>
+          </div>
+        </div>`;
+      }).join('') : '<p class="settings-hint">Сообщений пока нет.</p>'}
     </div>`;
   box.querySelector('.admin-support-push')?.addEventListener('click', async () => {
     try {
@@ -480,17 +498,52 @@ async function renderAdminSupport(box) {
       renderAdminSupport(box);
     } catch { showToastError('Не удалось включить уведомления'); }
   });
-  box.querySelectorAll('.support-msg').forEach(el => {
-    const id = el.dataset.id; const m = msgs.find(x => x.id === id);
-    el.querySelector('.sm-read').addEventListener('click', async () => {
-      await apiJson('PATCH', `/api/admin/support/${encodeURIComponent(id)}`, { read: !m.read });
-      renderAdminSupport(box); refreshSupportBadge();
+  const rerender = () => { renderAdminSupport(box); refreshSupportBadge(); };
+  box.querySelectorAll('.sup-thread').forEach(th => {
+    const login = th.dataset.login;
+    const ta = th.querySelector('textarea');
+    th.querySelector('.sup-send').addEventListener('click', async () => {
+      const text = ta.value.trim();
+      if (!text) { ta.focus(); return; }
+      const res = await apiJson('POST', '/api/admin/support/reply', { login, text });
+      if (res?.error) { showToastError(res.error); return; }
+      showToastSuccess('Ответ отправлен');
+      rerender();
     });
-    el.querySelector('.sm-del').addEventListener('click', async () => {
-      await apiJson('DELETE', `/api/admin/support/${encodeURIComponent(id)}`);
-      renderAdminSupport(box); refreshSupportBadge();
+    th.querySelector('.sup-mark')?.addEventListener('click', async e => {
+      await Promise.all(e.currentTarget.dataset.ids.split(',').map(id => apiJson('PATCH', `/api/admin/support/${encodeURIComponent(id)}`, { read: true })));
+      rerender();
     });
+    const bubbles = th.querySelector('.sup-bubbles'); bubbles.scrollTop = bubbles.scrollHeight;
   });
+  box.querySelectorAll('.sup-del').forEach(btn => btn.addEventListener('click', async () => {
+    await apiJson('DELETE', `/api/admin/support/${encodeURIComponent(btn.dataset.id)}`);
+    rerender();
+  }));
+}
+
+// ── Поддержка у пользователя: переписка и красная точка на вкладке «Настройки»
+function setSupportDot(n) {
+  document.querySelector('.nav-btn[data-screen="settings"]')?.classList.toggle('has-dot', n > 0);
+}
+async function refreshSupportUnread() {
+  try { const r = await apiJson('GET', '/api/support/unread'); setSupportDot(r?.unread || 0); } catch { /* не критично */ }
+}
+async function loadSupportThread() {
+  const box = document.getElementById('support-thread');
+  if (!box) return;
+  try {
+    const r = await apiJson('GET', '/api/support');
+    const msgs = r?.messages || [];
+    box.classList.toggle('hidden', !msgs.length);
+    box.innerHTML = msgs.map(m => `
+      <div class="sup-bubble sup-bubble--${m.from === 'admin' ? 'them' : 'me'}${m.from === 'admin' && !m.seen ? ' unread' : ''}">
+        <div class="sup-bubble-text">${esc(m.text)}</div>
+        <div class="sup-bubble-meta">${m.from === 'admin' ? 'Разработчик' : 'Вы'} · ${supTime(m.createdAt)}</div>
+      </div>`).join('');
+    box.scrollTop = box.scrollHeight;
+    if (r?.unread) { await apiJson('POST', '/api/support/seen'); setSupportDot(0); }
+  } catch { /* офлайн — покажем позже */ }
 }
 
 async function initPushNotifications() {
@@ -680,7 +733,7 @@ function loadScreen(name) {
     case 'budget': loadBudget(); break;
     case 'summary': loadSummary(); break;
     case 'chart': loadChart(); loadCashflowSection(); break;
-    case 'settings': loadSettingsScreen(); break;
+    case 'settings': loadSupportThread(); loadSettingsScreen(); break;
     case 'goals': loadGoalsScreen(); break;
     case 'recurring': loadRecurring(); break;
   }
@@ -3103,6 +3156,11 @@ async function initApp() {
   } catch { /* сеть — синхронизируемся позже */ }
 
   showApp();
+  refreshSupportUnread();
+  if (new URLSearchParams(location.search).get('support')) {
+    window.history.replaceState({}, '', location.pathname);
+    setTimeout(() => { navigate('settings'); setTimeout(() => document.getElementById('support-section')?.scrollIntoView({ block: 'center' }), 400); }, 300);
+  }
   // Пуш «новое сообщение в поддержку» ведёт сюда — сразу открываем админ-панель
   if (currentUser?.isAdmin && new URLSearchParams(location.search).get('admin') === 'support') {
     window.history.replaceState({}, '', location.pathname);

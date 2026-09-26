@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View } from 'react-native';
+import { Animated, AppState, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { SvgXml } from 'react-native-svg';
 import { tabIconXml, type TabIconName } from '../tabIcons';
+import { refreshSupportUnread, useSupportUnread } from '../supportStore';
 import { useTheme } from '../theme';
 import { useBlocks } from '../blocks';
 import { haptics } from '../haptics';
@@ -44,6 +45,13 @@ function tabIcon(name: TabIconName) {
 export function AppNavigator() {
   const t = useTheme();
   const blocks = useBlocks();
+  const supportUnread = useSupportUnread();
+  // Ответ поддержки: проверяем при запуске и при каждом возвращении в приложение
+  useEffect(() => {
+    refreshSupportUnread();
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') refreshSupportUnread(); });
+    return () => sub.remove();
+  }, []);
   return (
     <View style={{ flex: 1 }}>
     <Tab.Navigator
@@ -83,7 +91,12 @@ export function AppNavigator() {
       <Tab.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{ tabBarLabel: 'Настройки', tabBarIcon: tabIcon('settings') }}
+        options={{
+          tabBarLabel: 'Настройки', tabBarIcon: tabIcon('settings'),
+          // красная точка, пока ответ поддержки не прочитан
+          tabBarBadge: supportUnread > 0 ? '' : undefined,
+          tabBarBadgeStyle: { minWidth: 10, maxHeight: 10, borderRadius: 5, backgroundColor: t.danger, top: 4 },
+        }}
       />
       {blocks.goalsTab && (
         <Tab.Screen

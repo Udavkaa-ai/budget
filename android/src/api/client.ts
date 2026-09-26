@@ -369,9 +369,13 @@ export const csv = {
 // ─── Push settings (server side) ─────────────────────────────────────────────
 
 // ─── Поддержка: сообщение разработчику (видно только в админ-панели веба) ─────
+export type SupportMessage = { id: string; from: 'user' | 'admin'; text: string; createdAt: string; seen?: boolean };
 export const support = {
   send: (text: string, appVersion: string) =>
     api.post<{ ok: boolean }>('/api/support', { text, platform: 'android', appVersion }),
+  thread: () => api.get<{ messages: SupportMessage[]; unread: number }>('/api/support'),
+  unread: () => api.get<{ unread: number }>('/api/support/unread'),
+  seen: () => api.post<{ ok: boolean }>('/api/support/seen', {}),
 };
 
 export const pushSettings = {
