@@ -930,7 +930,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <SectionTitle>О приложении</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.23.0 A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.25.0'} A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.
