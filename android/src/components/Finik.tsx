@@ -178,6 +178,8 @@ export function Finik({
         <G clipPath="url(#fkPouch)">
           <Path d="M146 76 Q164 112 160 156 Q154 184 118 194 L210 210 L210 60 Z" fill={C.sh} />
           <Path d="M52 104 Q34 128 42 156 Q50 172 68 166 Q80 158 70 142 Q62 128 66 112 Q62 98 52 104 Z" fill={C.hi} opacity={0.75} />
+          {/* шов — на ткани, под ботинками */}
+          {!plusPose && <Path d="M52 180 Q100 194 148 180" stroke={C.sh} strokeWidth="2.5" fill="none" strokeDasharray="4 4" strokeLinecap="round" />}
         </G>
       </AG>
 
@@ -191,17 +193,15 @@ export function Finik({
         <Ellipse cx="130" cy="189" rx="4.5" ry="2.6" fill={C.shoeHi} />
       </AG>
 
-      {/* Передний план: шов/кнопка «+», фермуар с застёжкой, лицо, предметы */}
+      {/* Передний план: кнопка «+», фермуар с застёжкой, лицо, предметы */}
       <AG animatedProps={bodyFrontP}>
-        {plusPose ? (<G>
+        {plusPose && (<G>
           <Circle cx="100" cy="156" r="20" fill={C.gold} stroke={C.goldSh} strokeWidth="3" />
           <Rect x="89" y="152" width="22" height="8" rx="4" fill="#fff" />
           <Rect x="96" y="145" width="8" height="22" rx="4" fill="#fff" />
           <Circle cx="72" cy="160" r="9" fill={C.glove} stroke={C.gloveLine} strokeWidth="2" />
           <Circle cx="128" cy="160" r="9" fill={C.glove} stroke={C.gloveLine} strokeWidth="2" />
-        </G>) : (
-          <Path d="M52 180 Q100 194 148 180" stroke={C.sh} strokeWidth="2.5" fill="none" strokeDasharray="4 4" strokeLinecap="round" />
-        )}
+        </G>)}
 
         <Line x1="95" y1="58" x2="105" y2="45" stroke={C.goldSh} strokeWidth="4" strokeLinecap="round" />
         <Line x1="105" y1="58" x2="95" y2="45" stroke={C.goldSh} strokeWidth="4" strokeLinecap="round" />
