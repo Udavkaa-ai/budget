@@ -13,6 +13,9 @@
 // движения: шаги, мах, тряска) и B (медленные: дыхание, «хмф», взгляд).
 // Фазы накапливаются, а не считаются как t·f, — смена темпа тоже без скачков.
 const PI = Math.PI;
+// Точки крепления рук (плечи) в координатах viewBox — на боках кошелька.
+export const SHOULDER_L = [40, 112];
+export const SHOULDER_R = [160, 112];
 const BASE = {
     fA: 1, fB: 0.3, blink: 1,
     breath: 0, hop: 0, hopSquash: 0, stepBob: 0, huff: 0, shakeX: 0,
@@ -37,7 +40,7 @@ export const TARGETS = {
     walk: T({ fA: 2.3, step: 7, stride: 8, stepBob: 3, tilt: 5, tiltA: 1.5,
         armLA: 28, armLPh: PI, armRA: 28, lookX: 3, mSmile: 1 }),
     // Привет: лапа высоко и машет, корпус качается в противовес и пружинит.
-    wave: T({ fA: 2.2, fB: 0.4, armR: -145, armRA: 20, armL: 6, armLB: 3,
+    wave: T({ fA: 2.2, fB: 0.4, armR: -115, armRA: 14, armL: 6, armLB: 3,
         tiltA: 3, tiltPhA: PI, hop: 2, hopSquash: 0.02, breath: 0.01,
         cheeks: 1, mGrin: 1, browDy: -3, lookY: -0.5 }),
     // Недовольный: руки в боки, полуприкрытые веки, взгляд искоса, стучит ногой;
@@ -50,12 +53,12 @@ export const TARGETS = {
     scold: T({ fA: 2.4, fB: 0.5, armR: -118, armRA: 14, armL: 30, armLA2: 3,
         shakeX: 1.4, tiltA: 1.2, browAngle: 20, browDy: 3, browTremble: 1.5,
         lid: 0.22, lookY: 1.5, talk: 1, anger: 1, mYell: 1 }),
-    overspend: T({ fA: 1.9, fB: 0.8, tiltA: 3, armR: -58, armRA: 4, sweat: 1, lid: 0.1,
+    overspend: T({ fA: 1.9, fB: 0.8, tiltA: 3, armR: -52, armRA: 4, sweat: 1, lid: 0.1,
         browAngle: 14, browRdy: -4, lookX: -2, lookAmp: 2, mFrown: 1 }),
-    income: T({ fA: 1.16, hop: 9, hopSquash: 0.04, armR: -38, cheeks: 1, mGrin: 1, browDy: -3 }),
-    goal: T({ fA: 1.39, hop: 18, hopSquash: 0.05, armL: 48, armR: -48, armLA: 10, armRA: 10,
+    income: T({ fA: 1.16, hop: 9, hopSquash: 0.04, armR: -34, cheeks: 1, mGrin: 1, browDy: -3 }),
+    goal: T({ fA: 1.39, hop: 18, hopSquash: 0.05, armL: 100, armR: -100, armLA: 10, armRA: 10, // «ура!» — руки вверх
         armRPh: PI, cheeks: 1, mGrin: 1, browDy: -4 }),
-    record: T({ breath: 0.02, armR: -46, lookX: 3, lookY: -2, mFocus: 1 }),
+    record: T({ breath: 0.02, armR: -30, lookX: 3, lookY: -2, mFocus: 1 }),
     thinking: T({ fA: 0.45, tilt: 0.5, tiltA: 2.5, armR: -72, browRdy: -4, lookX: 3, lookY: -4, mFlat: 1 }),
     fix: T({ fA: 1.0, tilt: 0.5, tiltA: 2.5, armR: -26, lookX: 3, lookY: 2, mFocus: 1 }),
     inspect: T({ fA: 0.2, fB: 0.25, tilt: 1.5, tiltA: 1.5, armR: -40, browRdy: -4, lookX: 4, lookAmp: 2, mFlat: 1 }),
@@ -63,7 +66,7 @@ export const TARGETS = {
 // Предметы в лапах/вокруг — дискретно по эмоции (пот и знак злости — плавно в риге).
 export const PROPS = {
     idle: [], plus: [], walk: [], wave: [], grumpy: [], scold: [], overspend: [],
-    record: ['board', 'pencil'], income: ['coin', 'sparkle'], goal: ['confetti', 'sparkle'],
+    record: ['board'], income: ['coin', 'sparkle'], goal: ['confetti', 'sparkle'],
     thinking: ['think'], spy: ['shades'], fix: ['wrench'], inspect: ['coin', 'magnifier'],
 };
 // ─── Аффинные матрицы [a, b, c, d, e, f] (формат нативного пропа matrix) ──────
@@ -195,13 +198,14 @@ export function computePose(st) {
     const sweatO = p.sweat * (s < 0.2 ? s / 0.2 : 1 - (s - 0.2) / 0.8);
     return {
         bodyM, shadowM,
-        armLM: mR(armL, 50, 112), armRM: mR(armR, 150, 112),
+        // Плечи — на боках кошелька; руки-«шланги» свисают наружу от них.
+        armLM: mR(armL, SHOULDER_L[0], SHOULDER_L[1]), armRM: mR(armR, SHOULDER_R[0], SHOULDER_R[1]),
         footLM: mT(-p.stride * cA, hopY - liftL), footRM: mT(p.stride * cA, hopY - liftR),
         browLM, browRM,
         pupilsM: mT(dx, dy),
         lidM: mT(0, lid * 39),
         yellM,
-        angerM: mMul(mT(152, 64), mS(pulse, pulse, 0, 0)),
+        angerM: mMul(mT(166, 44), mS(pulse, pulse, 0, 0)), // над застёжкой справа
         sweatM: mT(0, 16 * s),
         angerO: p.anger * (0.75 + 0.25 * Math.sin(2 * A)),
         sweatO,
