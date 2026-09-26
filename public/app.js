@@ -1266,207 +1266,235 @@ function initChat() {
 
 async function generatePdfReport() {
   const btn = document.getElementById('btn-pdf-report');
+  // окно открываем синхронно по клику — иначе мобильные браузеры блокируют попап
+  const win = window.open('', '_blank');
   btn.disabled = true;
-  btn.textContent = '⏳ Формирую отчёт...';
+  btn.textContent = 'Формирую отчёт…';
 
   try {
     const m = summaryMonth || (new Date().getMonth() + 1);
     const y = summaryYear || new Date().getFullYear();
-
-    // Fetch 3 months of data
-    const makeParams = (mo, yr) => new URLSearchParams({ month: mo, year: yr }).toString();
+    const q = (mo, yr) => `/api/summary?${new URLSearchParams({ month: mo, year: yr })}`;
     const prevDate = new Date(y, m - 2, 1);
     const prev2Date = new Date(y, m - 3, 1);
+    const ym = `${y}-${String(m).padStart(2, '0')}`;
 
-    const [data, planData, prev, prev2] = await Promise.all([
-      apiJson('GET', `/api/summary?${makeParams(m, y)}`),
+    const [data, planData, prev, prev2, cashflow] = await Promise.all([
+      apiJson('GET', q(m, y)),
       apiJson('GET', '/api/budget-plan'),
-      apiJson('GET', `/api/summary?${makeParams(prevDate.getMonth() + 1, prevDate.getFullYear())}`),
-      apiJson('GET', `/api/summary?${makeParams(prev2Date.getMonth() + 1, prev2Date.getFullYear())}`),
+      apiJson('GET', q(prevDate.getMonth() + 1, prevDate.getFullYear())),
+      apiJson('GET', q(prev2Date.getMonth() + 1, prev2Date.getFullYear())),
+      apiJson('GET', `/api/cashflow/${ym}`).catch(() => null),
     ]);
 
-    const html = buildReportHTML({ data, planData, prev, prev2, m, y });
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) {
-      win.addEventListener('load', () => {
-        setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 300);
-      });
+    const html = buildReportHTML({ data, planData, prev, prev2, cashflow, m, y });
+    if (win) { win.document.open(); win.document.write(html); win.document.close(); }
+    else {
+      // попап заблокирован — открываем в этой же вкладке через blob
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+      location.href = url;
     }
   } catch (e) {
+    if (win) win.close();
     showToastError('Ошибка формирования отчёта');
   } finally {
     btn.disabled = false;
-    btn.textContent = '📄 Скачать PDF отчёт';
+    btn.textContent = 'Отчёт за месяц (PDF)';
   }
 }
 
-function buildReportHTML({ data, planData, prev, prev2, m, y }) {
+// Фактический доход месяца — из кэшфлоу (дни поступлений). План доходов из
+// бюджета — только запасной вариант, и тогда он явно подписан как план.
+function actualIncomes(cashflow) {
+  const days = cashflow?.incomeDays;
+  const byUser = {};
+  let total = 0;
+  if (Array.isArray(days)) {
+    for (const e of days) {
+      const a = Number(e.amount) || 0;
+      total += a;
+      if (e.user) byUser[e.user] = (byUser[e.user] || 0) + a;
+    }
+  } else if (days && typeof days === 'object') {
+    total = Object.values(days).reduce((s, v) => s + (Number(v) || 0), 0);
+  }
+  return { total, byUser };
+}
+
+function buildReportHTML({ data, planData, prev, prev2, cashflow, m, y }) {
   const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь',
                      'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-  const MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня',
-                      'июля','августа','сентября','октября','ноября','декабря'];
   const monthLabel = `${MONTHS_RU[m - 1]} ${y}`;
   const today = new Date();
-  const dateLabel = `${today.getDate()} ${MONTHS_GEN[today.getMonth()]} ${today.getFullYear()}`;
-
+  const dateLabel = `${today.getDate()} ${MONTHS_GEN_ALL[today.getMonth()]} ${today.getFullYear()}`;
   const prevDate = new Date(y, m - 2, 1);
   const prev2Date = new Date(y, m - 3, 1);
+  const short = d => MONTHS_RU[d.getMonth()].slice(0, 3);
 
   const budgets = planData?.categoryBudgets || {};
-  const incomes = planData?.incomes || {};
-  const totalIncome = Object.values(incomes).reduce((s, v) => s + v, 0);
+  const planIncomes = planData?.incomes || {};
+  const fact = actualIncomes(cashflow);
+  const incomeIsFact = fact.total > 0;
+  const incomeTotal = incomeIsFact ? fact.total : Object.values(planIncomes).reduce((s, v) => s + v, 0);
+  const incomeOf = name => incomeIsFact ? (fact.byUser[name] || 0) : (planIncomes[name] || 0);
+  const planSpend = appSettings.plannedMonthly || Object.values(budgets).reduce((s, v) => s + v, 0);
+  const n = v => new Intl.NumberFormat('ru-RU').format(Math.round(v)) + ' ₽';
 
-  function fmtNum(n) {
-    return new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
-  }
-
-  // Category chart: horizontal bars
-  const allCats = Object.keys(CATEGORY_ICONS);
-  const catData = allCats.map(cat => ({
-    cat,
-    icon: CATEGORY_ICONS[cat],
+  const catData = Object.keys(CATEGORY_ICONS).map(cat => ({
+    cat, icon: CATEGORY_ICONS[cat],
     spent: data.byCategory?.[cat] || 0,
     limit: budgets[cat] || 0,
     prev: prev.byCategory?.[cat] || 0,
     prev2: prev2.byCategory?.[cat] || 0,
-  })).filter(c => c.spent > 0 || c.limit > 0).sort((a, b) => b.spent - a.spent);
-
+  })).filter(c => c.spent > 0 || c.limit > 0).sort((a, b) => b.spent - a.spent || b.limit - a.limit);
   const maxBar = Math.max(...catData.map(c => Math.max(c.spent, c.limit)), 1);
 
-  const barRows = catData.map(c => {
-    const spentPct = Math.round(c.spent / maxBar * 100);
-    const limitPct = c.limit ? Math.round(c.limit / maxBar * 100) : 0;
+  const catRows = catData.map(c => {
     const over = c.limit > 0 && c.spent > c.limit;
-    const barColor = over ? 'var(--danger)' : 'var(--primary)';
+    const used = c.limit ? Math.round(c.spent / c.limit * 100) : null;
     const trend = c.prev > 0 ? Math.round((c.spent - c.prev) / c.prev * 100) : null;
-    const trendHtml = trend !== null
-      ? `<span style="color:${trend > 10 ? 'var(--danger)' : trend < -10 ? 'var(--success)' : 'var(--text-muted)'};font-size:11px">${trend > 0 ? '▲' : '▼'}${Math.abs(trend)}%</span>`
-      : '';
+    const trendHtml = trend === null ? '' :
+      `<span class="trend ${trend > 10 ? 'up' : trend < -10 ? 'down' : ''}" title="к прошлому месяцу">${trend > 0 ? '▲' : trend < 0 ? '▼' : '•'}${Math.abs(trend)}%</span>`;
     return `
-      <tr>
-        <td style="width:120px;white-space:nowrap">${c.icon} ${esc(c.cat)}</td>
-        <td style="width:100%;padding:0 8px">
-          <div style="position:relative;height:18px;background:#f1f5f9;border-radius:4px;overflow:hidden">
-            <div style="position:absolute;left:0;top:0;bottom:0;width:${spentPct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
-            ${c.limit ? `<div style="position:absolute;left:${limitPct}%;top:0;bottom:0;width:2px;background:#f59e0b;z-index:1"></div>` : ''}
-          </div>
-        </td>
-        <td style="white-space:nowrap;text-align:right;font-weight:600">${fmtNum(c.spent)}</td>
-        <td style="white-space:nowrap;text-align:right;color:#6b7280;font-size:12px">${c.limit ? `/ ${fmtNum(c.limit)}` : ''}</td>
-        <td style="white-space:nowrap;text-align:right;width:48px">${trendHtml}</td>
-      </tr>`;
+      <div class="cat">
+        <div class="cat-top">
+          <span class="cat-name">${c.icon} ${esc(c.cat)}</span>
+          <span class="cat-sum"><b class="${over ? 'bad' : ''}">${n(c.spent)}</b>${c.limit ? `<span class="muted"> из ${n(c.limit)}</span>` : ''}</span>
+        </div>
+        <div class="bar"><i style="width:${(c.spent / maxBar * 100).toFixed(1)}%" class="${over ? 'bad' : ''}"></i>${c.limit ? `<s style="left:${(c.limit / maxBar * 100).toFixed(1)}%"></s>` : ''}</div>
+        <div class="cat-foot">
+          <span class="${over ? 'bad' : 'muted'}">${used === null ? 'без лимита' : over ? `превышение на ${n(c.spent - c.limit)}` : `${used}% лимита`}</span>
+          ${trendHtml}
+        </div>
+      </div>`;
   }).join('');
 
-  // User breakdown table
-  const userRows = Object.entries(data.byUser || {}).map(([name, ud]) => {
-    const inc = incomes[name] || 0;
-    const pct = inc > 0 ? Math.round(ud.total / inc * 100) : '—';
-    return `<tr>
-      <td>${esc(name)}</td>
-      <td style="text-align:right;font-weight:600">${fmtNum(ud.total)}</td>
-      <td style="text-align:right;color:#6b7280">${inc ? fmtNum(inc) : '—'}</td>
-      <td style="text-align:right">${inc ? pct + '%' : '—'}</td>
-    </tr>`;
+  const users = Object.entries(data.byUser || {});
+  const userCards = users.map(([name, ud]) => {
+    const inc = incomeOf(name);
+    const pct = inc > 0 ? Math.round(ud.total / inc * 100) : null;
+    return `<div class="user">
+      <div class="user-name">${esc(name)}</div>
+      <div class="user-sum">${n(ud.total)}</div>
+      <div class="muted">${inc ? `${pct}% от дохода ${n(inc)}` : 'доход не указан'}</div>
+      ${inc ? `<div class="bar thin"><i style="width:${Math.min(100, pct)}%" class="${pct > 100 ? 'bad' : ''}"></i></div>` : ''}
+    </div>`;
   }).join('');
 
-  // 3-month trend for top categories (by current month spend)
-  const top5 = catData.slice(0, 5);
+  const top5 = catData.filter(c => c.spent + c.prev + c.prev2 > 0).slice(0, 5);
   const trendRows = top5.map(c => {
     const arr = [c.prev2, c.prev, c.spent];
-    const svgW = 80, svgH = 30;
-    const mx = Math.max(...arr, 1);
-    const pts = arr.map((v, i) => `${Math.round(i / 2 * svgW)},${Math.round((1 - v / mx) * svgH)}`).join(' ');
-    const miniChart = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="overflow:visible">
-      <polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round"/>
-      ${arr.map((v, i) => `<circle cx="${Math.round(i / 2 * svgW)}" cy="${Math.round((1 - v / mx) * svgH)}" r="3" fill="#3b82f6"/>`).join('')}
-    </svg>`;
-    return `<tr>
-      <td>${c.icon} ${c.cat}</td>
-      <td style="text-align:right">${fmtNum(c.prev2)}</td>
-      <td style="text-align:right">${fmtNum(c.prev)}</td>
-      <td style="text-align:right;font-weight:600">${fmtNum(c.spent)}</td>
-      <td style="text-align:center;padding:0 8px">${miniChart}</td>
-    </tr>`;
+    const W = 72, H = 26, mx = Math.max(...arr, 1);
+    const pt = (v, i) => `${(4 + i / 2 * (W - 8)).toFixed(1)},${(3 + (1 - v / mx) * (H - 6)).toFixed(1)}`;
+    return `<div class="tr">
+      <span class="tr-name">${c.icon} ${esc(c.cat)}</span>
+      <span class="tr-v muted">${n(c.prev2)}</span>
+      <span class="tr-v muted">${n(c.prev)}</span>
+      <span class="tr-v"><b>${n(c.spent)}</b></span>
+      <svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><polyline points="${arr.map(pt).join(' ')}" fill="none" stroke="#5947E0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${arr.map((v, i) => `<circle cx="${pt(v, i).split(',')[0]}" cy="${pt(v, i).split(',')[1]}" r="2.6" fill="${i === 2 ? '#5947E0' : '#fff'}" stroke="#5947E0" stroke-width="1.6"/>`).join('')}</svg>
+    </div>`;
   }).join('');
 
-  const savingsRate = totalIncome > 0 ? Math.round((totalIncome - data.total) / totalIncome * 100) : null;
-  const savingsHtml = savingsRate !== null
-    ? `<div class="stat-box"><div class="stat-label">Норма сбережений</div><div class="stat-value" style="color:${savingsRate >= 0 ? 'var(--success)' : 'var(--danger)'}">${savingsRate}%</div></div>`
-    : '';
+  const savings = incomeTotal > 0 ? incomeTotal - data.total : null;
+  const savingsRate = savings !== null ? Math.round(savings / incomeTotal * 100) : null;
+  const planPct = planSpend > 0 ? Math.round(data.total / planSpend * 100) : null;
 
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Отчёт за ${monthLabel}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ФИНИК — отчёт за ${monthLabel}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1e293b; background: #fff; padding: 24px; max-width: 800px; margin: 0 auto; font-size: 13px; }
-  h1 { font-size: 22px; font-weight: 700; margin-bottom: 2px; }
-  h2 { font-size: 15px; font-weight: 600; margin: 20px 0 10px; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-  .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
-  .stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-  .stat-box { background: #f8fafc; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; }
-  .stat-label { font-size: 11px; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
-  .stat-value { font-size: 20px; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; }
-  td, th { padding: 6px 4px; }
-  th { font-size: 11px; color: #64748b; text-align: left; border-bottom: 1px solid #e2e8f0; }
-  tr:not(:last-child) td { border-bottom: 1px solid #f1f5f9; }
-  .legend { display: flex; gap: 16px; font-size: 11px; color: #64748b; margin-top: 6px; }
-  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+  :root { --ink: #1B1830; --muted: #6E6A85; --line: #ECEAF4; --soft: #F6F5FB; --primary: #5947E0; --gold: #F2B84B; --bad: #D93A55; --good: #17915C; }
+  body { font-family: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: #fff;
+    padding: 20px 16px 40px; max-width: 760px; margin: 0 auto; font-size: 14px; line-height: 1.4; -webkit-text-size-adjust: 100%; }
+  .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; justify-content: flex-end; padding: 8px 0 12px; background: #fff; }
+  .toolbar button { font: inherit; font-weight: 700; font-size: 14px; border: none; border-radius: 12px; padding: 10px 16px; cursor: pointer; }
+  .toolbar .pri { background: var(--primary); color: #fff; }
+  .toolbar .sec { background: var(--soft); color: var(--ink); }
+  .brand { font-size: 12px; font-weight: 800; letter-spacing: .12em; color: var(--primary); display: flex; align-items: center; gap: 6px; }
+  .brand::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); box-shadow: 8px 0 0 var(--gold); margin-right: 8px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin: 6px 0 2px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  h2 { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 26px 0 10px; }
+  .muted { color: var(--muted); }
+  .bad { color: var(--bad); }
+  .good { color: var(--good); }
+  .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi { background: var(--soft); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+  .kpi-l { font-size: 12px; color: var(--muted); }
+  .kpi-v { font-size: 20px; font-weight: 800; letter-spacing: -.01em; margin-top: 2px; white-space: nowrap; }
+  .kpi-s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .users { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+  .user { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .user-name { font-weight: 700; }
+  .user-sum { font-size: 20px; font-weight: 800; margin: 2px 0; }
+  .bar { position: relative; height: 8px; background: var(--soft); border-radius: 4px; margin: 6px 0 4px; }
+  .bar.thin { height: 6px; margin-top: 8px; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--primary); }
+  .bar i.bad { background: var(--bad); }
+  .bar s { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--gold); }
+  .cat { padding: 10px 0; border-bottom: 1px solid var(--line); break-inside: avoid; }
+  .cat-top, .cat-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .cat-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-sum { white-space: nowrap; }
+  .cat-foot { font-size: 12px; }
+  .trend { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+  .trend.up { color: var(--bad); } .trend.down { color: var(--good); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .tr { display: grid; grid-template-columns: 1fr repeat(3, auto) 72px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); break-inside: avoid; }
+  .tr-head { font-size: 12px; color: var(--muted); font-weight: 700; padding-top: 0; }
+  .tr-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .tr-v { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .foot { margin-top: 28px; font-size: 12px; color: var(--muted); text-align: center; }
+  @media (min-width: 600px) { .kpis { grid-template-columns: repeat(4, 1fr); } body { padding: 28px 24px 48px; } }
+  @media (max-width: 480px) {
+    .tr { grid-template-columns: 1fr auto 64px; row-gap: 2px; }
+    .tr .tr-v:nth-of-type(2), .tr .tr-v:nth-of-type(3) { display: none; }
+    .tr-head span:nth-child(2), .tr-head span:nth-child(3) { display: none; }
+  }
   @media print {
-    body { padding: 0; }
-    h2 { page-break-after: avoid; }
-    table { page-break-inside: avoid; }
+    .toolbar { display: none; }
+    body { padding: 0; max-width: none; }
+    .kpis { grid-template-columns: repeat(4, 1fr); }
+    .tr { grid-template-columns: 1fr repeat(3, auto) 72px !important; }
+    .tr .tr-v, .tr-head span { display: block !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    h2 { break-after: avoid; }
   }
 </style>
 </head>
 <body>
-<h1>Семейный бюджет — ${monthLabel}</h1>
+<div class="toolbar"><button class="sec" onclick="window.close()">Закрыть</button><button class="pri" onclick="window.print()">Сохранить PDF</button></div>
+<div class="brand">ФИНИК · СЕМЕЙНЫЙ БЮДЖЕТ</div>
+<h1>${monthLabel}</h1>
 <div class="meta">Отчёт сформирован ${dateLabel}</div>
 
-<h2>Итоги месяца</h2>
-<div class="stats-row">
-  <div class="stat-box">
-    <div class="stat-label">Потрачено</div>
-    <div class="stat-value">${fmtNum(data.total)}</div>
-  </div>
-  ${totalIncome > 0 ? `<div class="stat-box"><div class="stat-label">Доходы</div><div class="stat-value" style="color:#22c55e">${fmtNum(totalIncome)}</div></div>` : ''}
-  ${totalIncome > 0 && planData?.categoryBudgets ? `<div class="stat-box"><div class="stat-label">Бюджет</div><div class="stat-value">${fmtNum(Object.values(budgets).reduce((s,v) => s+v, 0))}</div></div>` : ''}
-  ${savingsHtml}
+<div class="kpis">
+  <div class="kpi"><div class="kpi-l">Потрачено</div><div class="kpi-v">${n(data.total)}</div>
+    ${planPct !== null ? `<div class="kpi-s ${planPct > 100 ? 'bad' : ''}">${planPct}% плана</div>` : ''}</div>
+  ${planSpend > 0 ? `<div class="kpi"><div class="kpi-l">План расходов</div><div class="kpi-v">${n(planSpend)}</div>
+    <div class="kpi-s ${planSpend - data.total < 0 ? 'bad' : ''}">${planSpend - data.total >= 0 ? `осталось ${n(planSpend - data.total)}` : `сверх плана ${n(data.total - planSpend)}`}</div></div>` : ''}
+  ${incomeTotal > 0 ? `<div class="kpi"><div class="kpi-l">${incomeIsFact ? 'Доход' : 'Доход (план)'}</div><div class="kpi-v good">${n(incomeTotal)}</div>
+    <div class="kpi-s">${incomeIsFact ? 'по данным кэшфлоу' : 'фактический доход не внесён'}</div></div>` : ''}
+  ${savings !== null ? `<div class="kpi"><div class="kpi-l">Сбережения</div><div class="kpi-v ${savings < 0 ? 'bad' : ''}">${n(savings)}</div>
+    <div class="kpi-s ${savings < 0 ? 'bad' : ''}">${savingsRate}% дохода</div></div>` : ''}
 </div>
 
-${Object.keys(data.byUser || {}).length > 1 ? `
-<h2>По участникам</h2>
-<table>
-  <thead><tr><th>Участник</th><th style="text-align:right">Расходы</th><th style="text-align:right">Доход</th><th style="text-align:right">% дохода</th></tr></thead>
-  <tbody>${userRows}</tbody>
-</table>` : ''}
+${users.length > 1 ? `<h2>По участникам</h2><div class="users">${userCards}</div>` : ''}
 
 <h2>Расходы по категориям</h2>
-<table>${barRows}</table>
-<div class="legend">
-  <span><span class="legend-dot" style="background:#3b82f6"></span>Факт</span>
-  <span><span class="legend-dot" style="background:#f59e0b"></span>Лимит</span>
-  <span><span class="legend-dot" style="background:var(--danger)"></span>Превышение</span>
-</div>
+${catRows}
+<div class="legend"><span><i style="background:#5947E0"></i>Факт</span><span><i style="background:#F2B84B;width:4px"></i>Лимит</span><span><i style="background:#D93A55"></i>Превышение</span><span>▲▼ к прошлому месяцу</span></div>
 
-${top5.length > 0 ? `
-<h2>Тенденции — топ категорий</h2>
-<table>
-  <thead><tr>
-    <th>Категория</th>
-    <th style="text-align:right">${MONTHS_RU[prev2Date.getMonth()].slice(0,3)}</th>
-    <th style="text-align:right">${MONTHS_RU[prevDate.getMonth()].slice(0,3)}</th>
-    <th style="text-align:right">${MONTHS_RU[m-1].slice(0,3)}</th>
-    <th style="text-align:center">Тренд</th>
-  </tr></thead>
-  <tbody>${trendRows}</tbody>
-</table>` : ''}
+${top5.length ? `<h2>Динамика — топ категорий</h2>
+<div class="tr tr-head"><span>Категория</span><span class="tr-v">${short(prev2Date)}</span><span class="tr-v">${short(prevDate)}</span><span class="tr-v">${MONTHS_RU[m - 1].slice(0, 3)}</span><span></span></div>
+${trendRows}` : ''}
 
+<div class="foot">ФИНИК — семейный бюджет</div>
 </body>
 </html>`;
 }
@@ -1477,6 +1505,7 @@ let summaryUserFilter = null; // null = all users
 let summaryCompareMode = false;
 let lastSummaryData = null;
 let lastPlanData = null;
+let summaryIncomes = {};
 let compareChart = null;
 
 let heatmapSelectedDay = null;
@@ -1627,13 +1656,18 @@ async function loadSummary() {
   try { loadSpeedChart(summaryMonth, summaryYear); } catch (e) { console.error('speedChart', e); }
 
   try {
-    const [data, planData] = await Promise.all([
+    const sm = summaryMonth || (new Date().getMonth() + 1), sy = summaryYear || new Date().getFullYear();
+    const [data, planData, cashflow] = await Promise.all([
       apiJson('GET', `/api/summary?${params}`),
       apiJson('GET', '/api/budget-plan'),
+      apiJson('GET', `/api/cashflow/${sy}-${String(sm).padStart(2, '0')}`).catch(() => null),
     ]);
     if (gen !== summaryGen) return;
     lastSummaryData = data;
     lastPlanData = planData;
+    // «% дохода» — от фактического дохода месяца (кэшфлоу), план — только если факта нет
+    const fact = actualIncomes(cashflow);
+    summaryIncomes = Object.keys(fact.byUser).length ? fact.byUser : (planData?.incomes || {});
 
     // Derive partner name from summary users
     const users = Object.keys(data.byUser || {});
@@ -1667,7 +1701,7 @@ function renderSummaryView() {
   countUp(totalBar.querySelector('.highlight-total'), displayTotal, prevMonth);
 
   // User chips — clickable filter toggle; show % of income in normal mode
-  const incomes = lastPlanData?.incomes || {};
+  const incomes = summaryIncomes;
   const byUserEl = document.getElementById('summary-by-user');
   byUserEl.innerHTML = '';
   for (const [user, udata] of Object.entries(data.byUser)) {
@@ -1757,7 +1791,7 @@ function renderCategoryList(data) {
 
 function renderCompareChart(data) {
   const users = Object.keys(data.byUser);
-  const incomes = lastPlanData?.incomes || {};
+  const incomes = summaryIncomes;
   const categoryBudgets = lastPlanData?.categoryBudgets || {};
 
   // Show % of income per user in chips
