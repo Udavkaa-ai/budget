@@ -395,84 +395,6 @@ async function loginSubmit(e) {
   }
 }
 
-// ─── BEAUTY RECATEGORIZATION ─────────────────────────────────────────────────
-
-async function openBeautyCandidates() {
-  const btn = document.getElementById('btn-beauty-scan');
-  btn.disabled = true;
-  btn.textContent = '⏳ Ищу...';
-
-  document.getElementById('beauty-sheet').classList.add('open');
-  document.getElementById('beauty-overlay').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  const body = document.getElementById('beauty-body');
-  body.innerHTML = '<div class="loading" style="padding:32px;text-align:center">Сканирую расходы...</div>';
-
-  try {
-    const { candidates } = await apiJson('GET', '/api/beauty-candidates');
-
-    if (candidates.length === 0) {
-      body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted)">Ничего не найдено — расходы уже корректно разложены по категориям.</div>';
-      btn.disabled = false;
-      btn.textContent = '💄 Найти расходы для «Красоты»';
-      return;
-    }
-
-    const rows = candidates.map(e => `
-      <label class="beauty-candidate-row">
-        <input type="checkbox" class="beauty-cb" data-id="${e.id}" checked />
-        <span class="beauty-candidate-info">
-          <span class="beauty-candidate-desc">${e.description || '—'}</span>
-          <span class="beauty-candidate-meta">${e.date} · ${fmt(e.amount)} · <span class="beauty-cat-old">${e.category}</span></span>
-        </span>
-      </label>`).join('');
-
-    body.innerHTML = `
-      <div style="padding:12px 16px 6px;color:var(--text-muted);font-size:13px">
-        Найдено <b>${candidates.length}</b> расх. Отметьте нужные и перекатегоризируйте.
-      </div>
-      <div id="beauty-list">${rows}</div>
-      <div style="padding:12px 16px;display:flex;gap:8px">
-        <button id="beauty-select-all" class="btn btn-outline" style="flex:0 0 auto">Все</button>
-        <button id="beauty-confirm" class="btn btn-primary" style="flex:1">💄 Перекатегоризировать</button>
-      </div>`;
-
-    document.getElementById('beauty-select-all').addEventListener('click', () => {
-      const cbs = body.querySelectorAll('.beauty-cb');
-      const allChecked = [...cbs].every(c => c.checked);
-      cbs.forEach(c => c.checked = !allChecked);
-    });
-
-    document.getElementById('beauty-confirm').addEventListener('click', async () => {
-      const ids = [...body.querySelectorAll('.beauty-cb:checked')].map(c => c.dataset.id);
-      if (ids.length === 0) { showToastError('Ничего не выбрано'); return; }
-      const confirmBtn = document.getElementById('beauty-confirm');
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = '⏳ Применяю...';
-      try {
-        const { updated } = await apiJson('POST', '/api/beauty-recategorize', { ids });
-        showToastSuccess(`Перекатегоризировано: ${updated}`);
-        closeBeautySheet();
-      } catch {
-        showToastError('Ошибка при сохранении');
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = '💄 Перекатегоризировать';
-      }
-    });
-  } catch {
-    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted)">Ошибка загрузки</div>';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '💄 Найти расходы для «Красоты»';
-  }
-}
-
-function closeBeautySheet() {
-  document.getElementById('beauty-sheet').classList.remove('open');
-  document.getElementById('beauty-overlay').classList.add('hidden');
-  document.body.style.overflow = '';
-}
-
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
 // Сообщаем service worker'у, кто мы, — чтобы он не показывал уведомления
@@ -494,6 +416,81 @@ document.addEventListener('visibilitychange', () => {
 });
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (currentUser) pushSelfToSW(); });
+}
+
+// ─── Поддержка ─────────────────────────────────────────────────────────────────
+async function sendSupportMessage() {
+  const ta = document.getElementById('support-text');
+  const btn = document.getElementById('btn-support-send');
+  const text = ta.value.trim();
+  if (text.length < 3) { showToastError('Напишите пару слов о проблеме или идее'); return; }
+  btn.disabled = true; btn.textContent = 'Отправляю…';
+  try {
+    const res = await apiJson('POST', '/api/support', { text, platform: 'web' });
+    if (res?.error) { showToastError(res.error); return; }
+    ta.value = '';
+    showToastSuccess('Сообщение отправлено разработчику — спасибо!');
+  } catch {
+    showToastError('Не удалось отправить. Проверьте интернет');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Отправить разработчику';
+  }
+}
+
+async function refreshSupportBadge() {
+  try {
+    const list = await apiJson('GET', '/api/admin/support');
+    const n = Array.isArray(list) ? list.filter(m => !m.read).length : 0;
+    const b = document.getElementById('admin-support-badge');
+    if (b) { b.textContent = n; b.classList.toggle('hidden', !n); }
+  } catch { /* не критично */ }
+}
+
+async function isPushSubscribed() {
+  try { return !!(await (await navigator.serviceWorker.ready).pushManager.getSubscription()); } catch { return false; }
+}
+
+// Блок «Сообщения поддержки» в админ-панели
+async function renderAdminSupport(box) {
+  const list = await apiJson('GET', '/api/admin/support').catch(() => []);
+  const msgs = Array.isArray(list) ? list : [];
+  const unread = msgs.filter(m => !m.read).length;
+  const pushOn = await isPushSubscribed();
+  box.innerHTML = `
+    <div class="admin-support">
+      <div class="settings-title">Сообщения поддержки${unread ? ` <span class="count-badge">${unread}</span>` : ''}</div>
+      <button class="btn btn-secondary btn-full admin-support-push" ${pushOn ? 'disabled' : ''}>${pushOn ? 'Уведомления о сообщениях приходят на это устройство' : 'Получать уведомления о новых сообщениях'}</button>
+      ${msgs.length ? msgs.map(m => `
+        <div class="support-msg${m.read ? '' : ' unread'}" data-id="${esc(m.id)}">
+          <div class="support-msg-head"><strong>${esc(m.name)}</strong><span>${esc(m.login)} · ${esc(m.platform)}${m.appVersion ? ' ' + esc(m.appVersion) : ''}</span></div>
+          <time class="support-msg-time">${new Date(m.createdAt).toLocaleString('ru')}</time>
+          <div class="support-msg-text">${esc(m.text)}</div>
+          <div class="support-msg-actions">
+            <button class="btn btn-ghost sm-read">${m.read ? 'Отметить непрочитанным' : 'Прочитано'}</button>
+            <button class="btn btn-ghost sm-del">Удалить</button>
+          </div>
+        </div>`).join('') : '<p class="settings-hint">Сообщений пока нет.</p>'}
+    </div>`;
+  box.querySelector('.admin-support-push')?.addEventListener('click', async () => {
+    try {
+      if (Notification.permission === 'default') await Notification.requestPermission();
+      if (Notification.permission !== 'granted') { showToastError('Разрешите уведомления в браузере'); return; }
+      await subscribeToPush();
+      showToastSuccess('Готово — сообщения поддержки будут приходить сюда');
+      renderAdminSupport(box);
+    } catch { showToastError('Не удалось включить уведомления'); }
+  });
+  box.querySelectorAll('.support-msg').forEach(el => {
+    const id = el.dataset.id; const m = msgs.find(x => x.id === id);
+    el.querySelector('.sm-read').addEventListener('click', async () => {
+      await apiJson('PATCH', `/api/admin/support/${encodeURIComponent(id)}`, { read: !m.read });
+      renderAdminSupport(box); refreshSupportBadge();
+    });
+    el.querySelector('.sm-del').addEventListener('click', async () => {
+      await apiJson('DELETE', `/api/admin/support/${encodeURIComponent(id)}`);
+      renderAdminSupport(box); refreshSupportBadge();
+    });
+  });
 }
 
 async function initPushNotifications() {
@@ -1850,239 +1847,167 @@ async function loadCategoryDetail(cat, month, year) {
 // Colors per user index
 // Цвета серий по участникам — userChartColors() (токены темы)
 
-let mainChart = null;     // Chart.js instance for inline chart
-let mainChartFs = null;   // Chart.js instance for fullscreen chart
-
-function buildChartConfig(chartData) {
-  const { labels, userExpenses, incomeDays, balanceLine, hasBalance } = chartData;
-  const datasets = [];
-
-  // Expense bars (UP, positive) — one dataset per user, rendered first (behind income)
-  Object.entries(userExpenses).forEach(([user, amounts], i) => {
-    const col = userChartColors()[i % userChartColors().length];
-    datasets.push({
-      type: 'bar',
-      label: user,
-      data: amounts,
-      backgroundColor: col.bg,
-      borderColor: col.border,
-      borderWidth: 1,
-      stack: 'expenses',
-      order: 3,
-      yAxisID: 'y',
-    });
-  });
-
-  // Income bars (UP, positive) — separate stack, rendered on top
-  const incomeArr = labels.map(d => incomeDays[d] || 0);
-  if (incomeArr.some(v => v > 0)) {
-    datasets.push({
-      type: 'bar',
-      label: 'Доход',
-      data: incomeArr,
-      backgroundColor: 'rgba(122,224,195,0.85)',
-      borderColor: cssVar('--success'),
-      borderWidth: 1,
-      stack: 'income',
-      order: 2,
-      yAxisID: 'y',
-    });
-  }
-
-  // Balance line
-  if (hasBalance && balanceLine) {
-    datasets.push({
-      type: 'line',
-      label: 'Баланс',
-      data: balanceLine,
-      borderWidth: 2,
-      pointRadius: labels.length > 20 ? 2 : 4,
-      pointHoverRadius: 6,
-      tension: 0.3,
-      order: 1,
-      yAxisID: 'yBalance',
-      fill: false,
-      segment: {
-        borderColor: ctx => ctx.p1.parsed.y < 0 ? cssVar('--danger') : cssVar('--primary'),
-        backgroundColor: ctx => ctx.p1.parsed.y < 0
-          ? withAlpha(cssVar('--danger'), 0.08) : withAlpha(cssVar('--primary'), 0.08),
-      },
-      pointBackgroundColor: balanceLine.map(v => v < 0 ? cssVar('--danger') : cssVar('--primary')),
-    });
-  }
-
-  const scales = {
-    x: {
-      grid: { display: false },
-      stacked: true,
-      ticks: { maxTicksLimit: 15 },
-    },
-    y: {
-      stacked: true,
-      title: { display: true, text: 'Расходы / Доход, ₽', font: { size: 10 }, color: cssVar('--text-muted') },
-      ticks: {
-        callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : String(v),
-      },
-      grid: { color: cssVar('--border') },
-    },
-  };
-
-  if (hasBalance && balanceLine) {
-    scales.yBalance = {
-      position: 'right',
-      grid: { display: false },
-      title: { display: true, text: 'Баланс, ₽', font: { size: 10 }, color: cssVar('--primary') },
-      ticks: {
-        callback: v => {
-          const abs = Math.abs(v);
-          return abs >= 1000 ? (v < 0 ? '-' : '') + (abs/1000).toFixed(0) + 'к' : String(v);
-        },
-        color: cssVar('--primary'),
-      },
-    };
-  }
-
-  return {
-    type: 'bar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      scales,
-      plugins: {
-        legend: {
-          display: datasets.length > 1,
-          labels: { boxWidth: 12, padding: 10, font: { size: 11 } },
-        },
-        tooltip: {
-          callbacks: {
-            label: ctx => {
-              const val = Math.abs(ctx.parsed.y);
-              return `${ctx.dataset.label}: ${val.toLocaleString('ru')} ₽`;
-            },
-          },
-        },
-        zoom: {
-          limits: {
-            x: { minRange: 7 }, // can't zoom in more than 7 days at once
-          },
-          zoom: {
-            wheel: { enabled: true, speed: 0.04 },
-            pinch: { enabled: true },
-            mode: 'x',
-          },
-          pan: {
-            enabled: true,
-            mode: 'x',
-          },
-        },
-      },
-    },
-  };
-}
-
-let lastChartData = null; // store for fullscreen reuse
+// Экран «График»: три простые карточки, у каждой одна шкала.
+// 1) накопительные траты против линии плана (+ прогноз до конца месяца),
+// 2) траты по дням с разбивкой по участникам и дневной нормой,
+// 3) остаток на счетах — если заполнен кэшфлоу.
+let chartScreenCharts = [];
+let lastChartData = null;
+const kFmt = v => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}к` : String(Math.round(v));
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
 async function loadChart() {
   const gen = ++chartGen;
   const ym = cfYm();
-
   document.getElementById('chart-month-label').textContent = getMonthName(chartMonth, chartYear);
-
-  const container = document.getElementById('chart-container');
-  // Show loading, keep expand button
-  container.querySelector('.chart-canvas-wrapper')?.remove();
-  container.querySelector('.chart-zoom-hint')?.remove();
-  container.querySelector('.empty-state')?.remove();
-  container.querySelector('.loading')?.remove();
-  const loadingEl = document.createElement('div');
-  loadingEl.className = 'loading';
-  loadingEl.textContent = 'Загрузка графика';
-  container.insertBefore(loadingEl, document.getElementById('chart-expand-btn'));
-
+  const box = document.getElementById('chart-cards');
+  box.innerHTML = '<div class="card"><div class="loading">Загрузка графиков</div></div>';
   try {
     const data = await apiJson('GET', `/api/unified-chart-data/${ym}`);
     if (gen !== chartGen) return;
-
     lastChartData = data;
-
-    // Clear loading
-    loadingEl.remove();
-
-    if (!data.labels?.length) {
-      const emp = document.createElement('div');
-      emp.className = 'empty-state';
-      emp.textContent = 'Нет данных за этот месяц';
-      container.insertBefore(emp, document.getElementById('chart-expand-btn'));
-      return;
-    }
-
-    // Create canvas wrapper
-    const wrapper = document.createElement('div');
-    wrapper.className = 'chart-canvas-wrapper';
-    const canvas = document.createElement('canvas');
-    canvas.id = 'main-chart';
-    wrapper.appendChild(canvas);
-    container.insertBefore(wrapper, document.getElementById('chart-expand-btn'));
-
-    // Zoom hint
-    const hint = document.createElement('div');
-    hint.className = 'chart-zoom-hint';
-    hint.textContent = 'Свайп/колесо мыши — масштаб • Двойной тап — сброс';
-    container.appendChild(hint);
-
-    // Destroy previous chart
-    if (mainChart) { mainChart.destroy(); mainChart = null; }
-
-    const cfg = buildChartConfig(data);
-    mainChart = new Chart(canvas, cfg);
-
-    // Double-tap resets zoom
-    let lastTap = 0;
-    canvas.addEventListener('touchend', () => {
-      const now = Date.now();
-      if (now - lastTap < 300) mainChart?.resetZoom();
-      lastTap = now;
-    }, { passive: true });
-    canvas.addEventListener('dblclick', () => mainChart?.resetZoom());
-
+    renderChartCards(box, data);
   } catch (e) {
     console.error('loadChart error:', e);
-    loadingEl.remove();
-    const emp = document.createElement('div');
-    emp.className = 'empty-state';
-    emp.textContent = typeof Chart === 'undefined'
-      ? 'Библиотека графиков не загрузилась'
-      : 'Ошибка загрузки графика: ' + (e?.message || e);
-    container.insertBefore(emp, document.getElementById('chart-expand-btn'));
+    box.innerHTML = `<div class="card"><div class="empty-state">${typeof Chart === 'undefined' ? 'Библиотека графиков не загрузилась' : 'Не удалось загрузить графики'}</div></div>`;
   }
 }
 
-function openChartFullscreen() {
-  if (!lastChartData) return;
-  const overlay = document.getElementById('chart-fullscreen');
-  overlay.classList.remove('hidden');
+function renderChartCards(box, data) {
+  chartScreenCharts.forEach(c => c.destroy());
+  chartScreenCharts = [];
+  const users = Object.keys(data.userExpenses || {});
+  const lastDay = data.labels?.length || 0;
+  if (!lastDay || (!users.length && !data.hasBalance)) {
+    box.innerHTML = '<div class="card"><div class="empty-state">Нет расходов за этот месяц</div></div>';
+    return;
+  }
+  const now = new Date();
+  // null в chartMonth/chartYear означает «текущий месяц»
+  const cm = chartMonth || now.getMonth() + 1, cy = chartYear || now.getFullYear();
+  const dim = new Date(cy, cm, 0).getDate();
+  const isCur = cy === now.getFullYear() && cm === now.getMonth() + 1;
+  const plan = appSettings.plannedMonthly || 0;
+  const days = Array.from({ length: dim }, (_, i) => i + 1);
+  const userDay = (u, d) => d <= lastDay ? (data.userExpenses[u][d - 1] || 0) : null;
+  const daily = days.map(d => d <= lastDay ? users.reduce((s, u) => s + userDay(u, d), 0) : null);
+  let acc = 0;
+  const cum = daily.map(v => v === null ? null : (acc += v));
+  const spent = acc;
+  const perDay = spent / lastDay;
+  const projected = Math.round(perDay * dim);
+  const showProj = isCur && lastDay < dim;
+  const normNow = plan ? Math.round(plan * lastDay / dim) : 0;
+  const zone = plan ? gaugeZone(Math.round(spent / Math.max(1, normNow) * 100)) : null;
+  const series = seriesColors();
+  const userTotals = users.map(u => data.userExpenses[u].reduce((s, v) => s + (v || 0), 0));
+  const bal = data.hasBalance ? (data.balanceLine || []) : null;
+  const balNow = bal ? bal[Math.min(bal.length, lastDay) - 1] : 0;
+  const C = { primary: cssVar('--primary'), faint: cssVar('--text-faint'), border: cssVar('--border'),
+    danger: cssVar('--danger'), gold: cssVar('--gold'), surface: cssVar('--surface') };
 
-  // Destroy previous fullscreen chart
-  if (mainChartFs) { mainChartFs.destroy(); mainChartFs = null; }
+  box.innerHTML = `
+    <div class="card chart-card">
+      <div class="chart-card-head">
+        <div class="settings-title">Траты за месяц</div>
+        ${zone ? `<span class="gauge-chip gauge-chip--${zone.key}">${zone.verdict}</span>` : ''}
+      </div>
+      <div class="chart-kpis">
+        <div class="chart-kpi"><span class="chart-kpi-label">Потрачено</span><span class="chart-kpi-value">${fmt(spent)}</span></div>
+        ${plan ? `<div class="chart-kpi"><span class="chart-kpi-label">План на месяц</span><span class="chart-kpi-value">${fmt(plan)}</span></div>` : ''}
+        ${showProj ? `<div class="chart-kpi"><span class="chart-kpi-label">Прогноз</span><span class="chart-kpi-value${plan && projected > plan ? ' is-over' : ''}">${fmt(projected)}</span></div>` : ''}
+      </div>
+      <div class="chart-box chart-box--hero"><canvas id="ch-cum" aria-label="Накопительные траты за месяц"></canvas></div>
+      <div class="chart-legend">
+        <span><i class="lg-line"></i>Потрачено</span>
+        ${plan ? '<span><i class="lg-dash"></i>План</span>' : ''}
+        ${showProj ? '<span><i class="lg-dot"></i>Прогноз</span>' : ''}
+      </div>
+      ${plan ? '' : '<p class="settings-hint">Укажите плановые расходы в настройках — появится линия плана.</p>'}
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card-head"><div class="settings-title">Траты по дням</div>
+        <span class="chart-card-meta">в среднем ${fmt(Math.round(perDay))} в день</span></div>
+      <div class="chart-box"><canvas id="ch-daily" aria-label="Траты по дням"></canvas></div>
+      <div class="chart-legend">
+        ${users.map((u, i) => `<span><i class="lg-sq" style="background:${series[i % series.length]}"></i>${esc(u)} · ${fmt(userTotals[i])}</span>`).join('')}
+        ${plan ? `<span><i class="lg-dash"></i>Норма ${fmt(Math.round(plan / dim))} в день</span>` : ''}
+      </div>
+    </div>
+    ${bal ? `
+    <div class="card chart-card">
+      <div class="chart-card-head"><div class="settings-title">Остаток на счетах</div>
+        <span class="chart-card-meta${balNow < 0 ? ' is-over' : ''}">${fmt(balNow)}</span></div>
+      <div class="chart-box chart-box--sm"><canvas id="ch-bal" aria-label="Остаток на счетах"></canvas></div>
+      <div class="chart-legend"><span><i class="lg-line"></i>Остаток</span><span><i class="lg-gold"></i>Поступления</span></div>
+    </div>` : ''}`;
 
-  const canvas = document.getElementById('main-chart-fs');
-  const cfg = buildChartConfig(lastChartData);
-  mainChartFs = new Chart(canvas, cfg);
+  const base = (extra = {}) => ({
+    responsive: true, maintainAspectRatio: false,
+    animation: motionOK() ? { duration: 750, easing: 'easeOutQuart' } : false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        filter: it => it.parsed.y != null,
+        callbacks: {
+          title: it => `${it[0].label} ${MONTHS_SHORT[cm - 1]}`,
+          label: ctx => ` ${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y))}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, border: { display: false },
+        ticks: { maxRotation: 0, autoSkip: false, callback: (_v, i) => (i === 0 || (i + 1) % 5 === 0) ? i + 1 : '' } },
+      y: { beginAtZero: true, grid: { color: C.border }, border: { display: false }, ticks: { maxTicksLimit: 5, callback: v => kFmt(v) } },
+    },
+    ...extra,
+  });
 
-  let lastTapFs = 0;
-  canvas.addEventListener('touchend', () => {
-    const now = Date.now();
-    if (now - lastTapFs < 300) mainChartFs?.resetZoom();
-    lastTapFs = now;
-  }, { passive: true });
-  canvas.addEventListener('dblclick', () => mainChartFs?.resetZoom());
-}
+  // 1) Накопительно против плана
+  chartScreenCharts.push(new Chart(document.getElementById('ch-cum'), {
+    type: 'line',
+    data: { labels: days, datasets: [
+      { label: 'Потрачено', data: cum, borderColor: C.primary, backgroundColor: withAlpha(C.primary, 0.12), fill: 'origin',
+        borderWidth: 3, tension: 0.25, pointRadius: days.map(d => isCur && d === lastDay ? 5 : 0),
+        pointBackgroundColor: C.primary, pointBorderColor: C.surface, pointBorderWidth: 2, pointHoverRadius: 5 },
+      ...(plan ? [{ label: 'План', data: days.map(d => Math.round(plan * d / dim)), borderColor: C.faint, borderDash: [6, 5],
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, fill: false }] : []),
+      ...(showProj ? [{ label: 'Прогноз', data: days.map(d => d < lastDay ? null : Math.round(spent + perDay * (d - lastDay))),
+        borderColor: withAlpha(C.primary, 0.65), borderDash: [2, 5], borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 0, fill: false }] : []),
+    ] },
+    options: base(),
+  }));
 
-function closeChartFullscreen() {
-  document.getElementById('chart-fullscreen').classList.add('hidden');
-  if (mainChartFs) { mainChartFs.destroy(); mainChartFs = null; }
+  // 2) По дням: столбики по участникам + дневная норма
+  const dailyOpts = base();
+  dailyOpts.scales.x.stacked = true; dailyOpts.scales.y.stacked = true;
+  chartScreenCharts.push(new Chart(document.getElementById('ch-daily'), {
+    data: { labels: days, datasets: [
+      ...users.map((u, i) => ({ type: 'bar', label: u, data: days.map(d => userDay(u, d)), backgroundColor: series[i % series.length],
+        borderRadius: 3, borderSkipped: false, barPercentage: 0.82, categoryPercentage: 0.9, stack: 'day' })),
+      ...(plan ? [{ type: 'line', label: 'Норма в день', data: days.map(() => Math.round(plan / dim)), borderColor: C.faint,
+        borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, stack: 'norm' }] : []),
+    ] },
+    options: dailyOpts,
+  }));
+
+  // 3) Остаток на счетах
+  if (bal) {
+    const balOpts = base();
+    balOpts.scales.y.beginAtZero = false;
+    chartScreenCharts.push(new Chart(document.getElementById('ch-bal'), {
+      type: 'line',
+      data: { labels: days, datasets: [{
+        label: 'Остаток', data: days.map(d => d <= lastDay ? bal[d - 1] : null), borderColor: C.primary, borderWidth: 2.5,
+        tension: 0.25, fill: 'origin', backgroundColor: withAlpha(C.primary, 0.10),
+        segment: { borderColor: ctx => ctx.p1.parsed.y < 0 ? C.danger : C.primary },
+        pointRadius: days.map(d => data.incomeDays?.[String(d)] ? 4.5 : 0),
+        pointBackgroundColor: C.gold, pointBorderColor: C.surface, pointBorderWidth: 2, pointHoverRadius: 5,
+      }] },
+      options: balOpts,
+    }));
+  }
 }
 
 // ─── PLANNING (merged into summary screen) ────────────────────────────────────
@@ -2189,6 +2114,7 @@ async function loadSettingsScreen() {
   if (currentUser?.isAdmin) {
     document.getElementById('admin-panel-btn-section').classList.remove('hidden');
     document.getElementById('admin-update-section').classList.remove('hidden');
+    refreshSupportBadge();
   }
 
   renderE2ESection();
@@ -2377,6 +2303,7 @@ async function openAdminPanel(month, year) {
   });
 
   body.innerHTML = `
+    <div id="admin-support"></div>
     <div class="admin-stats-summary">
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalFamilies}</div><div class="admin-stat-label">семей</div></div>
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalUsers}</div><div class="admin-stat-label">пользователей</div></div>
@@ -2384,6 +2311,8 @@ async function openAdminPanel(month, year) {
     </div>
     <div id="admin-families-stat"></div>
   `;
+
+  renderAdminSupport(body.querySelector('#admin-support'));
 
   // Load family names in parallel
   const familyIds = Object.keys(byFamily);
@@ -3174,6 +3103,11 @@ async function initApp() {
   } catch { /* сеть — синхронизируемся позже */ }
 
   showApp();
+  // Пуш «новое сообщение в поддержку» ведёт сюда — сразу открываем админ-панель
+  if (currentUser?.isAdmin && new URLSearchParams(location.search).get('admin') === 'support') {
+    window.history.replaceState({}, '', location.pathname);
+    setTimeout(() => openAdminPanel(), 300);
+  }
   initSocket();
   initCategoryGrid();
   setupEventListeners();
@@ -3427,17 +3361,6 @@ function setupEventListeners() {
     chartYear = next.getFullYear();
     loadChart(); loadCashflowSection();
   });
-  // Chart expand / fullscreen
-  document.getElementById('chart-expand-btn').addEventListener('click', openChartFullscreen);
-  document.getElementById('chart-fs-close').addEventListener('click', closeChartFullscreen);
-  document.getElementById('chart-fullscreen').addEventListener('dblclick', e => {
-    if (e.target === document.getElementById('chart-fullscreen')) closeChartFullscreen();
-  });
-  // Prevent fullscreen touch events from bubbling to the screen-chart swipe handler
-  ['touchstart', 'touchmove', 'touchend'].forEach(type => {
-    document.getElementById('chart-fullscreen').addEventListener(type, e => e.stopPropagation(), { passive: true });
-  });
-
   // Cashflow
   document.getElementById('btn-cf-add-day').addEventListener('click', () => {
     document.getElementById('cf-income-days').appendChild(makeCfDayRow('', 0, currentUser?.name || ''));
@@ -3581,10 +3504,7 @@ function setupEventListeners() {
     e.target.value = '';
   });
 
-  document.getElementById('btn-beauty-scan').addEventListener('click', openBeautyCandidates);
   document.getElementById('btn-custom-cat-add')?.addEventListener('click', addCustomCategoryUI);
-  document.getElementById('beauty-close').addEventListener('click', closeBeautySheet);
-  document.getElementById('beauty-overlay').addEventListener('click', closeBeautySheet);
 
   // Reminder close
   document.getElementById('reminder-close').addEventListener('click', () => {
@@ -3593,6 +3513,7 @@ function setupEventListeners() {
 
   // Принудительное обновление у всех пользователей
   document.getElementById('btn-open-admin').addEventListener('click', () => openAdminPanel());
+  document.getElementById('btn-support-send')?.addEventListener('click', sendSupportMessage);
   document.getElementById('btn-close-admin').addEventListener('click', () => closeAdminPanel());
   document.getElementById('admin-overlay').addEventListener('click', () => closeAdminPanel());
 
@@ -4035,118 +3956,132 @@ async function loadSpeedometer() {
   }
 }
 
+// ─── Спидометр темпа трат ─────────────────────────────────────────────────────
+// Полукруг 180°, шкала 0–150% от нормы трат на сегодня. Зоны совпадают с
+// ИИ-анализом: ≤85% — экономим, 85–115% — в графике, >115% — перерасход.
+// Стрелка — недодемпфированная пружина (разгон, лёгкий перелёт, успокоение);
+// при перерасходе мелко дрожит, за пределом шкалы бьётся об ограничитель.
+const GAUGE = { CX: 120, CY: 118, R: 90, SW: 14, MAX: 150, LOW: 85, HIGH: 115 };
+function gaugeZone(p) {
+  if (p <= GAUGE.LOW)  return { key: 'good', color: cssVar('--success'), verdict: 'Экономим', emo: 'income' };
+  if (p <= GAUGE.HIGH) return { key: 'ok',   color: cssVar('--primary'), verdict: 'В графике', emo: 'idle' };
+  return { key: 'over', color: cssVar('--danger'), verdict: 'Перерасход', emo: 'scold' };
+}
+// угол (градусы, математический, против часовой от +x) для значения шкалы
+const gaugeAngle = v => 180 - (Math.max(0, Math.min(GAUGE.MAX, v)) / GAUGE.MAX) * 180;
+function gaugePt(v, r) {
+  const t = gaugeAngle(v) * Math.PI / 180;
+  return [GAUGE.CX + r * Math.cos(t), GAUGE.CY - r * Math.sin(t)];
+}
+function gaugeArc(v1, v2, r) {
+  const [x1, y1] = gaugePt(v1, r), [x2, y2] = gaugePt(v2, r);
+  const large = (gaugeAngle(v1) - gaugeAngle(v2)) > 180 ? 1 : 0;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
 function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, ratio, daysElapsed, daysInMonth) {
-  const pctFmt = Math.round(ratio * 100);
+  const { CX, CY, R, SW, MAX, LOW, HIGH } = GAUGE;
+  const pct = Math.round(ratio * 100);
+  const zone = gaugeZone(pct);
+  const projected = daysElapsed > 0 ? Math.round(spent / daysElapsed * daysInMonth) : spent;
+  const ink = cssVar('--text'), faint = cssVar('--text-faint'), track = cssVar('--surface-3');
 
-  // SVG angles are measured CLOCKWISE from the right (3 o'clock).
-  // x = cx + r*cos(θ),  y = cy + r*sin(θ)  (y positive = DOWN in SVG)
-  //
-  // Arc layout: starts at 150° (lower-left, ~7 o'clock),
-  //             ends   at  30° (lower-right, ~5 o'clock),
-  //             sweeps 240° clockwise through the top (12 o'clock = 270°).
-  //
-  // 0%→150°  70%→255°  90%→285°  160%→30°
-  const CX = 100, CY = 112, R = 75, SW = 18;
-  const START_A = 150, END_A = 30;
-  const TOTAL_SWEEP = 240; // degrees, clockwise in SVG
-  const SCALE_MAX = 160;
-
-  // SVG point at angle θ (CW from right)
-  function pt(deg, r) {
-    const rad = deg * Math.PI / 180;
-    return [(CX + r * Math.cos(rad)).toFixed(1), (CY + r * Math.sin(rad)).toFixed(1)];
+  // деления: мелкие каждые 10%, крупные с подписями — 0/50/100/150
+  let ticks = '';
+  for (let v = 0; v <= MAX; v += 10) {
+    const major = v % 50 === 0;
+    const [x1, y1] = gaugePt(v, R + SW / 2 + 3), [x2, y2] = gaugePt(v, R + SW / 2 + (major ? 10 : 6));
+    ticks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${major ? ink : faint}" stroke-width="${major ? 2 : 1.2}" stroke-linecap="round" opacity="${major ? 0.55 : 0.5}"/>`;
+    if (major) {
+      // крайние подписи — под концами дуги, остальные — снаружи шкалы
+      const end = v === 0 || v === MAX;
+      const [lx, ly] = end ? [v === 0 ? CX - R : CX + R, CY + SW / 2 + 14] : gaugePt(v, R + SW / 2 + 21);
+      ticks += `<text x="${lx.toFixed(1)}" y="${(ly + (end ? 0 : 3.5)).toFixed(1)}" text-anchor="middle" class="gauge-label${v === 100 ? ' gauge-plan' : ''}">${v}%</text>`;
+    }
   }
-
-  // Clockwise arc from startDeg to endDeg (sweep-flag = 1)
-  function arc(s, e, r) {
-    const [x1, y1] = pt(s, r);
-    const [x2, y2] = pt(e, r);
-    const sweep = ((e - s) + 360) % 360;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${x2} ${y2}`;
-  }
-
-  // Zone boundary angles and needle angle
-  const gEnd = START_A + (70 / SCALE_MAX) * TOTAL_SWEEP;  // 255°
-  const yEnd = START_A + (90 / SCALE_MAX) * TOTAL_SWEEP;  // 285°
-  const needleA = START_A + (Math.min(pctFmt, SCALE_MAX) / SCALE_MAX) * TOTAL_SWEEP;
-
-  // Needle tip sits on the middle of the track
-  const [nx, ny] = pt(needleA, R - SW / 2 - 2);
-
-  // Tick mark helper (inner→outer of track)
-  function tick(deg) {
-    const [xi, yi] = pt(deg, R - SW / 2 + 2);
-    const [xo, yo] = pt(deg, R + SW / 2 + 1);
-    return `<line x1="${xi}" y1="${yi}" x2="${xo}" y2="${yo}" stroke="rgba(255,255,255,0.75)" stroke-width="2.5"/>`;
-  }
-
-  // Label position: outside arc track
-  function labelPt(deg) { return pt(deg, R + SW / 2 + 14); }
-
-  const color   = pctFmt <= 70 ? cssVar('--success') : pctFmt <= 90 ? cssVar('--warning') : cssVar('--danger');
-  const verdict = pctFmt <= 70 ? 'Экономим' : pctFmt <= 90 ? 'В норме' : 'Перерасход';
-  const overspent = pctFmt > 90;
-  // при перерасходе — сначала машет лапами «вы чего, транжиры!», потом стоит угрюмый
-  const barEmo = overspent ? 'scold' : pctFmt <= 70 ? 'income' : 'idle';
-  const labelFill = cssVar('--text-faint');
-
-  const [l0x, l0y]   = labelPt(START_A);   // 0%   at 150° (lower-left)
-  const [l70x, l70y] = labelPt(gEnd);      // 70%  at 255° (upper-left)
-  const [l90x, l90y] = labelPt(yEnd);      // 90%  at 285° (upper-right)
-  const [l160x, l160y] = labelPt(END_A);   // 160% at 30°  (lower-right)
+  // «застёжка» прямо на дорожке шкалы у отметки 100% = план
+  const [kx, ky] = gaugePt(100, R);
+  const ka = (90 - gaugeAngle(100)) * Math.PI / 180;       // касательная к дуге
+  const kdx = 4.2 * Math.cos(ka), kdy = 4.2 * Math.sin(ka);
+  const zoneBand = (a, b, c) => `<path d="${gaugeArc(a, b, R - SW / 2 - 3)}" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" opacity="0.75"/>`;
 
   container.innerHTML = `
-    <svg viewBox="0 0 200 178" class="speedometer-svg">
-      <!-- Background track -->
-      <path d="${arc(START_A, END_A, R)}" fill="none" stroke="${cssVar('--surface-3')}" stroke-width="${SW}"/>
-      <!-- Green zone 0-70% -->
-      <path d="${arc(START_A, gEnd, R)}" fill="none" stroke="${cssVar('--success')}" stroke-width="${SW}" opacity="0.4"/>
-      <!-- Yellow zone 70-90% -->
-      <path d="${arc(gEnd, yEnd, R)}" fill="none" stroke="${cssVar('--warning')}" stroke-width="${SW}" opacity="0.4"/>
-      <!-- Red zone 90-160% -->
-      <path d="${arc(yEnd, END_A, R)}" fill="none" stroke="${cssVar('--danger')}" stroke-width="${SW}" opacity="0.4"/>
-      <!-- Zone boundary ticks -->
-      ${tick(gEnd)}${tick(yEnd)}
-      <!-- Progress arc (bright, up to needle) -->
-      ${pctFmt > 0 ? `<path d="${arc(START_A, needleA, R)}" fill="none" stroke="${color}" stroke-width="${SW - 8}"/>` : ''}
-      <!-- Needle -->
-      <line x1="${CX}" y1="${CY}" x2="${nx}" y2="${ny}" stroke="${color}" stroke-width="3.5" stroke-linecap="round"/>
-      <!-- Hub -->
-      <circle cx="${CX}" cy="${CY}" r="7" fill="rgba(89,71,224,0.1)"/>
-      <circle cx="${CX}" cy="${CY}" r="4"  fill="${color}"/>
-      <!-- Value -->
-      <text x="${CX}" y="${CY - 16}" text-anchor="middle" fill="${color}" font-size="26" font-weight="800" font-family="Onest,sans-serif">${pctFmt}%</text>
-      <text x="${CX}" y="${CY - 2}"  text-anchor="middle" fill="rgba(26,21,48,0.5)" font-size="8" font-family="Onest,sans-serif" letter-spacing="0.6">ФАКТ / ПЛАН</text>
-      <!-- Scale labels outside arc track -->
-      <text x="${l0x}"   y="${l0y}"   text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">0%</text>
-      <text x="${l70x}"  y="${l70y}"  text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">70%</text>
-      <text x="${l90x}"  y="${l90y}"  text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">90%</text>
-      <text x="${l160x}" y="${l160y}" text-anchor="middle" fill="${labelFill}" font-size="10" font-weight="600" font-family="Onest,sans-serif">160%</text>
-    </svg>
-    <div class="bablometr-verdict-row">
-      ${finik(barEmo, 'finik-md', 'bar-finik')}
-      <div class="speedometer-verdict" style="color:${color}"><span class="verdict-dot" style="background:${color}"></span>${verdict}</div>
-    </div>
-    <div class="bablometr-stats">
-      <div class="bablometr-stat">
-        <span class="bablometr-stat-label">Потрачено</span>
-        <span class="bablometr-stat-value">${fmt(spent)}</span>
+    <div class="gauge">
+      <svg viewBox="0 0 240 170" class="speedometer-svg" role="img" aria-label="Темп трат: ${pct}% от нормы, ${zone.verdict.toLowerCase()}">
+        <path d="${gaugeArc(0, MAX, R)}" fill="none" stroke="${track}" stroke-width="${SW}" stroke-linecap="round"/>
+        ${zoneBand(1, LOW - 1.5, cssVar('--success'))}${zoneBand(LOW + 1.5, HIGH - 1.5, cssVar('--primary'))}${zoneBand(HIGH + 1.5, MAX - 1, cssVar('--danger'))}
+        <path class="gauge-value" d="${gaugeArc(0, MAX, R)}" pathLength="100" fill="none" stroke="${zone.color}" stroke-width="${SW}" stroke-linecap="round" stroke-dasharray="0 100"/>
+        ${ticks}
+        <g class="gauge-clasp" stroke="${cssVar('--surface')}" stroke-width="1.6">
+          <circle cx="${(kx - kdx).toFixed(1)}" cy="${(ky - kdy).toFixed(1)}" r="3.6" fill="${cssVar('--gold')}"/>
+          <circle cx="${(kx + kdx).toFixed(1)}" cy="${(ky + kdy).toFixed(1)}" r="3.6" fill="${cssVar('--gold')}"/>
+        </g>
+        <g class="gauge-needle" transform="rotate(0 ${CX} ${CY})">
+          <path d="M ${CX - 5} ${CY} L ${CX - 1} ${CY - R + 22} Q ${CX} ${CY - R + 19} ${CX + 1} ${CY - R + 22} L ${CX + 5} ${CY} Z" fill="${ink}"/>
+        </g>
+        <circle cx="${CX}" cy="${CY}" r="9" fill="${cssVar('--surface')}" stroke="${ink}" stroke-width="2.5"/>
+        <circle cx="${CX}" cy="${CY}" r="3.2" fill="${cssVar('--gold')}"/>
+        <text x="${CX}" y="${CY + 36}" text-anchor="middle" class="gauge-value-text" fill="${zone.color}">${pct}%</text>
+        <text x="${CX}" y="${CY + 50}" text-anchor="middle" class="gauge-caption">от нормы трат на сегодня</text>
+      </svg>
+      <div class="bablometr-verdict-row">
+        ${finik(zone.emo, 'finik-md', 'bar-finik')}
+        <div class="speedometer-verdict gauge-chip gauge-chip--${zone.key}">${zone.verdict}</div>
       </div>
-      <div class="bablometr-stat">
-        <span class="bablometr-stat-label">По плану</span>
-        <span class="bablometr-stat-value">${fmt(expectedByNow)}</span>
+      <div class="bablometr-stats">
+        <div class="bablometr-stat"><span class="bablometr-stat-label">Потрачено</span><span class="bablometr-stat-value">${fmt(spent)}</span></div>
+        <div class="bablometr-stat"><span class="bablometr-stat-label">Норма на сегодня</span><span class="bablometr-stat-value">${fmt(expectedByNow)}</span></div>
+        <div class="bablometr-stat"><span class="bablometr-stat-label">Прогноз на месяц</span><span class="bablometr-stat-value ${projected > plannedMonthly ? 'is-over' : ''}">${fmt(projected)}</span></div>
       </div>
-      <div class="bablometr-stat">
-        <span class="bablometr-stat-label">Дней</span>
-        <span class="bablometr-stat-value">${daysElapsed} из ${daysInMonth}</span>
-      </div>
+      <div class="gauge-foot">День ${daysElapsed} из ${daysInMonth} · план на месяц ${fmt(plannedMonthly)}</div>
     </div>`;
 
+  animateGauge(container, pct, zone);
+
   // помахал лапами — и перешёл в угрюмое стояние
-  if (overspent) {
+  if (zone.key === 'over') {
     const svg = container.querySelector('.bar-finik .finik-svg');
     if (svg) setTimeout(() => { if (svg.isConnected) svg.setAttribute('data-emotion', 'grumpy'); }, 2300);
   }
+}
+
+// Физика стрелки: пружина с затуханием (ζ≈0.42) от прошлого значения к новому.
+function animateGauge(container, pct, zone) {
+  const needle = container.querySelector('.gauge-needle');
+  const arcEl = container.querySelector('.gauge-value');
+  const valEl = container.querySelector('.gauge-value-text');
+  const { CX, CY, MAX } = GAUGE;
+  const target = Math.min(pct, MAX);
+  const pinned = pct > MAX;               // за пределом шкалы — упирается в ограничитель
+  const from = Number(container.dataset.gauge || 0);
+  container.dataset.gauge = target;
+  const draw = (v, shownPct) => {
+    const clamped = Math.max(0, Math.min(MAX, v));
+    needle.setAttribute('transform', `rotate(${(clamped / MAX * 180 - 90).toFixed(2)} ${CX} ${CY})`);
+    arcEl.setAttribute('stroke-dasharray', `${(clamped / MAX * 100).toFixed(2)} 100`);
+    valEl.textContent = `${Math.round(shownPct)}%`;
+  };
+  if (!motionOK()) { draw(target, pct); return; }
+
+  const w = 8.5, zeta = 0.42;            // собственная частота и затухание
+  let x = from, vel = 0, last = performance.now(), t0 = last;
+  const tick = now => {
+    if (!needle.isConnected) return;
+    const dt = Math.min(0.032, (now - last) / 1000); last = now;
+    const acc = -2 * zeta * w * vel - w * w * (x - target);
+    vel += acc * dt; x += vel * dt;
+    // об ограничитель: отскок с потерей энергии
+    if (x > MAX) { x = MAX; vel = -Math.abs(vel) * 0.35; }
+    if (x < 0) { x = 0; vel = Math.abs(vel) * 0.35; }
+    const settled = Math.abs(x - target) < 0.05 && Math.abs(vel) < 0.05;
+    const k = Math.min(1, (now - t0) / 900);
+    const shown = from + (pct - from) * (1 - Math.pow(1 - k, 3));
+    // при перерасходе — мелкая дрожь, как на холостых оборотах
+    const jitter = zone.key === 'over' && settled ? Math.sin(now / 55) * 0.35 + Math.sin(now / 23) * 0.2 - (pinned ? 0.6 : 0) : 0;
+    draw(x + jitter, shown);
+    if (!settled || zone.key === 'over') requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 let speedChartMonth = null; // { m, y } — currently viewed month
@@ -4231,8 +4166,8 @@ async function _renderSpeedChart(m, y, isCurrent, todayDay) {
 
     function ratioColor(v) {
       if (v === null) return withAlpha(cssVar('--text-faint'), 0.5);
-      if (v < 70) return cssVar('--success');
-      if (v < 90) return cssVar('--warning');
+      if (v <= GAUGE.LOW) return cssVar('--success');
+      if (v <= GAUGE.HIGH) return cssVar('--primary');
       return cssVar('--danger');
     }
 

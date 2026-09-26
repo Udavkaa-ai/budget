@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
-import { api, invites, csv, pushSettings, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
+import { api, invites, csv, pushSettings, support as supportApi, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
 import { BLOCKS, useBlocks, setBlock } from '../blocks';
@@ -23,6 +23,7 @@ import { useFinikEnabled, setFinikEnabled } from '../finik';
 import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
+import Constants from 'expo-constants';
 import { openHelp } from '../help';
 import { RUSTORE_URL, openRuStoreListing } from '../rateApp';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
@@ -96,6 +97,8 @@ export default function SettingsScreen() {
   const [importVisible, setImportVisible] = useState(false);
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [supportText, setSupportText] = useState('');
+  const [supportBusy, setSupportBusy] = useState(false);
   const [recurringVisible, setRecurringVisible] = useState(false);
 
   const [familyName, setFamilyName] = useState('');
@@ -376,6 +379,21 @@ export default function SettingsScreen() {
       { text: 'Отмена', style: 'cancel' },
       { text: 'Отключить', style: 'destructive', onPress: async () => { await setPremium(false); } },
     ]);
+  };
+
+  const sendSupport = async () => {
+    const text = supportText.trim();
+    if (text.length < 3) { Alert.alert('Поддержка', 'Напишите пару слов о проблеме или идее'); return; }
+    setSupportBusy(true);
+    try {
+      await supportApi.send(text, Constants.expoConfig?.version ?? '');
+      setSupportText('');
+      Alert.alert('Спасибо!', 'Сообщение отправлено разработчику.');
+    } catch (e) {
+      Alert.alert('Не удалось отправить', String((e as Error)?.message ?? e));
+    } finally {
+      setSupportBusy(false);
+    }
   };
 
   const inviteFamily = async () => {
@@ -860,6 +878,24 @@ export default function SettingsScreen() {
             <Text style={{ color: t.text }}>🧭 Пройти вводный тур</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
+        </Card>
+
+        {/* Support */}
+        <Card>
+          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Поддержка</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 20 }}>
+            Нашли ошибку, есть идея или вопрос? Напишите — сообщение придёт напрямую разработчику.
+          </Text>
+          <TextInput
+            style={[styles.input, styles.multiline, { height: 110, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+            value={supportText}
+            onChangeText={setSupportText}
+            placeholder="Опишите, что случилось или что хотелось бы улучшить"
+            placeholderTextColor={t.textMuted}
+            maxLength={2000}
+            multiline
+          />
+          <PrimaryButton title="Отправить разработчику" onPress={sendSupport} loading={supportBusy} />
         </Card>
 
         {/* About */}

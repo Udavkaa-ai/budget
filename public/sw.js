@@ -1,5 +1,5 @@
 // Service Worker — network-first: всегда свежие файлы, кэш только при офлайне
-const CACHE = 'budget-v29';
+const CACHE = 'budget-v30';
 const STATIC = [
   '/', '/style.css', '/app.js', '/e2e.js', '/finik-rig.js', '/manifest.json',
   '/vendor/chart.umd.min.js', '/vendor/hammer.min.js',
@@ -42,7 +42,7 @@ self.addEventListener('push', e => {
     const selfName = await getSelfName();
     // Своё же действие — не уведомляем
     if (data.by && selfName && data.by === selfName) return;
-    await self.registration.showNotification(data.title || 'Семейный бюджет', {
+    await self.registration.showNotification(data.title || 'ФИНИК', {
       body: data.body || '',
       icon: '/icon-512.png',
       badge: '/icon-512.png',

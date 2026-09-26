@@ -368,6 +368,12 @@ export const csv = {
 
 // ─── Push settings (server side) ─────────────────────────────────────────────
 
+// ─── Поддержка: сообщение разработчику (видно только в админ-панели веба) ─────
+export const support = {
+  send: (text: string, appVersion: string) =>
+    api.post<{ ok: boolean }>('/api/support', { text, platform: 'android', appVersion }),
+};
+
 export const pushSettings = {
   get: () => api.get<{ enabled: boolean }>('/api/push/settings'),
   set: (enabled: boolean) => api.post<{ ok: boolean }>('/api/push/settings', { enabled }),
