@@ -325,6 +325,12 @@ html, body {
 .nav-btn.active .nav-icon { transform: scale(1.12); }
 
 .nav-icon { font-size: 22px; line-height: 1; transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+/* Свои иконки в стиле Финика (1:1 с приложением: android/src/tabIcons.ts).
+   Неактивная — приглушённый силуэт, светлые детали цветом фона панели;
+   активная — фирменная палитра (фиолетовый + золото). */
+.nav-icon .ti { width: 26px; height: 26px; display: block; overflow: visible; }
+.nav-btn .ti { --ti-p: #645E82; --ti-d: #645E82; --ti-g: #645E82; --ti-gd: #645E82; --ti-i: #645E82; --ti-l: #FFFFFF; --ti-w: #FFFFFF; }
+.nav-btn.active .ti { --ti-p: #7A5CF0; --ti-d: #5947E0; --ti-g: #FFC24B; --ti-gd: #E8A21F; --ti-l: #EDE8FF; --ti-w: #FFFFFF; --ti-i: #2B2160; }
 .nav-label { font-size: 10px; font-weight: 600; white-space: nowrap; letter-spacing: 0.2px; }
 
 /* ═══════════════════════════════════════════ CARDS ══ */
