@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, TextInput, Modal, ActivityIndicator,
-} from 'react-native';
+import { showAlert } from '../dialog';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
@@ -94,10 +92,10 @@ export default function GoalsScreen() {
         if (!isNaN(n) && n > 0) categoryBudgets[cat] = n;
       }
       await budgetPlan.save({ ...(plan ?? {}), categoryBudgets } as BudgetPlan);
-      Alert.alert('Лимиты сохранены');
+      showAlert('Лимиты сохранены');
       load();
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setSavingLimits(false);
     }
@@ -108,14 +106,14 @@ export default function GoalsScreen() {
   const addGoal = async () => {
     if (!name.trim() || !target.trim()) return;
     const t2 = parseFloat(target.replace(',', '.'));
-    if (isNaN(t2) || t2 <= 0) { Alert.alert('Некорректная сумма'); return; }
+    if (isNaN(t2) || t2 <= 0) { showAlert('Некорректная сумма'); return; }
     try {
       await goalsApi.add({ name: name.trim(), target: t2, emoji });
       haptics.success();
       setAddVisible(false); setName(''); setTarget(''); setEmoji('🎯');
       setFlash(n => n + 1);
       load();
-    } catch (e) { Alert.alert('Ошибка', String(e)); }
+    } catch (e) { showAlert('Ошибка', String(e)); }
   };
 
   const contribute = async () => {
@@ -128,11 +126,11 @@ export default function GoalsScreen() {
       setContribGoal(null); setContribAmt('');
       setFlash(n => n + 1);
       load();
-    } catch (e) { Alert.alert('Ошибка', String(e)); }
+    } catch (e) { showAlert('Ошибка', String(e)); }
   };
 
   const deleteGoal = (id: string) => {
-    Alert.alert('Удалить цель?', undefined, [
+    showAlert('Удалить цель?', undefined, [
       { text: 'Отмена', style: 'cancel' },
       { text: 'Удалить', style: 'destructive', onPress: async () => { await goalsApi.delete(id); haptics.warning(); load(); } },
     ]);

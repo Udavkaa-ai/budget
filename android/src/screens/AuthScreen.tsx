@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { showAlert } from '../dialog';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
@@ -45,7 +43,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
       const token = await passwordLogin(pwLogin.trim(), pwPass);
       onLoginSuccess(token);
     } catch (e) {
-      Alert.alert('Не удалось войти', 'Проверьте логин и пароль');
+      showAlert('Не удалось войти', 'Проверьте логин и пароль');
     } finally {
       setLoading(false);
     }
@@ -54,7 +52,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
   const handleServerUrl = async () => {
     const url = serverUrl.trim().replace(/\/+$/, '');
     setServerUrlState(url);
-    if (!url.startsWith('http')) { Alert.alert('Введите корректный URL'); return; }
+    if (!url.startsWith('http')) { showAlert('Введите корректный URL'); return; }
     setLoading(true);
     try {
       await setServerUrl(url);
@@ -62,7 +60,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
       await api.get('/health').catch(() => {});
       setStep('auth');
     } catch {
-      Alert.alert('Не удалось подключиться к серверу', url);
+      showAlert('Не удалось подключиться к серверу', url);
     } finally {
       setLoading(false);
     }
@@ -90,9 +88,9 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
           return;
         }
       }
-      Alert.alert('Не удалось войти', 'Попробуйте ещё раз');
+      showAlert('Не удалось войти', 'Попробуйте ещё раз');
     } catch (e) {
-      Alert.alert('Ошибка входа', String(e));
+      showAlert('Ошибка входа', String(e));
     } finally {
       setLoading(false);
     }

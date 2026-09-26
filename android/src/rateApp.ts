@@ -1,4 +1,5 @@
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
+import { showAlert } from './dialog';
 import * as SecureStore from 'expo-secure-store';
 
 // Страница приложения в RuStore (по package name). Если каталожный слаг
@@ -26,7 +27,7 @@ async function markNever() { await set(STATUS, 'never'); }
 async function snooze()    { await set(SNOOZE, String(Date.now() + SNOOZE_MS)); await set(CNT, String(THRESHOLD - 3)); }
 
 function askNow() {
-  Alert.alert(
+  showAlert(
     'Нравится ФИНИК?',
     'Если приложение помогает вести семейный бюджет — поставьте, пожалуйста, оценку в RuStore. Это очень поможет проекту 🟣',
     [

@@ -1,8 +1,6 @@
 import React, { forwardRef, useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Modal, ScrollView,
-} from 'react-native';
+import { showAlert } from '../dialog';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import BottomSheet, { BottomSheetScrollView, BottomSheetFooter, type BottomSheetFooterProps } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -97,11 +95,11 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
 
   const submit = async () => {
     if (!description.trim() || !amount.trim() || !selectedCat) {
-      Alert.alert('Заполните все поля');
+      showAlert('Заполните все поля');
       return;
     }
     const amt = parseFloat(amount.replace(',', '.'));
-    if (isNaN(amt) || amt <= 0) { Alert.alert('Некорректная сумма'); return; }
+    if (isNaN(amt) || amt <= 0) { showAlert('Некорректная сумма'); return; }
 
     setSubmitting(true);
     const item = { date: formDate, category: selectedCat, amount: amt, description: description.trim() };
@@ -117,7 +115,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     } catch (e) {
       if (isNetworkError(e)) {
         // Сети нет — предлагаем офлайн-режим с последующей синхронизацией
-        Alert.alert(
+        showAlert(
           'Нет соединения',
           'Внести расход в офлайн-режиме? Он появится в ленте с меткой ⏳ и уйдёт на сервер, когда сеть вернётся.',
           [
@@ -137,7 +135,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
           ],
         );
       } else {
-        Alert.alert('Ошибка', String(e));
+        showAlert('Ошибка', String(e));
       }
     } finally {
       setSubmitting(false);
@@ -147,10 +145,10 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   // Photo receipt scan (premium): camera/gallery → server AI → add expenses
   const scanReceipt = () => {
     if (!premium) {
-      Alert.alert('💎 Премиум', 'Сканирование чеков доступно в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+      showAlert('💎 Премиум', 'Сканирование чеков доступно в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
       return;
     }
-    Alert.alert('Скан чека', 'Откуда взять фото?', [
+    showAlert('Скан чека', 'Откуда взять фото?', [
       { text: 'Отмена', style: 'cancel' },
       { text: '📷 Камера', onPress: () => pickImage(true) },
       { text: '🖼 Галерея', onPress: () => pickImage(false) },
@@ -167,7 +165,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       try {
         if (camera) {
           const perm = await ImagePicker.requestCameraPermissionsAsync();
-          if (!perm.granted) { Alert.alert('Нет доступа к камере'); return; }
+          if (!perm.granted) { showAlert('Нет доступа к камере'); return; }
         }
         const opts: ImagePicker.ImagePickerOptions = {
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -186,12 +184,12 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       const res = await ai.parseImage(result.assets[0].base64);
       const parsed = res.expenses ?? [];
       if (parsed.length === 0) {
-        Alert.alert('Не удалось распознать', 'На фото не нашлось расходов');
+        showAlert('Не удалось распознать', 'На фото не нашлось расходов');
         return;
       }
       setPreview({ items: parsed, source: 'photo' });
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setScanning(false);
     }
@@ -217,7 +215,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       sheetRef?.current?.close();
       onAdded();
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setAdding(false);
     }
@@ -230,10 +228,10 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     try {
       const res = await ai.parseText(freeText.trim());
       const parsed = res.expenses ?? [];
-      if (parsed.length === 0) { Alert.alert('Не удалось разобрать текст'); return; }
+      if (parsed.length === 0) { showAlert('Не удалось разобрать текст'); return; }
       setPreview({ items: parsed, source: 'text' });
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setParsing(false);
     }
@@ -241,7 +239,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
 
   const switchMode = (m: 'form' | 'text') => {
     if (m === 'text' && !premium) {
-      Alert.alert('💎 Премиум', 'Ввод текстом через ИИ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+      showAlert('💎 Премиум', 'Ввод текстом через ИИ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
       return;
     }
     setMode(m);

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Switch, Alert, Share, Modal, TextInput,
-} from 'react-native';
+import { Toggle } from '../components/UI';
+import { showAlert } from '../dialog';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -46,7 +45,7 @@ export default function SettingsScreen() {
   const e2e = useE2E();
 
   const doEnableE2E = () => {
-    Alert.alert(
+    showAlert(
       'Включить сквозное шифрование?',
       'Все данные семьи переедут в зашифрованный вид. После этого сервер (и тот, кто им владеет) не сможет видеть ваши суммы и расходы — только зашифрованные блобы.\n\n⚠️ Ключ хранится ТОЛЬКО на устройствах. Если потеряете ключ-фразу и все устройства — данные восстановить будет НЕЛЬЗЯ. Сразу сохраните ключ-фразу и передайте её членам семьи.',
       [
@@ -58,7 +57,7 @@ export default function SettingsScreen() {
             const r = await enableE2E();
             setBusy(false);
             if (r.ok) {
-              Alert.alert(
+              showAlert(
                 '🔒 Шифрование включено',
                 `Перенесено расходов: ${r.migrated}.\n\nСОХРАНИТЕ ключ-фразу — без неё данные не восстановить и не подключить второе устройство:\n\n${r.keyPhrase}`,
                 [
@@ -67,7 +66,7 @@ export default function SettingsScreen() {
                 ],
               );
             } else {
-              Alert.alert('Не удалось включить', r.error);
+              showAlert('Не удалось включить', r.error);
             }
           },
         },
@@ -140,9 +139,9 @@ export default function SettingsScreen() {
       if (familyName.trim()) await settingsApi.set('familyName', familyName.trim());
       const n = parseFloat(plannedMonthly.replace(',', '.'));
       if (!isNaN(n) && n > 0) await settingsApi.set('plannedMonthly', n);
-      Alert.alert('Сохранено');
+      showAlert('Сохранено');
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
@@ -157,14 +156,14 @@ export default function SettingsScreen() {
       setNewCatName(''); setNewCatEmoji('');
       await refreshCategories();
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
   };
 
   const removeCategory = (name: string) => {
-    Alert.alert(
+    showAlert(
       `Удалить «${name}»?`,
       'Все расходы этой категории будут перенесены в «Прочее».',
       [
@@ -175,9 +174,9 @@ export default function SettingsScreen() {
             try {
               const r = await categoriesApi.remove(name);
               await refreshCategories();
-              if (r.moved) Alert.alert('Готово', `Перенесено расходов в «Прочее»: ${r.moved}`);
+              if (r.moved) showAlert('Готово', `Перенесено расходов в «Прочее»: ${r.moved}`);
             } catch (e) {
-              Alert.alert('Ошибка', String(e));
+              showAlert('Ошибка', String(e));
             }
           },
         },
@@ -191,7 +190,7 @@ export default function SettingsScreen() {
     await generateKey();
     const phrase = await exportKeyHex();
     await new Promise<void>(resolve => {
-      Alert.alert(
+      showAlert(
         '🔑 Создан ключ шифрования',
         `Бэкапы шифруются этим ключом ПРЯМО НА ТЕЛЕФОНЕ — сервер их прочитать не может.\n\nСохраните фразу в надёжном месте (без неё бэкап не восстановить!) и передайте жене/мужу:\n\n${phrase}`,
         [
@@ -212,16 +211,16 @@ export default function SettingsScreen() {
       const blob = await encryptJson(snap);
       await backupsApi.create(blob);
       refreshBackups();
-      Alert.alert('Готово', 'Шифрованная копия сохранена на сервере');
+      showAlert('Готово', 'Шифрованная копия сохранена на сервере');
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
   };
 
   const restoreBackup = (b: BackupMeta) => {
-    Alert.alert(
+    showAlert(
       'Восстановить из копии?',
       `Данные семьи будут ЗАМЕНЕНЫ состоянием на ${new Date(b.createdAt).toLocaleString('ru')}.`,
       [
@@ -236,13 +235,13 @@ export default function SettingsScreen() {
               if (isE2E()) {
                 // Восстанавливаем в локальное хранилище, а не на (пустой) сервер
                 await e2eData.restoreLocalSnapshot(snap);
-                Alert.alert('Готово', `Восстановлено расходов: ${(snap as any).expenses?.length ?? 0}`);
+                showAlert('Готово', `Восстановлено расходов: ${(snap as any).expenses?.length ?? 0}`);
               } else {
                 const r = await backupsApi.restore(snap);
-                Alert.alert('Готово', `Восстановлено расходов: ${r.expenses}`);
+                showAlert('Готово', `Восстановлено расходов: ${r.expenses}`);
               }
             } catch (e) {
-              Alert.alert('Ошибка', 'Не удалось расшифровать или восстановить: ' + String(e));
+              showAlert('Ошибка', 'Не удалось расшифровать или восстановить: ' + String(e));
             } finally {
               setBusy(false);
             }
@@ -256,14 +255,14 @@ export default function SettingsScreen() {
   const applyImportedKey = async () => {
     const clean = keyInput.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
     if (clean.length !== 64) {
-      Alert.alert('Не похоже на ключ', 'Фраза должна содержать 64 символа (цифры и буквы a–f). Скопируйте её целиком с устройства, где создавалась копия: 🔑 «Показать ключ шифрования».');
+      showAlert('Не похоже на ключ', 'Фраза должна содержать 64 символа (цифры и буквы a–f). Скопируйте её целиком с устройства, где создавалась копия: 🔑 «Показать ключ шифрования».');
       return;
     }
     const finish = async () => {
       await importKey(clean);
       setKeyVisible(false);
       setKeyInput('');
-      Alert.alert('Готово', 'Ключ сохранён — теперь копии семьи можно восстанавливать на этом устройстве.');
+      showAlert('Готово', 'Ключ сохранён — теперь копии семьи можно восстанавливать на этом устройстве.');
     };
     // Сверяем отпечаток вводимого ключа с зарегистрированным у семьи на сервере.
     // Если не совпал — ключ ЧУЖОЙ: записи не расшифруются, и всё, что внесёшь,
@@ -272,7 +271,7 @@ export default function SettingsScreen() {
     let familyFp: string | null = null;
     try { familyFp = (await api.get<{ enabled: boolean; keyFingerprint: string | null }>('/api/family/e2e')).keyFingerprint; } catch { /* оффлайн — пропускаем проверку */ }
     if (familyFp && fp && familyFp !== fp) {
-      Alert.alert(
+      showAlert(
         '⚠️ Ключ не от этой семьи',
         `Отпечаток введённого ключа (${fp}) не совпадает с ключом семьи (${familyFp}).\n\nЕсли всё равно сохранить — твои записи не увидят другие участники, а их записи не увидишь ты. Скопируй фразу точь-в-точь с устройства, где данные открываются правильно (там: 🔑 «Показать ключ шифрования»).`,
         [
@@ -284,7 +283,7 @@ export default function SettingsScreen() {
     }
     const existing = await exportKeyHex();
     if (existing && existing !== clean) {
-      Alert.alert(
+      showAlert(
         'Заменить ключ?',
         'На этом устройстве уже есть свой ключ. После замены копии, созданные со старым ключом, откроются только по старой фразе.',
         [
@@ -299,9 +298,9 @@ export default function SettingsScreen() {
 
   const showKey = async () => {
     const phrase = await exportKeyHex();
-    if (!phrase) { Alert.alert('Ключа ещё нет', 'Он создастся при первом бэкапе'); return; }
+    if (!phrase) { showAlert('Ключа ещё нет', 'Он создастся при первом бэкапе'); return; }
     const fp = fingerprintOfHex(phrase);
-    Alert.alert('🔑 Ключ шифрования', `${phrase}\n\nОтпечаток: ${fp}\n(должен совпадать на всех устройствах семьи)`, [
+    showAlert('🔑 Ключ шифрования', `${phrase}\n\nОтпечаток: ${fp}\n(должен совпадать на всех устройствах семьи)`, [
       { text: '📋 Поделиться', onPress: () => Share.share({ message: phrase }) },
       { text: 'Закрыть' },
     ]);
@@ -316,7 +315,7 @@ export default function SettingsScreen() {
         await setLockEnabled(true);
       } else {
         // Ни биометрии, ни PIN — предлагаем задать PIN, затем включим замок
-        Alert.alert(
+        showAlert(
           'Нужен способ разблокировки',
           'Отпечаток/Face ID недоступны. Задайте PIN-код, чтобы включить замок.',
           [
@@ -348,7 +347,7 @@ export default function SettingsScreen() {
         await setPin(pin);
         setPinModal(false);
         if (pinAfterSet) { await setLockEnabled(true); setPinAfterSet(false); }
-        Alert.alert('Готово', 'PIN-код установлен.');
+        showAlert('Готово', 'PIN-код установлен.');
       } else {
         setPinErr(true);
         setTimeout(() => { setPinErr(false); setPinStage('enter'); setPinFirst(''); }, 900);
@@ -357,14 +356,14 @@ export default function SettingsScreen() {
   };
 
   const removePin = () => {
-    Alert.alert('Убрать PIN-код?', 'Разблокировка останется только по отпечатку/Face ID (если доступны).', [
+    showAlert('Убрать PIN-код?', 'Разблокировка останется только по отпечатку/Face ID (если доступны).', [
       { text: 'Отмена', style: 'cancel' },
       { text: 'Убрать', style: 'destructive', onPress: () => clearPin() },
     ]);
   };
 
   const handleLogout = () => {
-    Alert.alert('Выйти?', 'Данные на устройстве сохранятся', [
+    showAlert('Выйти?', 'Данные на устройстве сохранятся', [
       { text: 'Отмена', style: 'cancel' },
       { text: 'Выйти', style: 'destructive', onPress: logout },
     ]);
@@ -378,7 +377,7 @@ export default function SettingsScreen() {
   // Тестовый режим: премиум включается бесплатно.
   // TODO: заменить на Google Play Billing перед публикацией
   const activatePremium = () => {
-    Alert.alert(
+    showAlert(
       '💎 Премиум (тестовый режим)',
       'На время тестирования Премиум активируется бесплатно. Откроются ИИ-аналитика и сканирование чеков.',
       [
@@ -389,7 +388,7 @@ export default function SettingsScreen() {
   };
 
   const deactivatePremium = () => {
-    Alert.alert('Отключить Премиум?', undefined, [
+    showAlert('Отключить Премиум?', undefined, [
       { text: 'Отмена', style: 'cancel' },
       { text: 'Отключить', style: 'destructive', onPress: async () => { await setPremium(false); } },
     ]);
@@ -397,15 +396,15 @@ export default function SettingsScreen() {
 
   const sendSupport = async () => {
     const text = supportText.trim();
-    if (text.length < 3) { Alert.alert('Поддержка', 'Напишите пару слов о проблеме или идее'); return; }
+    if (text.length < 3) { showAlert('Поддержка', 'Напишите пару слов о проблеме или идее'); return; }
     setSupportBusy(true);
     try {
       await supportApi.send(text, Constants.expoConfig?.version ?? '');
       setSupportText('');
       loadSupportThread();
-      Alert.alert('Спасибо!', 'Сообщение отправлено разработчику. Ответ появится здесь.');
+      showAlert('Спасибо!', 'Сообщение отправлено разработчику. Ответ появится здесь.');
     } catch (e) {
-      Alert.alert('Не удалось отправить', String((e as Error)?.message ?? e));
+      showAlert('Не удалось отправить', String((e as Error)?.message ?? e));
     } finally {
       setSupportBusy(false);
     }
@@ -420,7 +419,7 @@ export default function SettingsScreen() {
       const android = `Присоединяйся к нашему семейному бюджету в ФИНИК! 🟣\n\nУстанови приложение из RuStore:\n${RUSTORE_URL}\n\nи введи код приглашения: ${code}\n\nНет Android? Открой веб-версию: ${link}`;
       const web = `Присоединяйся к нашему семейному бюджету в ФИНИК! 🟣\n\nОткрой веб-версию (работает в браузере на любом устройстве):\n${link}\n\nКод приглашения уже в ссылке. Если попросит — введи вручную: ${code}`;
       const iphone = `Присоединяйся к нашему семейному бюджету в ФИНИК! 🟣\n\nНа iPhone приложение работает через браузер. Открой ссылку в Safari:\n${link}\n\nМожно добавить на экран «Домой»: кнопка «Поделиться» → «На экран «Домой»» — будет как обычное приложение.\n\nКод (если попросит): ${code}`;
-      Alert.alert(
+      showAlert(
         'Пригласить в семью',
         'Кого приглашаете? Для Android — приложение из RuStore. Для iPhone и компьютера — веб-версия, она открывается прямо в браузере.',
         [
@@ -431,7 +430,7 @@ export default function SettingsScreen() {
         ],
       );
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
@@ -446,9 +445,9 @@ export default function SettingsScreen() {
       await setToken(res.token);
       onLoginSuccess(res.token);
       setJoinVisible(false); setJoinCode('');
-      Alert.alert('Готово', 'Вы присоединились к семье');
+      showAlert('Готово', 'Вы присоединились к семье');
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
@@ -469,7 +468,7 @@ export default function SettingsScreen() {
         await Share.share({ message: text, title: 'Экспорт расходов (CSV)' });
       }
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
@@ -478,8 +477,8 @@ export default function SettingsScreen() {
   // Убрать задвоенные расходы (последствие старого бага восстановления).
   // Достаточно нажать на ОДНОМ устройстве — удаления разъедутся на остальные.
   const dedupe = () => {
-    if (!isE2E()) { Alert.alert('Недоступно', 'Убрать дубликаты можно только при включённом шифровании.'); return; }
-    Alert.alert(
+    if (!isE2E()) { showAlert('Недоступно', 'Убрать дубликаты можно только при включённом шифровании.'); return; }
+    showAlert(
       'Убрать дубликаты?',
       'Удалит повторяющиеся расходы (одинаковые дата, сумма, описание и время создания), оставив по одному. Изменения синхронизируются на все устройства семьи.',
       [
@@ -489,9 +488,9 @@ export default function SettingsScreen() {
             setBusy(true);
             try {
               const n = await e2eData.dedupeExpenses();
-              Alert.alert(n ? 'Готово' : 'Дубликатов нет', n ? `Удалено дубликатов: ${n}. Обновление уедет на другие устройства.` : 'Повторов не найдено.');
+              showAlert(n ? 'Готово' : 'Дубликатов нет', n ? `Удалено дубликатов: ${n}. Обновление уедет на другие устройства.` : 'Повторов не найдено.');
             } catch (e) {
-              Alert.alert('Ошибка', String(e));
+              showAlert('Ошибка', String(e));
             } finally {
               setBusy(false);
             }
@@ -513,16 +512,16 @@ export default function SettingsScreen() {
       let text = await FileSystem.readAsStringAsync(res.assets[0].uri);
       if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM
       const r = await csv.import(text);
-      Alert.alert('Готово', `Импортировано записей: ${r.imported ?? '—'}`);
+      showAlert('Готово', `Импортировано записей: ${r.imported ?? '—'}`);
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
   };
 
   const chooseImport = () => {
-    Alert.alert('Импорт CSV', 'Формат экспорта веб-версии или бота', [
+    showAlert('Импорт CSV', 'Формат экспорта веб-версии или бота', [
       { text: 'Отмена', style: 'cancel' },
       { text: '✍️ Вставить текстом', onPress: () => setImportVisible(true) },
       { text: '📄 Выбрать файл', onPress: importCsvFile },
@@ -535,9 +534,9 @@ export default function SettingsScreen() {
     try {
       const res = await csv.import(importText);
       setImportVisible(false); setImportText('');
-      Alert.alert('Готово', `Импортировано записей: ${res.imported ?? '—'}`);
+      showAlert('Готово', `Импортировано записей: ${res.imported ?? '—'}`);
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setBusy(false);
     }
@@ -636,10 +635,9 @@ export default function SettingsScreen() {
                 Пуш при добавлении новой траты
               </Text>
             </View>
-            <Switch
+            <Toggle
               value={pushEnabled}
               onValueChange={togglePush}
-              trackColor={{ true: t.primary }}
             />
           </View>
         </Card>
@@ -655,7 +653,7 @@ export default function SettingsScreen() {
                 Разблокировка по отпечатку / Face ID или PIN-коду
               </Text>
             </View>
-            <Switch value={lockEnabled} onValueChange={toggleLock} trackColor={{ true: t.primary }} />
+            <Toggle value={lockEnabled} onValueChange={toggleLock} />
           </View>
           <TouchableOpacity style={styles.row} onPress={() => openPinSetup()}>
             <Text style={{ color: t.text }}>🔢 {hasPinSet ? 'Изменить PIN-код' : 'Задать PIN-код'}</Text>
@@ -775,10 +773,9 @@ export default function SettingsScreen() {
                 <Text style={{ color: t.text }}>{b.label}</Text>
                 <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{b.hint}</Text>
               </View>
-              <Switch
+              <Toggle
                 value={blocks[b.id]}
                 onValueChange={v => setBlock(b.id, v)}
-                trackColor={{ true: t.primary }}
               />
             </View>
           ))}
@@ -810,7 +807,7 @@ export default function SettingsScreen() {
                 Виртуальный бухгалтер, который реагирует на ваши деньги
               </Text>
             </View>
-            <Switch value={finikOn} onValueChange={setFinikEnabled} trackColor={{ true: t.primary }} />
+            <Toggle value={finikOn} onValueChange={setFinikEnabled} />
           </View>
         </Card>
 
@@ -857,7 +854,7 @@ export default function SettingsScreen() {
                 <Text style={{ color: t.primary, fontSize: font.sm }}>Восстановить</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => Alert.alert('Удалить копию?', undefined, [
+                onPress={() => showAlert('Удалить копию?', undefined, [
                   { text: 'Отмена', style: 'cancel' },
                   { text: 'Удалить', style: 'destructive', onPress: async () => { await backupsApi.remove(b.id); refreshBackups(); } },
                 ])}

@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Modal, TextInput, Alert,
-} from 'react-native';
+import { showAlert } from '../dialog';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-native-svg';
@@ -251,7 +249,7 @@ export default function SummaryScreen() {
       setPlanVisible(false);
       loadWindow(month, year);
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setSaving(false);
     }
@@ -332,7 +330,7 @@ export default function SummaryScreen() {
         <ScrollView
           ref={isCenter ? scrollRef : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 24 }}
-          refreshControl={isCenter ? <RefreshControl refreshing={false} onRefresh={() => loadWindow(m, y)} /> : undefined}
+          refreshControl={isCenter ? <RefreshControl refreshing={false} onRefresh={() => loadWindow(m, y)} colors={[t.primary]} progressBackgroundColor={t.surface} tintColor={t.primary} /> : undefined}
         >
           {/* Сравнить */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
@@ -540,7 +538,7 @@ export default function SummaryScreen() {
               style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? t.primary : t.surface, borderColor: t.primary }]}
               onPress={() => {
                 if (!premium) {
-                  Alert.alert('💎 Премиум', 'ИИ-анализ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+                  showAlert('💎 Премиум', 'ИИ-анализ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
                   return;
                 }
                 runAnalysis();
@@ -554,7 +552,7 @@ export default function SummaryScreen() {
               style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? t.surface : t.surface, borderColor: t.primary }]}
               onPress={() => {
                 if (!premium) {
-                  Alert.alert('💎 Премиум', 'ИИ-чат доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
+                  showAlert('💎 Премиум', 'ИИ-чат доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
                   return;
                 }
                 setChatOpen(true);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, Modal, Alert, StyleSheet, ActivityIndicator, Switch,
-} from 'react-native';
+import { Toggle } from '../components/UI';
+import { showAlert } from '../dialog';
+import {View, Text, ScrollView, TouchableOpacity, Modal, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, font, radius } from '../theme';
@@ -57,7 +57,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
 
   const persist = async (next: RecurringItem[]) => {
     setItems(next);
-    try { await recurringApi.save(next); } catch { Alert.alert('Не удалось сохранить'); }
+    try { await recurringApi.save(next); } catch { showAlert('Не удалось сохранить'); }
   };
 
   const now = new Date();
@@ -80,13 +80,13 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
       const paid = paidInPeriod(item, now) + 1;
       await persist(items.map(i => i.id === item.id ? { ...i, lastPaid: key, paidCount: paid } : i));
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally { setBusy(false); }
   };
 
   const toggleActive = (id: string) => persist(items.map(i => i.id === id ? { ...i, active: !i.active } : i));
   const removeItem = (item: RecurringItem) => {
-    Alert.alert('Удалить платёж?', item.name, [
+    showAlert('Удалить платёж?', item.name, [
       { text: 'Отмена', style: 'cancel' },
       { text: 'Удалить', style: 'destructive', onPress: () => persist(items.filter(i => i.id !== item.id)) },
     ]);
@@ -109,9 +109,9 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
     if (!draft) return;
     const amount = parseInt(draft.amount.replace(/[^\d]/g, '')) || 0;
     const times = Math.max(1, parseInt(draft.times) || 1);
-    if (!draft.name.trim()) { Alert.alert('Введите название'); return; }
-    if (amount <= 0) { Alert.alert('Введите сумму'); return; }
-    if (draft.freq === 'weekly' && draft.days.length === 0) { Alert.alert('Выберите хотя бы один день недели'); return; }
+    if (!draft.name.trim()) { showAlert('Введите название'); return; }
+    if (amount <= 0) { showAlert('Введите сумму'); return; }
+    if (draft.freq === 'weekly' && draft.days.length === 0) { showAlert('Выберите хотя бы один день недели'); return; }
     const day = draft.freq === 'monthly' ? Math.min(Math.max(draft.day, 1), 31) : (draft.days[0] ?? 1);
     const days = draft.freq === 'weekly' ? WEEKDAYS_ORDER.filter(w => draft.days.includes(w)) : [];
     const base = {
@@ -137,7 +137,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
       setSuggestions(detectRecurring(lists.flat(), items, 3, dismissed));
       setScanned(true);
     } catch {
-      Alert.alert('Не удалось просканировать историю');
+      showAlert('Не удалось просканировать историю');
     } finally { setScanning(false); }
   };
 
@@ -258,7 +258,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
                     </Text>
                   </View>
                   <Text style={{ color: i.active ? t.text : t.textMuted, fontWeight: '700', marginRight: spacing.sm }}>{fmt(i.amount)}</Text>
-                  <Switch value={i.active} onValueChange={() => toggleActive(i.id)} />
+                  <Toggle value={i.active} onValueChange={() => toggleActive(i.id)} />
                 </TouchableOpacity>
               ))}
               <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>Тап — изменить · долгое нажатие — удалить</Text>
@@ -353,7 +353,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md }}>
                   <Text style={{ color: t.text }}>Активен</Text>
-                  <Switch value={draft?.active ?? true} onValueChange={v => setDraft(d => d && ({ ...d, active: v }))} />
+                  <Toggle value={draft?.active ?? true} onValueChange={v => setDraft(d => d && ({ ...d, active: v }))} />
                 </View>
 
                 <PrimaryButton title="Сохранить" onPress={saveDraft} style={{ marginTop: spacing.lg }} />

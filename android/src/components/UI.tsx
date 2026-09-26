@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, ActivityIndicator, Pressable,
+  View, Text, TextInput, ActivityIndicator, Pressable, Switch, type SwitchProps,
   StyleSheet, type TextInputProps, type ViewStyle, type StyleProp, type TextStyle,
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -143,6 +143,19 @@ export function Segmented<T extends string>({ value, options, onChange, style }:
         </Pressable>
       ))}
     </View>
+  );
+}
+
+// Переключатель в цветах темы (системный — бирюзовый/серый, не наш)
+export function Toggle(props: SwitchProps) {
+  const t = useTheme();
+  return (
+    <Switch
+      {...props}
+      trackColor={{ false: t.surface3, true: t.primary }}
+      thumbColor={props.value ? '#FFFFFF' : (t.scheme === 'dark' ? t.textMuted : '#FFFFFF')}
+      ios_backgroundColor={t.surface3}
+    />
   );
 }
 

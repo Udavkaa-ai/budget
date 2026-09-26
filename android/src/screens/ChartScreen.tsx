@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, TextInput, Alert,
-} from 'react-native';
+import { showAlert } from '../dialog';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme, spacing, font, radius } from '../theme';
@@ -20,6 +18,7 @@ import { ScreenGradient } from '../components/ScreenGradient';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
 import { MonthCharts } from '../components/MonthCharts';
+import { SixMonths, type MonthAgg } from '../components/SixMonths';
 import { SectionTitle, PrimaryButton } from '../components/UI';
 import { settings as settingsApi } from '../api/client';
 
@@ -39,22 +38,18 @@ function getMonthName(m: number, y: number) {
   return `${names[m - 1]} ${y}`;
 }
 
-async function fetchLast6Months() {
+async function fetchLast6Months(): Promise<MonthAgg[]> {
   const now = new Date();
-  const results: Array<{ label: string; total: number }> = [];
-  const short = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const m = d.getMonth() + 1;
-    const y = d.getFullYear();
+  const list = Array.from({ length: 6 }, (_, k) => new Date(now.getFullYear(), now.getMonth() - 5 + k, 1));
+  return Promise.all(list.map(async d => {
+    const m = d.getMonth() + 1, y = d.getFullYear();
     try {
       const s = await summaryApi.get(m, y);
-      results.push({ label: `${short[m - 1]} ${y}`, total: s.total });
+      return { m, y, total: s.total, byCategory: s.byCategory ?? {} };
     } catch {
-      results.push({ label: `${short[m - 1]} ${y}`, total: 0 });
+      return { m, y, total: 0, byCategory: {} };
     }
-  }
-  return results;
+  }));
 }
 
 export default function ChartScreen() {
@@ -68,7 +63,7 @@ export default function ChartScreen() {
 
   const [unified, setUnified] = useState<UnifiedChart | null>(null);
   const [plannedMonthly, setPlannedMonthly] = useState(0);
-  const [months6, setMonths6] = useState<Array<{ label: string; total: number }>>([]);
+  const [months6, setMonths6] = useState<MonthAgg[]>([]);
   const [loading, setLoading] = useState(true);
   const chartTarget = useTourTarget('chart.main');
 
@@ -115,7 +110,7 @@ export default function ChartScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   // Real-time: чужое изменение (в т.ч. E2E-синк по 'sync:changed') → перезагрузка
   useSocket(useCallback(() => { load(); }, [load]));
-  useEffect(() => { fetchLast6Months().then(setMonths6); }, []);
+  useFocusEffect(useCallback(() => { fetchLast6Months().then(setMonths6); }, []));
 
   const nav = (dir: -1 | 1) => {
     const d = new Date(year, month - 1 + dir, 1);
@@ -137,10 +132,10 @@ export default function ChartScreen() {
       };
       await cfApi.save(ym, body);
       haptics.success();
-      Alert.alert('Кэшфлоу сохранён');
+      showAlert('Кэшфлоу сохранён');
       load();
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setSavingCf(false);
     }
@@ -156,7 +151,7 @@ export default function ChartScreen() {
   const pickIncomeUser = (i: number) => {
     if (memberNames.length <= 1) return;
     haptics.select();
-    Alert.alert('Чей доход?', undefined, [
+    showAlert('Чей доход?', undefined, [
       ...memberNames.map(n => ({ text: n, onPress: () => setIncomeDays(d => d.map((x, xi) => xi === i ? { ...x, user: n } : x)) })),
       { text: 'Отмена', style: 'cancel' as const },
     ]);
@@ -303,37 +298,8 @@ export default function ChartScreen() {
             <PrimaryButton title="Сохранить кэшфлоу" onPress={saveCf} loading={savingCf} />
           </Card>
 
-          {/* 6 месяцев */}
-          {blocks.months6 !== false && months6.length > 0 && (
-            <Card>
-              <SectionTitle>Расходы за 6 месяцев</SectionTitle>
-              <View style={styles.chart6}>
-                {months6.map(({ label, total }) => {
-                  const mx = Math.max(...months6.map(x => x.total), 1);
-                  const pct = total / mx;
-                  return (
-                    <TouchableOpacity key={label} style={styles.barCol} onPress={() => Alert.alert(label, fmt(total))}>
-                      <Text style={{ fontSize: 9, color: t.textMuted, marginBottom: 2 }}>
-                        {total > 0 ? fmtShort(total) : ''}
-                      </Text>
-                      <View style={styles.barWrap}>
-                        <View style={{
-                          width: '100%',
-                          height: Math.max(pct * 70, 3),
-                          borderRadius: 4,
-                          backgroundColor: t.primary,
-                          opacity: pct > 0 ? 1 : 0.2,
-                        }} />
-                      </View>
-                      <Text style={{ fontSize: 9, color: t.textMuted, marginTop: 4 }} numberOfLines={1}>
-                        {label.split(' ')[0]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </Card>
-          )}
+          {/* 6 месяцев: топ-3 категорий по месяцам, по тапу — разбор месяца */}
+          {blocks.months6 !== false && months6.length > 0 && <SixMonths months={months6} />}
         </ScrollView>
       )}
     </SafeAreaView>

@@ -2,7 +2,7 @@
   "expo": {
     "name": "ФИНИК",
     "slug": "family-budget",
-    "version": "2.24.0",
+    "version": "2.24.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -20,7 +20,7 @@
         "backgroundColor": "#ECE6FF"
       },
       "package": "com.familybudget.app",
-      "versionCode": 19,
+      "versionCode": 20,
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",

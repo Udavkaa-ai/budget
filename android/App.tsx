@@ -13,6 +13,7 @@ import { initAppLock, useLockEnabled, isAuthInProgress, isSystemUiInProgress } f
 import { LockScreen } from './src/components/LockScreen';
 import { Tour } from './src/components/Tour';
 import { HelpScreen } from './src/components/HelpScreen';
+import { DialogHost } from './src/components/DialogHost';
 import { AchievementToast } from './src/components/AchievementToast';
 import { initTour, tourSeen, isTourActive, startTour, useTourLoaded } from './src/tour';
 import { initAchievements } from './src/achievements';
@@ -184,6 +185,7 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <Root />
+        <DialogHost />
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

@@ -1,9 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { showAlert } from '../dialog';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, Alert, Modal, TextInput, ScrollView,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Modal, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -183,7 +181,7 @@ export default function HomeScreen() {
   };
 
   const deleteExpense = (id: string) => {
-    Alert.alert('Удалить расход?', undefined, [
+    showAlert('Удалить расход?', undefined, [
       { text: 'Отмена', style: 'cancel' },
       {
         text: 'Удалить', style: 'destructive',
@@ -218,7 +216,7 @@ export default function HomeScreen() {
   const saveEdit = async () => {
     if (!editing) return;
     const amt = parseFloat(editAmt.replace(',', '.'));
-    if (isNaN(amt) || amt <= 0) { Alert.alert('Некорректная сумма'); return; }
+    if (isNaN(amt) || amt <= 0) { showAlert('Некорректная сумма'); return; }
     setSavingEdit(true);
     try {
       await expApi.update(editing.id, {
@@ -230,7 +228,7 @@ export default function HomeScreen() {
       setEditing(null);
       fetchDay(date);
     } catch (e) {
-      Alert.alert('Ошибка', String(e));
+      showAlert('Ошибка', String(e));
     } finally {
       setSavingEdit(false);
     }
@@ -314,7 +312,7 @@ export default function HomeScreen() {
         <FlatList
           data={dRows}
           keyExtractor={e => e.id}
-          refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
+          refreshControl={isCenter ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[t.primary]} progressBackgroundColor={t.surface} tintColor={t.primary} /> : undefined}
           contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}>
