@@ -2816,7 +2816,10 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
    Позы и движения частей считает риг (finik-rig.js, 1:1 с приложением):
    драйвер в app.js каждый кадр задаёт им transform/opacity. Здесь — только
    размеры, раскладка и перемещение обёрток (ходок по кнопкам, пробежка). */
-.finik { display: inline-block; line-height: 0; cursor: pointer; }
+.finik { display: inline-block; line-height: 0; cursor: pointer;
+  /* без системной подсветки тапа (синий прямоугольник) и выделения при долгом нажатии */
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.finik:focus, .finik-svg:focus { outline: none; }
 .finik-svg { width: 100%; height: auto; overflow: visible; display: block; }
 .finik-sm { width: 66px; }
 .finik-md { width: 120px; }
@@ -2835,7 +2838,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, [tabindex]:focus-vi
 .bablometr-verdict-row .bar-finik { position: absolute; left: 8px; bottom: -4px; width: 82px; }
 
 /* FAB как Финик с плюсиком */
-.fab--finik { background: none; box-shadow: none; animation: none; width: 70px; height: 74px; border-radius: 0; }
+.fab--finik { background: none; box-shadow: none; animation: none; width: 70px; height: 74px; border-radius: 0; -webkit-tap-highlight-color: transparent; }
 .fab--finik:hover { box-shadow: none; }
 .fab--finik .finik { width: 100%; }
 
