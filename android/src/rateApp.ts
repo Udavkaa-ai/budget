@@ -32,11 +32,18 @@ function askNow() {
     'Если приложение помогает вести семейный бюджет — поставьте, пожалуйста, оценку в RuStore. Это очень поможет проекту 🟣',
     [
       { text: 'Не сейчас',      style: 'cancel',      onPress: () => { void snooze(); } },
-      { text: 'Не показывать',  style: 'destructive', onPress: () => { void markNever(); } },
-      { text: '⭐ Оценить',      onPress: () => { void markDone(); void openRuStoreListing(); } },
+      { text: '⭐ Оценить в RuStore', onPress: () => { void markDone(); void openRuStoreListing(); } },
+      { text: 'Больше не спрашивать', style: 'destructive', onPress: () => { void markNever(); } },
     ],
     { cancelable: true, onDismiss: () => { void snooze(); } },
   );
+}
+
+// Сразу после обновления приложения — если ещё не оценили и не отказались
+export async function askRatingAfterUpdate() {
+  const status = await get(STATUS);
+  if (status === 'done' || status === 'never') return;
+  askNow();
 }
 
 // Вызывать после заметного позитивного действия (например, добавления расхода).

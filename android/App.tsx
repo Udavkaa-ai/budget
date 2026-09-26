@@ -24,6 +24,7 @@ import { AppNavigator, navigationRef, goToTab } from './src/navigation';
 import { requestQuickAdd } from './src/quickAdd';
 import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
+import { checkUpdateNotices } from './src/updateNotices';
 import { initClassifier } from './src/classifier';
 import { importSeed } from './src/classifier/db';
 import { initPremium } from './src/premium';
@@ -91,6 +92,16 @@ function Root() {
     if (user && tourReady && !tourSeen() && !isTourActive()) startTour();
   }, [user, tourReady]);
 
+  // После обновления версии: просьба оценить в RuStore + рассказ о веб-версии.
+  // Ждём разблокировки, чтобы окна не легли поверх экрана PIN-кода.
+  const ready = !!user && tourReady && (!lockEnabled || unlocked);
+  useEffect(() => {
+    if (!ready) return;
+    const existing = tourSeen() && !isTourActive();
+    const id = setTimeout(() => { checkUpdateNotices(existing).catch(() => {}); }, 1200);
+    return () => clearTimeout(id);
+  }, [ready]);
+
   // Блокируем заново при уходе в фон. Игнорируем ложный уход в фон, вызванный
   // системным окном биометрии или выбором фото/камерой (иначе промпт «мигает»
   // и не срабатывает, а скан чека сбрасывается на экран разблокировки).
@@ -153,7 +164,7 @@ function Root() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color="#5947E0" />
       </View>
     );
   }
