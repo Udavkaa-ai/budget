@@ -1233,23 +1233,57 @@ export function setUserPushEnabled(userId, family, enabled) {
 }
 
 
-// ─── Поддержка: сообщения пользователей разработчику ────────────────────────
-// Видны только в админ-панели; пуш о новом сообщении — только администраторам.
+// ─── Поддержка: переписка пользователя с разработчиком ───────────────────────
+// Одна лента сообщений; переписка пользователя — все записи с его login.
+// from: 'user' (read — прочитано админом) | 'admin' (seen — увидено пользователем).
+// Видна только в админ-панели и самому пользователю; пуш о вопросе — только
+// администраторам, об ответе — только автору вопроса.
+function newSupportId() { return `sup_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`; }
+
 export function addSupportMessage({ login, name, family, text, platform, appVersion }) {
   if (!data.supportMessages) data.supportMessages = [];
   const msg = {
-    id: `sup_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    login, name, family: fam(family), text, platform: platform || 'web', appVersion: appVersion || '',
-    createdAt: new Date().toISOString(), read: false,
+    id: newSupportId(), from: 'user', login, name, family: fam(family), text,
+    platform: platform || 'web', appVersion: appVersion || '', createdAt: new Date().toISOString(), read: false,
   };
   data.supportMessages.unshift(msg);
-  if (data.supportMessages.length > 1000) data.supportMessages.length = 1000; // не растём бесконечно
+  if (data.supportMessages.length > 2000) data.supportMessages.length = 2000; // не растём бесконечно
+  debouncedSave();
+  return msg;
+}
+
+// Ответ разработчика в переписку пользователя login
+export function addSupportReply(login, text, adminName) {
+  const thread = (data.supportMessages || []).filter(m => m.login === login);
+  const lastUser = thread.find(m => (m.from || 'user') === 'user');
+  if (!lastUser) return null;
+  const msg = {
+    id: newSupportId(), from: 'admin', login, name: lastUser.name, family: lastUser.family, text,
+    adminName: adminName || 'Разработчик', createdAt: new Date().toISOString(), seen: false,
+  };
+  data.supportMessages.unshift(msg);
+  thread.forEach(m => { if ((m.from || 'user') === 'user') m.read = true; }); // ответил — значит прочитал
   debouncedSave();
   return msg;
 }
 
 export function listSupportMessages() {
-  return data.supportMessages || [];
+  return (data.supportMessages || []).map(m => ({ from: 'user', ...m }));
+}
+
+// Переписка пользователя — по времени, от старых к новым
+export function getSupportThread(login) {
+  return listSupportMessages().filter(m => m.login === login).reverse();
+}
+
+export function countUnseenSupportReplies(login) {
+  return (data.supportMessages || []).filter(m => m.login === login && m.from === 'admin' && !m.seen).length;
+}
+
+export function markSupportRepliesSeen(login) {
+  let changed = false;
+  (data.supportMessages || []).forEach(m => { if (m.login === login && m.from === 'admin' && !m.seen) { m.seen = true; changed = true; } });
+  if (changed) debouncedSave();
 }
 
 export function setSupportMessageRead(id, read) {
@@ -1266,6 +1300,12 @@ export function deleteSupportMessage(id) {
   if (data.supportMessages.length === before) return false;
   debouncedSave();
   return true;
+}
+
+// Веб-подписки конкретного пользователя (по имени или логину и семье)
+export function getUserPushSubscriptions(name, login, family) {
+  const f = fam(family);
+  return (data.pushSubscriptions || []).filter(s => s.family === f && (s.userId === name || s.userId === login));
 }
 
 // Подписки на пуши только пользователей-администраторов (по имени и семье,
