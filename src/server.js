@@ -89,7 +89,7 @@ import {
   addSupportReply,
   getSupportThread,
   countUnseenSupportReplies,
-  markSupportRepliesSeen,
+  markSupportRepliesSeen, closeSupportThread,
   getUserPushSubscriptions,
   listSupportMessages,
   setSupportMessageRead,
@@ -1027,6 +1027,10 @@ app.get('/api/support/unread', authMiddleware, (req, res) => {
 app.post('/api/support/seen', authMiddleware, (req, res) => {
   markSupportRepliesSeen(req.user.login);
   res.json({ ok: true });
+});
+// Закрыть диалог: переписка пропадает у пользователя, у разработчика остаётся
+app.post('/api/support/close', authMiddleware, (req, res) => {
+  res.json({ ok: true, hidden: closeSupportThread(req.user.login) });
 });
 
 // Ответ разработчика: попадает в переписку пользователя, пуш — только ему

@@ -1271,9 +1271,23 @@ export function listSupportMessages() {
   return (data.supportMessages || []).map(m => ({ from: 'user', ...m }));
 }
 
-// Переписка пользователя — по времени, от старых к новым
+// Переписка пользователя — по времени, от старых к новым. Сообщения из
+// «закрытого» диалога пользователь больше не видит (у админа они остаются).
 export function getSupportThread(login) {
-  return listSupportMessages().filter(m => m.login === login).reverse();
+  return listSupportMessages().filter(m => m.login === login && !m.hiddenForUser).reverse();
+}
+
+// Пользователь закрыл диалог: прячем у него всю текущую переписку. Новое
+// сообщение или ответ разработчика начнут переписку заново.
+export function closeSupportThread(login) {
+  let n = 0;
+  (data.supportMessages || []).forEach(m => {
+    if (m.login !== login || m.hiddenForUser) return;
+    m.hiddenForUser = true; n++;
+    if (m.from === 'admin') m.seen = true;
+  });
+  if (n) debouncedSave();
+  return n;
 }
 
 export function countUnseenSupportReplies(login) {

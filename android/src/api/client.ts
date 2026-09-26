@@ -376,6 +376,7 @@ export const support = {
   thread: () => api.get<{ messages: SupportMessage[]; unread: number }>('/api/support'),
   unread: () => api.get<{ unread: number }>('/api/support/unread'),
   seen: () => api.post<{ ok: boolean }>('/api/support/seen', {}),
+  close: () => api.post<{ ok: boolean }>('/api/support/close', {}),
 };
 
 export const pushSettings = {

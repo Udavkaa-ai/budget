@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Toggle } from '../components/UI';
 import { showAlert } from '../dialog';
+import { haptics } from '../haptics';
 import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -112,6 +113,18 @@ export default function SettingsScreen() {
     } catch { /* офлайн — покажем позже */ }
   }, []);
   useFocusEffect(React.useCallback(() => { loadSupportThread(); }, [loadSupportThread]));
+  // Закрыть диалог: переписка пропадает из настроек (у разработчика остаётся)
+  const closeSupport = () => showAlert(
+    'Закрыть диалог?',
+    'Переписка пропадёт из настроек. Если понадобится — просто напишите снова, начнётся новый диалог.',
+    [
+      { text: 'Отмена', style: 'cancel' },
+      { text: 'Закрыть', onPress: async () => {
+        try { await supportApi.close(); setSupportThread([]); setSupportUnread(0); haptics.success(); }
+        catch { showAlert('Не удалось закрыть диалог', 'Проверьте соединение и попробуйте ещё раз.'); }
+      } },
+    ],
+  );
   const [recurringVisible, setRecurringVisible] = useState(false);
 
   const [familyName, setFamilyName] = useState('');
@@ -913,6 +926,9 @@ export default function SettingsScreen() {
                   </View>
                 );
               })}
+              <TouchableOpacity onPress={closeSupport} style={{ alignSelf: 'flex-end', paddingVertical: 6, paddingHorizontal: 2 }} accessibilityRole="button">
+                <Text style={{ color: t.textMuted, fontSize: 13, fontWeight: '600' }}>Закрыть диалог</Text>
+              </TouchableOpacity>
             </View>
           )}
           <TextInput
@@ -930,7 +946,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <SectionTitle>О приложении</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.25.1'} A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.25.2'} A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.
