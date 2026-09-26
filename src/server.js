@@ -1465,11 +1465,14 @@ app.post('/api/analyze', authMiddleware, async (req, res) => {
     const dailyPlan   = Math.round(paceBase / daysInMonth);
     const projected   = Math.round(cur.total / daysElapsed * daysInMonth);
     const projVsPlan  = Math.round(projected / paceBase * 100);
-    const verdict = paceRatio >= 115
-      ? `ОПЕРЕЖЕНИЕ ГРАФИКА — потрачено ${paceRatio}% от нормы на этот день (на ${(cur.total - expectedNow).toLocaleString('ru')} ₽ больше ожидаемого), есть риск перерасхода`
-      : paceRatio <= 85
-        ? `отставание от графика — ${paceRatio}% от нормы на этот день (пока укладываемся в план)`
-        : `в графике — ${paceRatio}% от нормы на этот день`;
+    // Зоны совпадают со спидометром в клиентах: ≤85 / 85–100 / 100–110 / >110
+    const verdict = paceRatio > 110
+      ? `ПЕРЕРАСХОД ПО ТЕМПУ — потрачено ${paceRatio}% от нормы на этот день (на ${(cur.total - expectedNow).toLocaleString('ru')} ₽ больше ожидаемого), при таком темпе план будет превышен`
+      : paceRatio > 100
+        ? `чуть выше графика — ${paceRatio}% от нормы на этот день (на ${(cur.total - expectedNow).toLocaleString('ru')} ₽ больше ожидаемого), стоит притормозить`
+        : paceRatio <= 85
+          ? `экономим — ${paceRatio}% от нормы на этот день (укладываемся в план с запасом)`
+          : `в графике — ${paceRatio}% от нормы на этот день`;
     // Все цифры уже посчитаны в коде. ИИ должен пересказать их своими словами,
     // НЕ пересчитывая (модель регулярно берёт «10» из графика выплат «аванс к 10-му»
     // и делит на него, вместо реального числа прошедших дней).
