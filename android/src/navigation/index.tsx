@@ -1,8 +1,9 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { SvgXml } from 'react-native-svg';
+import { tabIconXml, type TabIconName } from '../tabIcons';
 import { useTheme } from '../theme';
 import { useBlocks } from '../blocks';
 import { haptics } from '../haptics';
@@ -22,13 +23,22 @@ import { FinikWander } from '../components/FinikWander';
 
 const Tab = createBottomTabNavigator();
 
-type IonName = React.ComponentProps<typeof Ionicons>['name'];
-
-// Единый набор иконок (Ionicons): заливка на активной вкладке, контур на неактивной
-function tabIcon(base: string) {
-  return ({ focused, color }: { focused: boolean; color: string }) => (
-    <Ionicons name={(focused ? base : `${base}-outline`) as IonName} size={23} color={color} />
+// Свои иконки в стиле Финика: активная — в цвете с лёгким «пружинящим» увеличением,
+// неактивные — приглушённый силуэт (1:1 с вебом).
+function TabIcon({ name, focused }: { name: TabIconName; focused: boolean }) {
+  const t = useTheme();
+  const scale = useRef(new Animated.Value(focused ? 1.12 : 1)).current;
+  useEffect(() => {
+    Animated.spring(scale, { toValue: focused ? 1.12 : 1, friction: 4, tension: 160, useNativeDriver: true }).start();
+  }, [focused, scale]);
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <SvgXml xml={tabIconXml(name, focused, t.textMuted, t.tabBar)} width={26} height={26} />
+    </Animated.View>
   );
+}
+function tabIcon(name: TabIconName) {
+  return ({ focused }: { focused: boolean }) => <TabIcon name={name} focused={focused} />;
 }
 
 export function AppNavigator() {
@@ -56,18 +66,18 @@ export function AppNavigator() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: 'Бюджет', tabBarIcon: tabIcon('wallet') }}
+        options={{ tabBarLabel: 'Бюджет', tabBarIcon: tabIcon('budget') }}
       />
       <Tab.Screen
         name="Summary"
         component={SummaryScreen}
-        options={{ tabBarLabel: 'Месяц', tabBarIcon: tabIcon('pie-chart') }}
+        options={{ tabBarLabel: 'Месяц', tabBarIcon: tabIcon('month') }}
       />
       {blocks.chartTab && (
         <Tab.Screen
           name="Chart"
           component={ChartScreen}
-          options={{ tabBarLabel: 'График', tabBarIcon: tabIcon('trending-up') }}
+          options={{ tabBarLabel: 'График', tabBarIcon: tabIcon('chart') }}
         />
       )}
       <Tab.Screen
@@ -79,7 +89,7 @@ export function AppNavigator() {
         <Tab.Screen
           name="Goals"
           component={GoalsScreen}
-          options={{ tabBarLabel: 'Цели', tabBarIcon: tabIcon('flag') }}
+          options={{ tabBarLabel: 'Цели', tabBarIcon: tabIcon('goals') }}
         />
       )}
     </Tab.Navigator>
