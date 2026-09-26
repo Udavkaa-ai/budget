@@ -90,6 +90,7 @@ import {
   getSupportThread,
   countUnseenSupportReplies,
   markSupportRepliesSeen, closeSupportThread,
+  listSupportThreads, markSupportThreadRead, deleteSupportThread, getSupportThreadAdmin,
   getUserPushSubscriptions,
   listSupportMessages,
   setSupportMessageRead,
@@ -1051,6 +1052,22 @@ app.post('/api/admin/support/reply', authMiddleware, adminMiddleware, async (req
     }).catch(() => {});
   }
   res.json({ ok: true, id: msg.id });
+});
+
+// Мессенджер поддержки: список чатов, переписка, прочтение, удаление
+app.get('/api/admin/support/threads', authMiddleware, adminMiddleware, (_req, res) => {
+  const threads = listSupportThreads().map(t => ({ ...t, familyName: getFamilyBudgetSettings(t.family)?.familyName || '' }));
+  res.json({ threads, unread: threads.reduce((s, t) => s + t.unread, 0) });
+});
+app.get('/api/admin/support/thread/:login', authMiddleware, adminMiddleware, (req, res) => {
+  res.json({ messages: getSupportThreadAdmin(req.params.login) });
+});
+app.post('/api/admin/support/thread/:login/read', authMiddleware, adminMiddleware, (req, res) => {
+  res.json({ ok: true, marked: markSupportThreadRead(req.params.login) });
+});
+app.delete('/api/admin/support/thread/:login', authMiddleware, adminMiddleware, (req, res) => {
+  if (!deleteSupportThread(req.params.login)) return res.status(404).json({ error: 'Не найдено' });
+  res.json({ ok: true });
 });
 
 app.get('/api/admin/support', authMiddleware, adminMiddleware, (_req, res) => {

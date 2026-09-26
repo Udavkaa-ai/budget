@@ -419,7 +419,8 @@
         <!-- Панель администратора — видна только администраторам -->
         <!-- Кнопка панели администратора — только для adminов -->
         <div class="settings-section hidden" id="admin-panel-btn-section">
-          <button id="btn-open-admin" class="btn btn-outline btn-full">Панель администратора <span id="admin-support-badge" class="count-badge hidden"></span></button>
+          <button id="btn-open-inbox" class="btn btn-primary btn-full inbox-open-btn">Сообщения поддержки <span id="admin-support-badge" class="count-badge hidden"></span></button>
+          <button id="btn-open-admin" class="btn btn-outline btn-full" style="margin-top:8px">Панель администратора</button>
         </div>
 
         <!-- Принудительное обновление — только для администраторов -->
@@ -735,6 +736,30 @@
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/hammer.min.js"></script>
 <script src="/vendor/chartjs-plugin-zoom.min.js"></script>
+<!-- Мессенджер поддержки (только для администратора) -->
+<div id="support-inbox" class="inbox hidden" role="dialog" aria-modal="true" aria-label="Сообщения поддержки">
+  <section class="inbox-list">
+    <header class="inbox-head">
+      <button class="icon-btn inbox-x" data-act="close" aria-label="Закрыть">✕</button>
+      <div class="inbox-title">Поддержка <span class="inbox-total count-badge hidden"></span></div>
+      <button class="icon-btn inbox-bell" data-act="push" aria-label="Уведомления на это устройство" title="Уведомления на это устройство">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+      </button>
+    </header>
+    <div class="inbox-tools">
+      <input class="inbox-search" type="search" placeholder="Поиск по нику, логину или семье" autocomplete="off">
+      <div class="inbox-filters">
+        <button class="pill active" data-filter="all">Все</button>
+        <button class="pill" data-filter="unread">Непрочитанные</button>
+      </div>
+    </div>
+    <div class="inbox-chats"></div>
+  </section>
+  <section class="inbox-chat">
+    <div class="inbox-empty">Выберите чат слева</div>
+  </section>
+</div>
+
 <!-- Admin panel overlay -->
 <div id="admin-overlay" class="sheet-overlay hidden"></div>
 <div id="admin-panel" class="admin-panel hidden">
