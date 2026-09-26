@@ -482,6 +482,7 @@ async function renderAdminSupport(box) {
             ${tUnread.length ? `<button class="btn btn-ghost sup-mark" data-ids="${tUnread.map(m => esc(m.id)).join(',')}">Прочитано</button>` : ''}
           </div>
           <div class="sup-bubbles">${arr.slice().reverse().map(bubble).join('')}</div>
+          ${arr[0].hiddenForUser ? '<p class="settings-hint sup-closed">Пользователь закрыл диалог — ответ начнёт у него новую переписку.</p>' : ''}
           <div class="sup-reply">
             <textarea rows="2" maxlength="4000" placeholder="Ответить: ${esc(who.name)}"></textarea>
             <button class="btn btn-primary sup-send">Ответить</button>
@@ -529,6 +530,18 @@ function setSupportDot(n) {
 async function refreshSupportUnread() {
   try { const r = await apiJson('GET', '/api/support/unread'); setSupportDot(r?.unread || 0); } catch { /* не критично */ }
 }
+// Закрыть диалог: переписка исчезает из настроек (у разработчика остаётся).
+// Новое сообщение начнёт диалог заново.
+async function closeSupportThread() {
+  if (!(await uiConfirm('Закрыть диалог?', 'Переписка пропадёт из настроек. Если понадобится — просто напишите снова, начнётся новый диалог.', { ok: 'Закрыть' }))) return;
+  try {
+    await apiJson('POST', '/api/support/close');
+    setSupportDot(0);
+    await loadSupportThread();
+    showToastSuccess('Диалог закрыт');
+  } catch { showToastError('Не удалось закрыть диалог'); }
+}
+
 async function loadSupportThread() {
   const box = document.getElementById('support-thread');
   if (!box) return;
@@ -536,6 +549,7 @@ async function loadSupportThread() {
     const r = await apiJson('GET', '/api/support');
     const msgs = r?.messages || [];
     box.classList.toggle('hidden', !msgs.length);
+    document.getElementById('btn-support-close')?.classList.toggle('hidden', !msgs.length);
     box.innerHTML = msgs.map(m => `
       <div class="sup-bubble sup-bubble--${m.from === 'admin' ? 'them' : 'me'}${m.from === 'admin' && !m.seen ? ' unread' : ''}">
         <div class="sup-bubble-text">${esc(m.text)}</div>
@@ -2294,11 +2308,10 @@ function renderE2ESection() {
 }
 
 async function doEnableE2E() {
-  const ok = confirm(
-    'Включить сквозное шифрование?\n\n' +
+  const ok = await uiConfirm('Включить сквозное шифрование?',
     'После включения расходы будут шифроваться на устройстве, и сервер не сможет их прочитать.\n\n' +
-    '⚠️ ВАЖНО: ключ хранится только на ваших устройствах. Если вы его потеряете — данные будет НЕВОЗМОЖНО восстановить. Сразу после включения сохраните ключ в надёжном месте.'
-  );
+    'Важно: ключ хранится только на ваших устройствах. Если вы его потеряете — данные будет НЕВОЗМОЖНО восстановить. Сразу после включения сохраните ключ в надёжном месте.',
+    { ok: 'Включить' });
   if (!ok) return;
 
   const btn = document.getElementById('btn-e2e-enable');
@@ -2332,7 +2345,7 @@ async function showE2EKey(phrase) {
 }
 
 async function doImportE2EKey() {
-  const hex = prompt('Вставьте ключ семьи (64 символа), полученный с другого устройства:');
+  const hex = await uiPrompt('Ключ с другого устройства', 'Вставьте ключ семьи (64 символа), полученный с другого устройства.', { placeholder: 'ключ семьи', ok: 'Сохранить' });
   if (!hex) return;
   const clean = (hex || '').trim().toLowerCase().replace(/[^0-9a-f]/g, '');
   if (clean.length !== 64) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
@@ -2341,7 +2354,7 @@ async function doImportE2EKey() {
   const fp = await E2E.fingerprintOfHex(clean);
   const familyFp = await E2E.familyFingerprint();
   if (familyFp && fp && familyFp !== fp) {
-    if (!confirm(`⚠️ Ключ не от этой семьи.\n\nОтпечаток введённого ключа (${fp}) не совпадает с ключом семьи (${familyFp}).\n\nЕсли всё равно сохранить — ваши записи не увидят другие участники, а их записи не увидите вы. Скопируйте фразу точь-в-точь с устройства, где данные открываются правильно.\n\nВсё равно сохранить?`)) return;
+    if (!(await uiConfirm('Ключ не от этой семьи', `Отпечаток введённого ключа (${fp}) не совпадает с ключом семьи (${familyFp}).\n\nЕсли всё равно сохранить — ваши записи не увидят другие участники, а их записи не увидите вы. Скопируйте фразу точь-в-точь с устройства, где данные открываются правильно.`, { ok: 'Всё равно сохранить', danger: true }))) return;
   }
   const ok = await E2E.importKeyHex(clean);
   if (!ok) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
@@ -2503,7 +2516,7 @@ async function openAdminPanel(month, year) {
           ${u.login === currentUser.login ? 'disabled style="opacity:.3;cursor:default"' : ''}>✕</button>
       `;
       row.querySelector('.admin-user-del').addEventListener('click', async () => {
-        if (!confirm(`Удалить пользователя ${u.name}?`)) return;
+        if (!(await uiConfirm(`Удалить пользователя ${u.name}?`, '', { ok: 'Удалить', danger: true }))) return;
         const res = await apiJson('DELETE', `/api/admin/users/${encodeURIComponent(u.login)}`);
         if (res.ok) { showToastSuccess('Удалён'); openAdminPanel(); }
         else showToastError(res.error || 'Ошибка');
@@ -2710,7 +2723,7 @@ function renderCustomCategoriesList() {
   box.querySelectorAll('.btn-cat-del').forEach(btn => {
     btn.addEventListener('click', async () => {
       const name = btn.dataset.name;
-      if (!confirm(`Удалить «${name}»? Все её расходы будут перенесены в «Прочее».`)) return;
+      if (!(await uiConfirm(`Удалить «${name}»?`, 'Все её расходы будут перенесены в «Прочее».', { ok: 'Удалить', danger: true }))) return;
       try {
         const r = await apiJson('DELETE', `/api/categories/${encodeURIComponent(name)}`);
         showToastSuccess(r.moved ? `Категория удалена, перенесено расходов: ${r.moved}` : 'Категория удалена');
@@ -3066,7 +3079,7 @@ function buildExpenseItem(exp, canEdit, { showDate = false, showCategory = true,
 }
 
 async function deleteExpenseUI(id, itemEl) {
-  if (!confirm('Удалить этот расход?')) return;
+  if (!(await uiConfirm('Удалить этот расход?', '', { ok: 'Удалить', danger: true }))) return;
   itemEl.style.opacity = '0.4';
   try {
     const res = await apiJson('DELETE', `/api/expenses/${id}`);
@@ -3590,7 +3603,7 @@ function setupEventListeners() {
   });
   document.getElementById('btn-e2e-dedupe')?.addEventListener('click', async () => {
     if (!E2E.active()) { showToastError('Доступно только при включённом шифровании'); return; }
-    if (!confirm('Убрать задвоенные расходы (оставив по одному)? Изменения синхронизируются на все устройства семьи.')) return;
+    if (!(await uiConfirm('Убрать задвоенные расходы?', 'Оставим по одному. Изменения синхронизируются на все устройства семьи.', { ok: 'Убрать' }))) return;
     try {
       const n = await E2E.dedupeExpenses();
       showToastSuccess(n ? `Удалено дубликатов: ${n}` : 'Дубликатов не найдено');
@@ -3682,6 +3695,7 @@ function setupEventListeners() {
 
   // Принудительное обновление у всех пользователей
   document.getElementById('btn-open-admin').addEventListener('click', () => openAdminPanel());
+  document.getElementById('btn-support-close')?.addEventListener('click', closeSupportThread);
   document.getElementById('btn-support-send')?.addEventListener('click', sendSupportMessage);
   document.getElementById('btn-close-admin').addEventListener('click', () => closeAdminPanel());
   document.getElementById('admin-overlay').addEventListener('click', () => closeAdminPanel());
@@ -4584,7 +4598,7 @@ async function contributeToGoal() {
 }
 
 async function deleteGoalById(id) {
-  if (!confirm('Удалить копилку?')) return;
+  if (!(await uiConfirm('Удалить копилку?', '', { ok: 'Удалить', danger: true }))) return;
   try {
     await apiJson('DELETE', `/api/goals/${id}`);
     loadGoalsList();
@@ -4957,10 +4971,10 @@ async function recPay(id) {
   finally { recBusy = false; renderRecurring(); }
 }
 
-function recDelete(id) {
+async function recDelete(id) {
   const item = recItems.find(i => i.id === id);
   if (!item) return;
-  if (!confirm(`Удалить «${item.name}»?`)) return;
+  if (!(await uiConfirm(`Удалить «${item.name}»?`, '', { ok: 'Удалить', danger: true }))) return;
   recItems = recItems.filter(i => i.id !== id);
   recPersist();
   renderRecurring();
@@ -5207,6 +5221,51 @@ function initHelpAndTour() {
   let seen = false;
   try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch { seen = true; }
   if (!seen) setTimeout(startTour, 1200);
+}
+
+// ─── ДИАЛОГИ ──────────────────────────────────────────────────────────────────
+// Фирменные окна вместо системных confirm()/prompt() (1:1 с приложением,
+// android/src/components/DialogHost.tsx). Возвращают Promise.
+function uiDialog({ title, text = '', buttons, input = null }) {
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.className = 'ui-dialog';
+    wrap.innerHTML = `
+      <div class="ui-dialog-card" role="dialog" aria-modal="true" aria-labelledby="ui-dialog-title">
+        <div class="ui-dialog-clasp"><i></i><i></i></div>
+        <div class="ui-dialog-title" id="ui-dialog-title">${esc(title)}</div>
+        ${text ? `<div class="ui-dialog-text">${esc(text)}</div>` : ''}
+        ${input ? `<input class="ui-dialog-input" type="text" placeholder="${esc(input.placeholder || '')}" autocomplete="off" spellcheck="false">` : ''}
+        <div class="ui-dialog-btns">${buttons.map((b, i) => `<button class="btn ${b.kind === 'danger' ? 'btn-danger' : b.kind === 'primary' ? 'btn-primary' : 'btn-secondary'}" data-i="${i}">${esc(b.label)}</button>`).join('')}</div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const field = wrap.querySelector('.ui-dialog-input');
+    const close = v => { document.removeEventListener('keydown', onKey); wrap.classList.add('closing'); setTimeout(() => wrap.remove(), 160); resolve(v); };
+    const cancelVal = buttons.find(b => b.cancel)?.value ?? null;
+    const onKey = e => {
+      if (e.key === 'Escape') close(cancelVal);
+      if (e.key === 'Enter' && field && document.activeElement === field) close(field.value);
+    };
+    document.addEventListener('keydown', onKey);
+    wrap.addEventListener('click', e => { if (e.target === wrap) close(cancelVal); });
+    wrap.querySelectorAll('.ui-dialog-btns button').forEach(btn => btn.addEventListener('click', () => {
+      const b = buttons[+btn.dataset.i];
+      close(b.value === '__input' ? (field?.value ?? '') : b.value);
+    }));
+    setTimeout(() => (field || wrap.querySelector('.btn-primary, .btn-danger'))?.focus(), 50);
+  });
+}
+function uiConfirm(title, text = '', { ok = 'Да', cancel = 'Отмена', danger = false } = {}) {
+  return uiDialog({ title, text, buttons: [
+    { label: cancel, value: false, cancel: true },
+    { label: ok, value: true, kind: danger ? 'danger' : 'primary' },
+  ] });
+}
+function uiPrompt(title, text = '', { placeholder = '', ok = 'Готово' } = {}) {
+  return uiDialog({ title, text, input: { placeholder }, buttons: [
+    { label: 'Отмена', value: null, cancel: true },
+    { label: ok, value: '__input', kind: 'primary' },
+  ] });
 }
 
 // ─── PULL TO REFRESH ──────────────────────────────────────────────────────────
