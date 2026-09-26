@@ -530,19 +530,6 @@ html, body {
 .btn-delete:hover { color: var(--danger); background: var(--danger-soft); }
 .btn-edit:hover { color: var(--primary); background: var(--primary-light); }
 
-.beauty-candidate-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-}
-.beauty-candidate-row input[type=checkbox] { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; }
-.beauty-candidate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.beauty-candidate-desc { font-size: 14px; font-weight: 500; color: var(--text); }
-.beauty-candidate-meta { font-size: 12px; color: var(--text-muted); }
-.beauty-cat-old { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
 
 .empty-state {
   text-align: center;
@@ -3001,3 +2988,64 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--p
 .btn-secondary:hover { background: var(--primary-soft); color: var(--primary); }
 .btn-secondary:active, .btn-outline:active, .btn-danger:active { transform: scale(0.97); }
 .btn-ghost { background: transparent; color: var(--primary); border: none; }
+
+/* ── Поддержка ──────────────────────────────────────────────────────────── */
+.count-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px;
+  border-radius: var(--r-pill); background: var(--danger); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0; vertical-align: middle; }
+.admin-support { margin-bottom: 18px; }
+.admin-support .admin-support-push { margin-bottom: 12px; }
+.support-msg { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px 8px; margin-bottom: 10px; }
+.support-msg.unread { border-color: var(--primary); background: var(--primary-soft); }
+.support-msg.unread::before { content: ""; position: absolute; top: 14px; right: 14px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); box-shadow: -8px 0 0 var(--gold); }
+.support-msg-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding-right: 28px; }
+.support-msg-head strong { color: var(--text); font-size: 15px; }
+.support-msg-head span { color: var(--text-muted); font-size: 12px; }
+.support-msg-time { display: block; color: var(--text-faint); font-size: 12px; margin-top: 2px; }
+.support-msg-text { color: var(--text); font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 4px; }
+.support-msg-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.support-msg-actions .btn { padding: 6px 10px; font-size: 13px; }
+
+/* ── Спидометр темпа трат ───────────────────────────────────────────────── */
+.gauge .speedometer-svg { max-width: 300px; margin: 4px auto 0; overflow: visible; }
+.gauge-label { font: 600 9.5px 'Onest', sans-serif; fill: var(--text-faint); }
+.gauge-plan { fill: var(--gold-deep); font-weight: 700; }
+.gauge-value-text { font: 800 30px 'Onest', sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.gauge-caption { font: 500 9.5px 'Onest', sans-serif; fill: var(--text-muted); }
+.gauge .bablometr-verdict-row { min-height: 84px; margin-top: 2px; }
+.gauge-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: var(--r-pill);
+  font-size: 14px; font-weight: 700; margin: 0; }
+.gauge-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.gauge-chip--good { background: var(--success-soft); color: var(--success); }
+.gauge-chip--ok   { background: var(--primary-soft); color: var(--primary); }
+.gauge-chip--over { background: var(--danger-soft); color: var(--danger); }
+.bablometr-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 6px; gap: 2px; }
+.bablometr-stat-value { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text); }
+.bablometr-stat-value.is-over { color: var(--danger); }
+.gauge-foot { margin-top: 10px; text-align: center; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.bablometr-stat { justify-content: space-between; }
+.gauge-label.gauge-plan { fill: var(--gold-deep); font-weight: 800; }
+
+/* ── Экран «График»: карточки с одной шкалой ────────────────────────────── */
+.chart-cards { display: flex; flex-direction: column; gap: 12px; }
+.chart-cards .card { margin-bottom: 0; }
+.chart-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.chart-card-head .settings-title { margin: 0; }
+.chart-card-head .gauge-chip { font-size: 12px; padding: 4px 10px; }
+.chart-card-meta { font-size: 13px; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chart-card-meta.is-over { color: var(--danger); }
+.chart-kpis { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; }
+.chart-kpi { display: flex; flex-direction: column; gap: 2px; }
+.chart-kpi-label { font-size: 12px; color: var(--text-muted); }
+.chart-kpi-value { font-size: 18px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.chart-kpi-value.is-over { color: var(--danger); }
+.chart-box { position: relative; height: 190px; }
+.chart-box--hero { height: 220px; }
+.chart-box--sm { height: 160px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend i { display: inline-block; flex: none; }
+.lg-line { width: 16px; height: 3px; border-radius: 2px; background: var(--primary); }
+.lg-dash { width: 16px; height: 0; border-top: 2px dashed var(--text-faint); }
+.lg-dot { width: 16px; height: 0; border-top: 3px dotted var(--primary); opacity: 0.7; }
+.lg-sq { width: 10px; height: 10px; border-radius: 3px; }
+.lg-gold { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }

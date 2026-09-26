@@ -28,6 +28,7 @@ let data = {
   goals: [],
   invites: {},
   pushSubscriptions: [],
+  supportMessages: [],
   meta: { created: new Date().toISOString(), version: 1 }
 };
 
@@ -1229,4 +1230,49 @@ export function setUserPushEnabled(userId, family, enabled) {
   if (!s.pushEnabled) s.pushEnabled = {};
   s.pushEnabled[userId] = enabled;
   debouncedSave();
+}
+
+
+// ─── Поддержка: сообщения пользователей разработчику ────────────────────────
+// Видны только в админ-панели; пуш о новом сообщении — только администраторам.
+export function addSupportMessage({ login, name, family, text, platform, appVersion }) {
+  if (!data.supportMessages) data.supportMessages = [];
+  const msg = {
+    id: `sup_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    login, name, family: fam(family), text, platform: platform || 'web', appVersion: appVersion || '',
+    createdAt: new Date().toISOString(), read: false,
+  };
+  data.supportMessages.unshift(msg);
+  if (data.supportMessages.length > 1000) data.supportMessages.length = 1000; // не растём бесконечно
+  debouncedSave();
+  return msg;
+}
+
+export function listSupportMessages() {
+  return data.supportMessages || [];
+}
+
+export function setSupportMessageRead(id, read) {
+  const m = (data.supportMessages || []).find(x => x.id === id);
+  if (!m) return false;
+  m.read = !!read;
+  debouncedSave();
+  return true;
+}
+
+export function deleteSupportMessage(id) {
+  const before = (data.supportMessages || []).length;
+  data.supportMessages = (data.supportMessages || []).filter(x => x.id !== id);
+  if (data.supportMessages.length === before) return false;
+  debouncedSave();
+  return true;
+}
+
+// Подписки на пуши только пользователей-администраторов (по имени и семье,
+// как они сохраняются в savePushSubscription).
+export function getAdminPushSubscriptions() {
+  const admins = new Set((data.users || []).filter(u => u.isAdmin).flatMap(u => [
+    `${u.name}|${fam(u.family)}`, `${u.login}|${fam(u.family)}`,
+  ]));
+  return (data.pushSubscriptions || []).filter(s => admins.has(`${s.userId}|${s.family}`));
 }

@@ -85,6 +85,11 @@ import {
   listBackups,
   getBackup,
   deleteBackup,
+  addSupportMessage,
+  listSupportMessages,
+  setSupportMessageRead,
+  deleteSupportMessage,
+  getAdminPushSubscriptions,
 } from './storage.js';
 import { parseExpenses, parseImageExpenses, analyzeFinances, chatFinances, CATEGORIES } from './parser.js';
 import { generateChartImage } from './chart.js';
@@ -693,37 +698,7 @@ app.get('/api/chart', authMiddleware, async (req, res) => {
   }
 });
 
-// Кандидаты для перекатегоризации в "Красота"
-const BEAUTY_KEYWORDS = [
-  'маникюр','педикюр','стрижк','косметик','парфюм','шампун','тушь','помад',
-  'пудр','тональн','эпиляц','брови','ресниц','укладк','ботокс','лосьон',
-  'скраб','сыворотк','макияж','мейкап','спа','крем','ногт','салон красот',
-  'окраск волос','покраск волос','хайлайтер','консилер',
-];
 
-app.get('/api/beauty-candidates', authMiddleware, (req, res) => {
-  const candidates = getAllFamilyExpenses(req.user.family)
-    .filter(e => {
-      if (e.category === 'Красота') return false;
-      const desc = (e.description || '').toLowerCase();
-      return BEAUTY_KEYWORDS.some(kw => desc.includes(kw));
-    })
-    .map(e => ({ id: e.id, date: e.date, category: e.category, amount: e.amount, description: e.description, user: e.user }))
-    .sort((a, b) => b.date.localeCompare(a.date));
-  res.json({ candidates });
-});
-
-app.post('/api/beauty-recategorize', authMiddleware, async (req, res) => {
-  const { ids } = req.body || {};
-  if (!Array.isArray(ids) || ids.length === 0) return res.json({ updated: 0 });
-  let updated = 0;
-  for (const id of ids) {
-    const result = await updateExpense(id, { category: 'Красота' }, req.user.family);
-    if (result) updated++;
-  }
-  if (updated > 0) io.to(req.user.family).emit('expense:updated', { by: req.user.name });
-  res.json({ updated });
-});
 
 // Экспорт CSV
 app.get('/api/export', authMiddleware, (req, res) => {
@@ -1008,6 +983,47 @@ app.delete('/api/admin/users/:login', authMiddleware, adminMiddleware, async (re
 });
 
 // Принудительное обновление всех клиентов (или только одной семьи)
+// ─── Поддержка ────────────────────────────────────────────────────────────────
+// Пользователь пишет разработчику; сообщение видно только в админ-панели,
+// пуш о нём уходит ТОЛЬКО администраторам (их веб-подпискам).
+const supportRate = new Map(); // login → метки времени последних сообщений
+app.post('/api/support', authMiddleware, async (req, res) => {
+  const text = String(req.body?.text || '').trim();
+  if (text.length < 3) return res.status(400).json({ error: 'Напишите сообщение' });
+  if (text.length > 2000) return res.status(400).json({ error: 'Сообщение слишком длинное (до 2000 символов)' });
+  const now = Date.now();
+  const recent = (supportRate.get(req.user.login) || []).filter(t => now - t < 10 * 60 * 1000);
+  if (recent.length >= 5) return res.status(429).json({ error: 'Слишком много сообщений подряд — попробуйте через несколько минут' });
+  supportRate.set(req.user.login, [...recent, now]);
+
+  const platform = String(req.body?.platform || 'web').slice(0, 20);
+  const appVersion = String(req.body?.appVersion || '').slice(0, 30);
+  const msg = addSupportMessage({ login: req.user.login, name: req.user.name, family: req.user.family, text, platform, appVersion });
+
+  const subs = getAdminPushSubscriptions();
+  if (subs.length) {
+    sendPushToSubscriptions(subs, {
+      title: '💬 Новое сообщение в поддержку',
+      body: `${req.user.name}: ${text.length > 110 ? text.slice(0, 110) + '…' : text}`,
+      url: '/?admin=support',
+      tag: 'support',
+    }).catch(() => {});
+  }
+  res.json({ ok: true, id: msg.id });
+});
+
+app.get('/api/admin/support', authMiddleware, adminMiddleware, (_req, res) => {
+  res.json(listSupportMessages());
+});
+app.patch('/api/admin/support/:id', authMiddleware, adminMiddleware, (req, res) => {
+  if (!setSupportMessageRead(req.params.id, req.body?.read !== false)) return res.status(404).json({ error: 'Не найдено' });
+  res.json({ ok: true });
+});
+app.delete('/api/admin/support/:id', authMiddleware, adminMiddleware, (req, res) => {
+  if (!deleteSupportMessage(req.params.id)) return res.status(404).json({ error: 'Не найдено' });
+  res.json({ ok: true });
+});
+
 app.post('/api/admin/force-update', authMiddleware, adminMiddleware, (req, res) => {
   io.emit('app:update');
   console.log(`🔄 Принудительное обновление инициировано пользователем ${req.user.name}`);
