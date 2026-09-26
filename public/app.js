@@ -613,6 +613,49 @@ const SCREEN_TITLES = {
 
 let currentScreen = 'budget';
 
+// ─── Дизайн-система: «золотая застёжка», досчёт сумм, тема графиков ────────
+const motionOK = () => !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Две золотые точки над активной вкладкой пружинисто перескакивают к новой.
+function placeClasp(hop) {
+  const nav = document.querySelector('.bottom-nav');
+  const btn = nav?.querySelector('.nav-btn.active');
+  if (!nav || !btn) return;
+  let clasp = nav.querySelector('.nav-clasp');
+  if (!clasp) { clasp = document.createElement('span'); clasp.className = 'nav-clasp'; clasp.setAttribute('aria-hidden', 'true'); nav.appendChild(clasp); }
+  clasp.style.setProperty('--clasp-x', `${btn.offsetLeft + btn.offsetWidth / 2 - 7}px`);
+  if (hop && motionOK()) { clasp.classList.remove('hop'); void clasp.offsetWidth; clasp.classList.add('hop'); }
+}
+window.addEventListener('resize', () => placeClasp(false));
+
+// Итоговая сумма «досчитывается» от прежнего значения к новому.
+function countUp(el, to, from = 0) {
+  if (!el) return;
+  if (!motionOK() || from === to) { el.textContent = fmt(to); return; }
+  const t0 = performance.now(), dur = 650;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(Math.round(from + (to - from) * e));
+    if (k < 1 && el.isConnected) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Цвета графиков берём из токенов темы — корректно и в тёмной теме.
+const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const withAlpha = (hex, a) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.replace(/./g, c => c + c) : h, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+// Категориальная палитра серий (участники семьи) — из токенов --series-N
+const seriesColors = () => [1, 2, 3, 4].map(i => cssVar(`--series-${i}`));
+const userChartColors = () => seriesColors().map(c => ({ bg: withAlpha(c, 0.78), border: c }));
+function applyChartTheme() {
+  if (!window.Chart) return;
+  Chart.defaults.color = cssVar('--text-muted');
+  Chart.defaults.borderColor = cssVar('--border');
+  Chart.defaults.font.family = "'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+}
+applyChartTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { applyChartTheme(); refreshCurrentScreen(); });
+
 function navigate(screenName) {
   document.querySelectorAll('.main-content .screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -622,6 +665,7 @@ function navigate(screenName) {
 
   const navBtn = document.querySelector(`.nav-btn[data-screen="${screenName}"]`);
   if (navBtn) navBtn.classList.add('active');
+  placeClasp(true);
 
   document.getElementById('topbar-title').textContent = SCREEN_TITLES[screenName] || '';
   currentScreen = screenName;
@@ -718,8 +762,11 @@ async function loadBudget() {
       }
     }
 
-    document.getElementById('budget-total-bar').innerHTML =
-      `<span>Итого за день</span><span class="total-amount">${fmt(filteredTotal)}</span>`;
+    const dayBar = document.getElementById('budget-total-bar');
+    const prevDay = Number(dayBar.dataset.total || 0);
+    dayBar.innerHTML = `<span>Итого за день</span><span class="total-amount">${fmt(prevDay)}</span>`;
+    dayBar.dataset.total = filteredTotal;
+    countUp(dayBar.querySelector('.total-amount'), filteredTotal, prevDay);
 
     if (animateNextLoad) {
       animateNextLoad = false;
@@ -1239,10 +1286,10 @@ function buildReportHTML({ data, planData, prev, prev2, m, y }) {
     const spentPct = Math.round(c.spent / maxBar * 100);
     const limitPct = c.limit ? Math.round(c.limit / maxBar * 100) : 0;
     const over = c.limit > 0 && c.spent > c.limit;
-    const barColor = over ? '#ef4444' : '#3b82f6';
+    const barColor = over ? 'var(--danger)' : 'var(--primary)';
     const trend = c.prev > 0 ? Math.round((c.spent - c.prev) / c.prev * 100) : null;
     const trendHtml = trend !== null
-      ? `<span style="color:${trend > 10 ? '#ef4444' : trend < -10 ? '#22c55e' : '#6b7280'};font-size:11px">${trend > 0 ? '▲' : '▼'}${Math.abs(trend)}%</span>`
+      ? `<span style="color:${trend > 10 ? 'var(--danger)' : trend < -10 ? 'var(--success)' : 'var(--text-muted)'};font-size:11px">${trend > 0 ? '▲' : '▼'}${Math.abs(trend)}%</span>`
       : '';
     return `
       <tr>
@@ -1293,7 +1340,7 @@ function buildReportHTML({ data, planData, prev, prev2, m, y }) {
 
   const savingsRate = totalIncome > 0 ? Math.round((totalIncome - data.total) / totalIncome * 100) : null;
   const savingsHtml = savingsRate !== null
-    ? `<div class="stat-box"><div class="stat-label">Норма сбережений</div><div class="stat-value" style="color:${savingsRate >= 0 ? '#22c55e' : '#ef4444'}">${savingsRate}%</div></div>`
+    ? `<div class="stat-box"><div class="stat-label">Норма сбережений</div><div class="stat-value" style="color:${savingsRate >= 0 ? 'var(--success)' : 'var(--danger)'}">${savingsRate}%</div></div>`
     : '';
 
   return `<!DOCTYPE html>
@@ -1351,7 +1398,7 @@ ${Object.keys(data.byUser || {}).length > 1 ? `
 <div class="legend">
   <span><span class="legend-dot" style="background:#3b82f6"></span>Факт</span>
   <span><span class="legend-dot" style="background:#f59e0b"></span>Лимит</span>
-  <span><span class="legend-dot" style="background:#ef4444"></span>Превышение</span>
+  <span><span class="legend-dot" style="background:var(--danger)"></span>Превышение</span>
 </div>
 
 ${top5.length > 0 ? `
@@ -1561,7 +1608,10 @@ function renderSummaryView() {
   const remainHtml = remaining !== null
     ? `<div class="summary-остаток-row"><span>Остаток от плана</span><span class="summary-остаток-amt ${remaining >= 0 ? 'ok' : 'over'}">${fmt(remaining)}</span></div>`
     : '';
-  totalBar.innerHTML = `<div class="summary-total-main"><span>Итого за месяц${filterLabel}</span><span class="highlight-total">${fmt(displayTotal)}</span></div>${remainHtml}`;
+  const prevMonth = Number(totalBar.dataset.total || 0);
+  totalBar.innerHTML = `<div class="summary-total-main"><span>Итого за месяц${filterLabel}</span><span class="highlight-total">${fmt(prevMonth)}</span></div>${remainHtml}`;
+  totalBar.dataset.total = displayTotal;
+  countUp(totalBar.querySelector('.highlight-total'), displayTotal, prevMonth);
 
   // User chips — clickable filter toggle; show % of income in normal mode
   const incomes = lastPlanData?.incomes || {};
@@ -1682,7 +1732,7 @@ function renderCompareChart(data) {
     return tb - ta;
   });
 
-  const COLORS = ['#5947E0', '#FF7AB3', '#FFB47A', '#7AE0C3'];
+  const COLORS = seriesColors();
   const datasets = users.map((user, i) => ({
     label: user,
     data: sortedCats.map(cat => data.byUser[user].byCategory[cat] || 0),
@@ -1707,7 +1757,7 @@ function renderCompareChart(data) {
       scales: {
         x: {
           ticks: { callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : String(v) },
-          grid: { color: 'rgba(0,0,0,0.05)' },
+          grid: { color: cssVar('--border') },
         },
         y: { grid: { display: false }, ticks: { font: { size: 11 } } },
       },
@@ -1798,12 +1848,7 @@ async function loadCategoryDetail(cat, month, year) {
 // ─── CHART SCREEN ─────────────────────────────────────────────────────────────
 
 // Colors per user index
-const USER_CHART_COLORS = [
-  { bg: 'rgba(79,70,229,0.75)',  border: '#4f46e5' },
-  { bg: 'rgba(239,68,68,0.75)', border: '#ef4444' },
-  { bg: 'rgba(245,158,11,0.75)',border: '#f59e0b' },
-  { bg: 'rgba(16,185,129,0.75)',border: '#10b981' },
-];
+// Цвета серий по участникам — userChartColors() (токены темы)
 
 let mainChart = null;     // Chart.js instance for inline chart
 let mainChartFs = null;   // Chart.js instance for fullscreen chart
@@ -1814,7 +1859,7 @@ function buildChartConfig(chartData) {
 
   // Expense bars (UP, positive) — one dataset per user, rendered first (behind income)
   Object.entries(userExpenses).forEach(([user, amounts], i) => {
-    const col = USER_CHART_COLORS[i % USER_CHART_COLORS.length];
+    const col = userChartColors()[i % userChartColors().length];
     datasets.push({
       type: 'bar',
       label: user,
@@ -1836,7 +1881,7 @@ function buildChartConfig(chartData) {
       label: 'Доход',
       data: incomeArr,
       backgroundColor: 'rgba(122,224,195,0.85)',
-      borderColor: '#2BA889',
+      borderColor: cssVar('--success'),
       borderWidth: 1,
       stack: 'income',
       order: 2,
@@ -1858,11 +1903,11 @@ function buildChartConfig(chartData) {
       yAxisID: 'yBalance',
       fill: false,
       segment: {
-        borderColor: ctx => ctx.p1.parsed.y < 0 ? '#ef4444' : '#4f46e5',
+        borderColor: ctx => ctx.p1.parsed.y < 0 ? cssVar('--danger') : cssVar('--primary'),
         backgroundColor: ctx => ctx.p1.parsed.y < 0
-          ? 'rgba(239,68,68,0.08)' : 'rgba(79,70,229,0.08)',
+          ? withAlpha(cssVar('--danger'), 0.08) : withAlpha(cssVar('--primary'), 0.08),
       },
-      pointBackgroundColor: balanceLine.map(v => v < 0 ? '#ef4444' : '#4f46e5'),
+      pointBackgroundColor: balanceLine.map(v => v < 0 ? cssVar('--danger') : cssVar('--primary')),
     });
   }
 
@@ -1874,11 +1919,11 @@ function buildChartConfig(chartData) {
     },
     y: {
       stacked: true,
-      title: { display: true, text: 'Расходы / Доход, ₽', font: { size: 10 }, color: '#6b7280' },
+      title: { display: true, text: 'Расходы / Доход, ₽', font: { size: 10 }, color: cssVar('--text-muted') },
       ticks: {
         callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : String(v),
       },
-      grid: { color: 'rgba(0,0,0,0.05)' },
+      grid: { color: cssVar('--border') },
     },
   };
 
@@ -1886,13 +1931,13 @@ function buildChartConfig(chartData) {
     scales.yBalance = {
       position: 'right',
       grid: { display: false },
-      title: { display: true, text: 'Баланс, ₽', font: { size: 10 }, color: '#4f46e5' },
+      title: { display: true, text: 'Баланс, ₽', font: { size: 10 }, color: cssVar('--primary') },
       ticks: {
         callback: v => {
           const abs = Math.abs(v);
           return abs >= 1000 ? (v < 0 ? '-' : '') + (abs/1000).toFixed(0) + 'к' : String(v);
         },
-        color: '#4f46e5',
+        color: cssVar('--primary'),
       },
     };
   }
@@ -3061,8 +3106,8 @@ async function handlePhotoInput(file) {
 let toastTimer = null;
 
 function showToast(msg, type = 'info') {
-  const colors = { success: '#d1fae5', error: '#fee2e2', info: '#e0e7ff' };
-  const borders = { success: '#10b981', error: '#ef4444', info: '#4f46e5' };
+  const colors = { success: 'var(--success-soft)', error: 'var(--danger-soft)', info: 'var(--primary-soft)' };
+  const borders = { success: 'var(--success)', error: 'var(--danger)', info: 'var(--primary)' };
 
   let toast = document.getElementById('simple-toast');
   if (!toast) {
@@ -4038,12 +4083,12 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
   // Label position: outside arc track
   function labelPt(deg) { return pt(deg, R + SW / 2 + 14); }
 
-  const color   = pctFmt <= 70 ? '#22c55e' : pctFmt <= 90 ? '#f59e0b' : '#ef4444';
-  const verdict = pctFmt <= 70 ? 'Экономим 🟢' : pctFmt <= 90 ? 'В норме 🟡' : 'Перерасход 🔴';
+  const color   = pctFmt <= 70 ? cssVar('--success') : pctFmt <= 90 ? cssVar('--warning') : cssVar('--danger');
+  const verdict = pctFmt <= 70 ? 'Экономим' : pctFmt <= 90 ? 'В норме' : 'Перерасход';
   const overspent = pctFmt > 90;
   // при перерасходе — сначала машет лапами «вы чего, транжиры!», потом стоит угрюмый
   const barEmo = overspent ? 'scold' : pctFmt <= 70 ? 'income' : 'idle';
-  const labelFill = 'rgba(26,21,48,0.65)';
+  const labelFill = cssVar('--text-faint');
 
   const [l0x, l0y]   = labelPt(START_A);   // 0%   at 150° (lower-left)
   const [l70x, l70y] = labelPt(gEnd);      // 70%  at 255° (upper-left)
@@ -4053,13 +4098,13 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
   container.innerHTML = `
     <svg viewBox="0 0 200 178" class="speedometer-svg">
       <!-- Background track -->
-      <path d="${arc(START_A, END_A, R)}" fill="none" stroke="rgba(89,71,224,0.14)" stroke-width="${SW}"/>
+      <path d="${arc(START_A, END_A, R)}" fill="none" stroke="${cssVar('--surface-3')}" stroke-width="${SW}"/>
       <!-- Green zone 0-70% -->
-      <path d="${arc(START_A, gEnd, R)}" fill="none" stroke="#16a34a" stroke-width="${SW}" opacity="0.55"/>
+      <path d="${arc(START_A, gEnd, R)}" fill="none" stroke="${cssVar('--success')}" stroke-width="${SW}" opacity="0.4"/>
       <!-- Yellow zone 70-90% -->
-      <path d="${arc(gEnd, yEnd, R)}" fill="none" stroke="#d97706" stroke-width="${SW}" opacity="0.55"/>
+      <path d="${arc(gEnd, yEnd, R)}" fill="none" stroke="${cssVar('--warning')}" stroke-width="${SW}" opacity="0.4"/>
       <!-- Red zone 90-160% -->
-      <path d="${arc(yEnd, END_A, R)}" fill="none" stroke="#dc2626" stroke-width="${SW}" opacity="0.55"/>
+      <path d="${arc(yEnd, END_A, R)}" fill="none" stroke="${cssVar('--danger')}" stroke-width="${SW}" opacity="0.4"/>
       <!-- Zone boundary ticks -->
       ${tick(gEnd)}${tick(yEnd)}
       <!-- Progress arc (bright, up to needle) -->
@@ -4080,7 +4125,7 @@ function renderSpeedometer(container, spent, expectedByNow, plannedMonthly, rati
     </svg>
     <div class="bablometr-verdict-row">
       ${finik(barEmo, 'finik-md', 'bar-finik')}
-      <div class="speedometer-verdict" style="color:${color}">${verdict}</div>
+      <div class="speedometer-verdict" style="color:${color}"><span class="verdict-dot" style="background:${color}"></span>${verdict}</div>
     </div>
     <div class="bablometr-stats">
       <div class="bablometr-stat">
@@ -4185,10 +4230,10 @@ async function _renderSpeedChart(m, y, isCurrent, todayDay) {
     const canvas = document.getElementById('speed-chart-canvas');
 
     function ratioColor(v) {
-      if (v === null) return 'rgba(150,150,150,0.5)';
-      if (v < 70) return '#22c55e';
-      if (v < 90) return '#f59e0b';
-      return '#ef4444';
+      if (v === null) return withAlpha(cssVar('--text-faint'), 0.5);
+      if (v < 70) return cssVar('--success');
+      if (v < 90) return cssVar('--warning');
+      return cssVar('--danger');
     }
 
     const pointColors = ratios.map(ratioColor);
