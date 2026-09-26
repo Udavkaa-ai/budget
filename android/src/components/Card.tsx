@@ -1,30 +1,27 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
-import { useTheme, spacing, radius } from '../theme';
+import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useTheme, spacing, radius, shadow1 } from '../theme';
 
 interface Props {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
+// Карточка как в вебе: ровная заливка, тонкая рамка, едва заметная тень
 export function Card({ children, style }: Props) {
   const t = useTheme();
   return (
-    <View style={[styles.card, { backgroundColor: t.surface, shadowColor: t.primary }, style]}>
+    <View style={[styles.card, shadow1, { backgroundColor: t.surface, borderColor: t.border }, t.scheme === 'dark' && { shadowOpacity: 0.3 }, style]}>
       {children}
     </View>
   );
 }
 
-// Мягкие карточки без рамок с лёгкой фиолетовой тенью — как в веб-версии
 const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
+    borderWidth: 1,
     padding: spacing.lg,
     marginBottom: spacing.md,
-    elevation: 3,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
   },
 });

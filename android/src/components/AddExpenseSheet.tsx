@@ -4,14 +4,13 @@ import {
   ActivityIndicator, Alert, Modal, ScrollView,
 } from 'react-native';
 import BottomSheet, { BottomSheetScrollView, BottomSheetFooter, type BottomSheetFooterProps } from '@gorhom/bottom-sheet';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme, spacing, font, radius } from '../theme';
 import { predict, learn, queueContribution, type PredictResult } from '../classifier';
 import { useCategories, getCategories } from '../categories';
-import { PrimaryButton } from '../components/UI';
+import { PrimaryButton, SecondaryButton, Segmented, Chip } from '../components/UI';
 import { expenses, ai, type AuthUser, type ParsedExpense } from '../api/client';
 import { usePremium } from '../premium';
 import { queueExpense, isNetworkError } from '../offline';
@@ -56,6 +55,8 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [adding, setAdding] = useState(false);
   const [catEditIdx, setCatEditIdx] = useState<number | null>(null);
   const [dateEditIdx, setDateEditIdx] = useState<number | null>(null);
+  const [formDate, setFormDate] = useState(todayStr());
+  const [formDatePicker, setFormDatePicker] = useState(false);
 
   const updateItem = (idx: number, patch: Partial<ParsedExpense>) =>
     setPreview(p => p ? { ...p, items: p.items.map((it, i) => i === idx ? { ...it, ...patch } : it) } : p);
@@ -91,6 +92,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     setAmount('');
     setSelectedCat(null);
     setPrediction(null);
+    setFormDate(todayStr());
   };
 
   const submit = async () => {
@@ -102,7 +104,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     if (isNaN(amt) || amt <= 0) { Alert.alert('Некорректная сумма'); return; }
 
     setSubmitting(true);
-    const item = { date: todayStr(), category: selectedCat, amount: amt, description: description.trim() };
+    const item = { date: formDate, category: selectedCat, amount: amt, description: description.trim() };
     try {
       await expenses.add({ expenses: [item] });
       await learn(description, selectedCat);
@@ -257,22 +259,13 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     <BottomSheetFooter {...props} bottomInset={0}>
       <View style={[styles.footer, { backgroundColor: t.surface, borderTopColor: t.border }]}>
         {mode === 'text' ? (
-          <TouchableOpacity
-            style={[styles.submitBtn, { backgroundColor: '#9333EA', opacity: parsing || !freeText.trim() ? 0.6 : 1 }]}
-            onPress={parseFreeText}
-            disabled={parsing || !freeText.trim()}
-            activeOpacity={0.85}
-          >
-            {parsing
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.submitText}>🤖 Разобрать</Text>}
-          </TouchableOpacity>
+          <PrimaryButton title="Разобрать" onPress={parseFreeText} loading={parsing} disabled={!freeText.trim()} />
         ) : (
-          <PrimaryButton title="Добавить" onPress={submit} loading={submitting} />
+          <PrimaryButton title="Добавить расход" onPress={submit} loading={submitting} />
         )}
       </View>
     </BottomSheetFooter>
-  ), [mode, parsing, submitting, freeText, description, amount, selectedCat, t]);
+  ), [mode, parsing, submitting, freeText, description, amount, selectedCat, formDate, t]);
 
   return (
     <BottomSheet
@@ -281,7 +274,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
       snapPoints={snapPoints}
       enablePanDownToClose
       backgroundStyle={{ backgroundColor: t.surface }}
-      handleIndicatorStyle={{ backgroundColor: t.border }}
+      handleIndicatorStyle={{ backgroundColor: t.borderStrong, width: 40 }}
       footerComponent={renderFooter}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
@@ -292,129 +285,110 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     >
       <BottomSheetScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 96 }} keyboardShouldPersistTaps="handled">
         <View style={styles.titleRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 }}>
-            <Finik emotion="record" size={42} />
-            <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.scanBtn, { backgroundColor: t.surface2 }]}
-            onPress={scanReceipt}
-            disabled={scanning}
-          >
-            {scanning
-              ? <ActivityIndicator size="small" color="#a855f7" />
-              : <Text style={{ fontSize: font.sm }}>📸 Чек{premium ? '' : ' 💎'}</Text>
-            }
-          </TouchableOpacity>
+          <Text style={[styles.title, { color: t.text }]}>Добавить расход</Text>
+          <Finik emotion="record" size={46} />
         </View>
 
-        {/* Mode toggle */}
-        <View style={styles.modeRow}>
-          <TouchableOpacity
-            style={[styles.modeBtn, { backgroundColor: mode === 'form' ? t.primary : t.surface2 }]}
-            onPress={() => switchMode('form')}
-          >
-            <Text style={{ color: mode === 'form' ? '#fff' : t.text, fontSize: font.sm }}>📋 Форма</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeBtn, { backgroundColor: mode === 'text' ? t.primary : t.surface2 }]}
-            onPress={() => switchMode('text')}
-          >
-            <Text style={{ color: mode === 'text' ? '#fff' : t.text, fontSize: font.sm }}>
-              ✍️ Текстом{premium ? '' : ' 💎'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <Segmented
+          value={mode}
+          options={[{ value: 'text', label: premium ? 'Текстом' : 'Текстом 💎' }, { value: 'form', label: 'Вручную' }]}
+          onChange={m => switchMode(m)}
+          style={{ marginBottom: spacing.lg }}
+        />
 
         {mode === 'text' ? (
           <>
-            <Text style={[styles.label, { color: t.textMuted }]}>
-              Напишите расходы в свободной форме — ИИ разберёт их сам
-            </Text>
-            <TextInput
-              style={[
-                styles.freeText,
-                {
-                  color: t.text,
-                  backgroundColor: t.surface2,
-                  borderColor: focusedField === 'free' ? t.primary : t.border,
-                },
-                focusedField === 'free' && styles.inputFocused,
-                focusedField === 'free' && { shadowColor: t.primary },
-              ]}
-              value={freeText}
-              onChangeText={setFreeText}
-              onFocus={() => setFocusedField('free')}
-              onBlur={() => setFocusedField(null)}
-              placeholder={'Пример:\nпродукты 2300\nвчера такси 450\nкофе 180'}
-              placeholderTextColor={t.textMuted}
-              multiline
-              textAlignVertical="top"
-            />
-            <Text style={[styles.freeHint, { color: t.textMuted }]}>
-              По одной трате на строку или через запятую — ИИ сам определит суммы, даты и категории.
-            </Text>
+            {/* ИИ-поле: текст + инструменты в одной рамке (как в вебе) */}
+            <View style={[styles.aiBox, {
+              backgroundColor: t.surface2,
+              borderColor: focusedField === 'free' ? t.primary : t.border,
+            }]}>
+              <TextInput
+                style={[styles.freeText, { color: t.text }]}
+                value={freeText}
+                onChangeText={setFreeText}
+                onFocus={() => setFocusedField('free')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="продукты 2300, вчера такси 450, кофе 180"
+                placeholderTextColor={t.textFaint}
+                multiline
+                textAlignVertical="top"
+              />
+              <View style={styles.aiFoot}>
+                <Text style={{ color: t.textFaint, fontSize: 12, flex: 1 }}>
+                  {scanning ? 'Читаю чек…' : 'ИИ разберёт суммы, категории и даты'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.toolBtn, { backgroundColor: t.surface, borderColor: t.border }]}
+                  onPress={scanReceipt}
+                  disabled={scanning}
+                  accessibilityLabel="Распознать фото чека"
+                >
+                  {scanning
+                    ? <ActivityIndicator size="small" color={t.primary} />
+                    : <Ionicons name="camera-outline" size={21} color={t.primary} />}
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.chipRow}>
+              {['кофе 180', 'вчера такси 450', 'аптека 640'].map(ex => (
+                <Chip key={ex} label={ex} onPress={() => {
+                  Haptics.selectionAsync();
+                  setFreeText(v => v.trim() ? `${v.trim().replace(/,$/, '')}, ${ex}` : ex);
+                }} />
+              ))}
+            </View>
           </>
         ) : (
         <>
-        {/* Description */}
-        <Text style={[styles.label, { color: t.textMuted }]}>Описание</Text>
+        {/* Крупная сумма */}
+        <View style={[styles.amountBox, {
+          backgroundColor: t.surface2, borderColor: focusedField === 'amount' ? t.primary : t.border,
+        }]}>
+          <TextInput
+            style={[styles.amountInput, { color: t.text }]}
+            value={amount}
+            onChangeText={setAmount}
+            onFocus={() => setFocusedField('amount')}
+            onBlur={() => setFocusedField(null)}
+            placeholder="0"
+            placeholderTextColor={t.textFaint}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Сумма, ₽"
+          />
+          <Text style={[styles.amountCur, { color: t.textFaint }]}>₽</Text>
+        </View>
+        <View style={[styles.chipRow, { justifyContent: 'center' }]}>
+          {[100, 200, 500, 1000, 2000, 5000].map(v => (
+            <Chip key={v} label={new Intl.NumberFormat('ru-RU').format(v)} active={amount === String(v)}
+              onPress={() => { Haptics.selectionAsync(); setAmount(String(v)); }} />
+          ))}
+        </View>
+
+        <Text style={[styles.label, { color: t.textMuted }]}>ОПИСАНИЕ</Text>
         <TextInput
-          style={[
-            styles.input,
-            { color: t.text, backgroundColor: t.surface2, borderColor: focusedField === 'desc' ? t.primary : t.border },
-            focusedField === 'desc' && styles.inputFocused,
-            focusedField === 'desc' && { shadowColor: t.primary },
-          ]}
+          style={[styles.input, { color: t.text, backgroundColor: t.surface2, borderColor: focusedField === 'desc' ? t.primary : t.border }]}
           value={description}
           onChangeText={setDescription}
           onFocus={() => setFocusedField('desc')}
           onBlur={() => setFocusedField(null)}
           placeholder="Что купили?"
-          placeholderTextColor={t.textMuted}
+          placeholderTextColor={t.textFaint}
           autoCapitalize="none"
         />
 
-        {/* AI prediction chips */}
+        {/* Подсказки классификатора */}
         {catBtns && (
-          <View style={styles.predRow}>
+          <View style={styles.chipRow}>
             {predicting
               ? <ActivityIndicator size="small" color={t.primary} />
               : catBtns.map(cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.predChip, { backgroundColor: selectedCat === cat ? t.primary : t.surface2 }]}
-                  onPress={() => handleCategorySelect(cat)}
-                >
-                  <Text style={{ color: selectedCat === cat ? '#fff' : t.text, fontSize: font.sm }}>
-                    {catIcon2(cat)} {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))
-            }
+                <Chip key={cat} label={`${catIcon2(cat)} ${cat}`} active={selectedCat === cat} onPress={() => handleCategorySelect(cat)} />
+              ))}
           </View>
         )}
 
-        {/* Amount */}
-        <Text style={[styles.label, { color: t.textMuted }]}>Сумма, ₽</Text>
-        <TextInput
-          style={[
-            styles.input,
-            { color: t.text, backgroundColor: t.surface2, borderColor: focusedField === 'amount' ? t.primary : t.border },
-            focusedField === 'amount' && styles.inputFocused,
-            focusedField === 'amount' && { shadowColor: t.primary },
-          ]}
-          value={amount}
-          onChangeText={setAmount}
-          onFocus={() => setFocusedField('amount')}
-          onBlur={() => setFocusedField(null)}
-          placeholder="0"
-          placeholderTextColor={t.textMuted}
-          keyboardType="decimal-pad"
-        />
-
-        {/* Category grid */}
-        <Text style={[styles.label, { color: t.textMuted }]}>Категория</Text>
+        <Text style={[styles.label, { color: t.textMuted }]}>КАТЕГОРИЯ</Text>
         <View style={styles.catGrid}>
           {cats.map(cat => {
             const active = selectedCat === cat;
@@ -422,17 +396,33 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
               <TouchableOpacity
                 key={cat}
                 style={[styles.catBtn, {
-                  backgroundColor: active ? t.primary : t.surface2,
-                  borderWidth: 2, borderColor: active ? t.primary : 'transparent',
+                  backgroundColor: active ? t.primarySoft : t.surface2,
+                  borderColor: active ? t.primary : 'transparent',
                 }]}
                 onPress={() => handleCategorySelect(cat)}
+                activeOpacity={0.7}
               >
-                <Text style={{ fontSize: 26 }}>{catIcon2(cat)}</Text>
+                <Text style={{ fontSize: 22 }}>{catIcon2(cat)}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: active ? t.primary : t.textMuted, textAlign: 'center' }} numberOfLines={1}>{cat}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
+        <Text style={[styles.label, { color: t.textMuted }]}>ДАТА</Text>
+        <TouchableOpacity
+          style={[styles.input, styles.dateBtn, { backgroundColor: t.surface2, borderColor: t.border }]}
+          onPress={() => { Haptics.selectionAsync(); setFormDatePicker(true); }}
+        >
+          <Text style={{ color: t.text, fontSize: 16 }}>{formDate === todayStr() ? `Сегодня, ${formDate}` : formDate}</Text>
+          <Ionicons name="calendar-outline" size={20} color={t.textMuted} />
+        </TouchableOpacity>
+        <DayPickerModal
+          visible={formDatePicker}
+          date={formDate}
+          onClose={() => setFormDatePicker(false)}
+          onPick={d => { setFormDate(d); setFormDatePicker(false); }}
+        />
         </>
         )}
       </BottomSheetScrollView>
@@ -507,24 +497,9 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
               ))}
             </ScrollView>
             <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
-              <TouchableOpacity
-                style={[styles.previewBtn, { backgroundColor: t.surface2 }]}
-                onPress={() => { setPreview(null); setCatEditIdx(null); setDateEditIdx(null); }}
-                disabled={adding}
-              >
-                <Text style={{ color: t.text, fontWeight: '600' }}>Отмена</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ flex: 1 }} onPress={confirmPreview} disabled={adding} activeOpacity={0.85}>
-                <LinearGradient
-                  colors={t.gradient}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={styles.previewBtn}
-                >
-                  {adding
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={{ color: '#fff', fontWeight: '700' }}>Добавить всё</Text>}
-                </LinearGradient>
-              </TouchableOpacity>
+              <SecondaryButton title="Отмена" style={{ flex: 1 }} disabled={adding}
+                onPress={() => { setPreview(null); setCatEditIdx(null); setDateEditIdx(null); }} />
+              <PrimaryButton title="Добавить всё" style={{ flex: 1 }} onPress={confirmPreview} loading={adding} />
             </View>
           </View>
         </View>
@@ -542,33 +517,40 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
 });
 
 const styles = StyleSheet.create({
-  titleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
-  title:     { fontSize: font.xl, fontWeight: '700' },
+  titleRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  title:     { fontSize: 20, fontWeight: '800', letterSpacing: -0.2 },
+  aiBox:     { borderRadius: radius.md, borderWidth: 1 },
+  aiFoot:    { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: spacing.lg, paddingRight: spacing.sm, paddingBottom: spacing.sm },
+  toolBtn:   { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  chipRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.md },
+  amountBox: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6, borderRadius: radius.md, borderWidth: 1, paddingVertical: 8, paddingHorizontal: spacing.lg },
+  amountInput: { fontSize: 38, fontWeight: '800', minWidth: 40, textAlign: 'right', padding: 0 },
+  amountCur: { fontSize: 26, fontWeight: '700' },
+  dateBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   scanBtn:   { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   modeRow:   { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   modeBtn:   { flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },
   freeText:  {
-    borderRadius: radius.md, borderWidth: 1.5,
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    fontSize: 16, lineHeight: 22, minHeight: 140, marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs,
+    fontSize: 16, lineHeight: 22, minHeight: 96,
   },
   inputFocused: {
     shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
   freeHint:  { fontSize: font.xs, lineHeight: 16, marginTop: spacing.sm, marginBottom: spacing.xs },
-  label:     { fontSize: font.sm, marginBottom: spacing.xs, marginTop: spacing.md },
-  input:     { borderRadius: radius.md, borderWidth: 1.5, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: 16 },
+  label:     { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6, marginTop: spacing.lg },
+  input:     { borderRadius: radius.md, borderWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: 16 },
   footer:    { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, borderTopWidth: StyleSheet.hairlineWidth },
   predRow:   { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, flexWrap: 'wrap' },
   predChip:  { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: spacing.lg },
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(17,16,24,0.5)', justifyContent: 'center', padding: spacing.lg },
   previewBox: { borderRadius: radius.lg, padding: spacing.lg },
   previewRow: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
   previewBtn: { flex: 1, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center' },
   prevCatBtn: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
   prevCatChip:{ width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
-  catGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  catBtn:    { alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, width: 52, height: 52 },
+  catGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  catBtn:    { alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: radius.md, borderWidth: 1.5, width: '23%', flexGrow: 1, maxWidth: '24%', paddingVertical: 9, paddingHorizontal: 2 },
   submitBtn: { borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', marginTop: spacing.sm },
   submitText:{ color: '#fff', fontSize: font.md, fontWeight: '600' },
 });

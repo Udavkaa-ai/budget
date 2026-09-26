@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, AppState, View } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { SvgXml } from 'react-native-svg';
 import { tabIconXml, type TabIconName } from '../tabIcons';
@@ -42,6 +42,35 @@ function tabIcon(name: TabIconName) {
   return ({ focused }: { focused: boolean }) => <TabIcon name={name} focused={focused} />;
 }
 
+// Фишка дизайна — «золотая застёжка»: две золотые точки на верхней кромке
+// таб-бара пружинисто перепрыгивают к активной вкладке (как в вебе .nav-clasp).
+function ClaspTabBar(props: BottomTabBarProps) {
+  const t = useTheme();
+  const [w, setW] = useState(0);
+  const n = props.state.routes.length;
+  const x = useRef(new Animated.Value(0)).current;
+  const target = w > 0 ? (props.state.index + 0.5) * (w / n) : 0;
+  useEffect(() => {
+    if (w <= 0) return;
+    Animated.spring(x, { toValue: target, friction: 6, tension: 120, useNativeDriver: true }).start();
+  }, [target, w, x]);
+  return (
+    <View onLayout={e => setW(e.nativeEvent.layout.width)}>
+      <BottomTabBar {...props} />
+      {w > 0 && (
+        <Animated.View pointerEvents="none" style={{
+          position: 'absolute', top: -5, left: -11, flexDirection: 'row', gap: 2,
+          transform: [{ translateX: x }],
+        }}>
+          {[0, 1].map(i => (
+            <View key={i} style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: t.gold, borderWidth: 1.5, borderColor: t.tabBar }} />
+          ))}
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
 export function AppNavigator() {
   const t = useTheme();
   const blocks = useBlocks();
@@ -55,6 +84,7 @@ export function AppNavigator() {
   return (
     <View style={{ flex: 1 }}>
     <Tab.Navigator
+      tabBar={props => <ClaspTabBar {...props} />}
       screenListeners={{ tabPress: () => haptics.select() }}
       screenOptions={{
         headerShown: false,

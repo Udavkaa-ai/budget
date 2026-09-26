@@ -306,7 +306,7 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        <View style={[styles.totalCard, { backgroundColor: t.surface }]}>
+        <View style={[styles.totalCard, { backgroundColor: t.surface, borderColor: t.border }]}>
           <Text style={[styles.totalLabel, { color: t.textMuted }]}>Итого за день</Text>
           <Text style={[styles.totalAmt, { color: t.primary }]}>{fmt(shown)}</Text>
         </View>
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   userChipTop:{ borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   filterRow:  { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   filterChip: { borderRadius: radius.xl, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1.5 },
-  totalCard:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', margin: spacing.md, marginBottom: spacing.xs, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(89,71,224,0.16)', shadowColor: '#5947E0', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+  totalCard:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', margin: spacing.md, marginBottom: spacing.xs, padding: spacing.lg, borderRadius: radius.lg, borderWidth: 1, shadowColor: '#1C1830', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   groupHdr:   { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.md, paddingBottom: spacing.xs },
   header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
   navBtn:     { padding: spacing.md },
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   fab:        { position: 'absolute', bottom: 18, right: 16, width: 68, height: 72, alignItems: 'center', justifyContent: 'center' },
   fabBtn:     { position: 'absolute', bottom: 24, right: 24, width: 60, height: 60, borderRadius: 30, elevation: 8, shadowColor: '#5947E0', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
   fabInner:   { flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(17,16,24,0.5)', justifyContent: 'center', padding: spacing.lg },
   modalBox:   { borderRadius: radius.lg, padding: spacing.lg },
   modalTitle: { fontSize: font.lg, fontWeight: '700', marginBottom: spacing.md },
   input:      { borderRadius: radius.sm, borderWidth: 1, padding: spacing.md, fontSize: font.md, marginBottom: spacing.md },

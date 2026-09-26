@@ -220,7 +220,7 @@ export default function GoalsScreen() {
 
                   {/* Progress bar */}
                   <View style={[styles.progBg, { backgroundColor: t.surface2 }]}>
-                    <View style={[styles.progFill, { width: `${pct * 100}%`, backgroundColor: pct >= 1 ? '#22c55e' : t.primary }]} />
+                    <View style={[styles.progFill, { width: `${pct * 100}%`, backgroundColor: pct >= 1 ? t.success : t.primary }]} />
                   </View>
                   <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 4 }}>
                     {Math.round(pct * 100)}% · осталось {fmt(Math.max(g.target - g.saved, 0))}

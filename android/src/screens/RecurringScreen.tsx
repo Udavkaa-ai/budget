@@ -67,7 +67,7 @@ export function RecurringScreen({ visible, onClose }: { visible: boolean; onClos
 
   const dueColor = (i: RecurringItem) => {
     const diff = daysUntil(i, now);
-    return diff < 0 ? t.danger : diff <= 1 ? '#f59e0b' : t.textMuted;
+    return diff < 0 ? t.danger : diff <= 1 ? t.warning : t.textMuted;
   };
 
   const payNow = async (item: RecurringItem) => {

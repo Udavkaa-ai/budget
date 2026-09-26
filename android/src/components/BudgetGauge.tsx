@@ -1,145 +1,168 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text } from 'react-native';
-import Svg, {
-  Path, Line as SvgLine, Circle, Polygon, Text as SvgText,
-  Defs, LinearGradient, Stop, G,
-} from 'react-native-svg';
-import { useTheme, font } from '../theme';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedProps, useAnimatedReaction, useReducedMotion,
+  withSpring, withRepeat, withSequence, withTiming, runOnJS, cancelAnimation,
+} from 'react-native-reanimated';
+import Svg, { Path, Line as SvgLine, Circle, G, Text as SvgText, type GProps } from 'react-native-svg';
+import { useTheme, font, radius, spacing } from '../theme';
 import { Finik, type FinikEmotion } from './Finik';
+import { StatusChip } from './UI';
 
-const CX = 130, CY = 132, R = 96, MAX = 160, STROKE = 16;
+// Спидометр темпа трат — 1:1 с вебом (renderSpeedometer в public/app.js).
+// Полукруг 180°, шкала 0–150% от нормы трат на сегодня. Зоны совпадают с
+// ИИ-анализом: ≤85% — экономим, 85–100% — в графике, 100–110% — выше плана,
+// >110% — перерасход. Стрелка — недодемпфированная пружина (разгон, лёгкий
+// перелёт, успокоение); при перерасходе мелко дрожит.
+const CX = 120, CY = 118, R = 90, SW = 14, MAX = 150, LOW = 85, PLAN = 100, HIGH = 110;
+const ARC_LEN = Math.PI * R;
 
-// Зоны — как в вебе и в ИИ-анализе: ≤85 экономим, 85–100 в графике,
-// 100–110 выше плана, >110 перерасход
 type Zone = 'good' | 'ok' | 'warn' | 'over';
 export function gaugeZone(pct: number): Zone {
-  return pct <= 85 ? 'good' : pct <= 100 ? 'ok' : pct <= 110 ? 'warn' : 'over';
+  return pct <= LOW ? 'good' : pct <= PLAN ? 'ok' : pct <= HIGH ? 'warn' : 'over';
 }
 const ZONE_TEXT: Record<Zone, string> = { good: 'Экономим', ok: 'В графике', warn: 'Выше плана', over: 'Перерасход' };
 
-// Точка на дуге: 0% слева (180°), максимум справа (0°)
-function polar(r: number, pct: number) {
-  const a = Math.PI * (1 - Math.min(Math.max(pct, 0), MAX) / MAX);
-  return { x: CX + r * Math.cos(a), y: CY - r * Math.sin(a) };
+const angle = (v: number) => 180 - (Math.max(0, Math.min(MAX, v)) / MAX) * 180;
+function pt(v: number, r: number): [number, number] {
+  const a = angle(v) * Math.PI / 180;
+  return [CX + r * Math.cos(a), CY - r * Math.sin(a)];
 }
-function arc(r: number, from: number, to: number) {
-  const s = polar(r, from), e = polar(r, to);
-  const large = (to - from) / MAX > 0.5 ? 1 : 0;
-  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+function arc(v1: number, v2: number, r: number) {
+  const [x1, y1] = pt(v1, r), [x2, y2] = pt(v2, r);
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 0 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 
-// Барометр бюджета: ровный контур, зоны с градиентом, анимированные стрелка и число
-export function BudgetGauge({ pct }: { pct: number }) {
+Animated.addWhitelistedUIProps({ matrix: true });
+const AG = Animated.createAnimatedComponent(G as unknown as React.ComponentClass<GProps & { matrix?: number[] }>);
+const APath = Animated.createAnimatedComponent(Path);
+
+// Стрелка начинает с прошлого показания — при возврате на экран не «раскручивается» с нуля
+let lastShown = 0;
+
+const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
+
+export function BudgetGauge({ pct, spent, norm, plan, daysPassed, daysInMonth }: {
+  pct: number; spent: number; norm: number; plan: number; daysPassed: number; daysInMonth: number;
+}) {
   const t = useTheme();
-  // Старт СРАЗУ со значения — без «раскрутки» с нуля. Иначе при листании
-  // месяцев (пейджер пересоздаёт барометр) стрелка каждый раз прыгала
-  // 0→…→pct. Анимируем только при РЕАЛЬНОЙ смене значения, от предыдущего.
-  const [anim, setAnim] = useState(pct);
-  const animRef = useRef(pct);
-  const raf = useRef<number | null>(null);
-  const startRef = useRef(0);
+  const reduce = useReducedMotion();
+  const zone = gaugeZone(pct);
+  const color = { good: t.success, ok: t.primary, warn: t.warning, over: t.danger }[zone];
+  const target = Math.min(pct, MAX);
+  const projected = daysPassed > 0 ? Math.round(spent / daysPassed * daysInMonth) : spent;
+
+  const v = useSharedValue(lastShown);
+  const [shown, setShown] = useState(Math.round(lastShown));
 
   useEffect(() => {
-    const from = animRef.current;
-    const target = pct;
-    if (Math.abs(from - target) < 0.5) { animRef.current = target; setAnim(target); return; }
-    startRef.current = Date.now();
-    const dur = 500;
-    const tick = () => {
-      const k = Math.min((Date.now() - startRef.current) / dur, 1);
-      const eased = 1 - Math.pow(1 - k, 3); // easeOutCubic
-      const val = from + (target - from) * eased;
-      animRef.current = val;
-      setAnim(val);
-      if (k < 1) raf.current = requestAnimationFrame(tick);
-    };
-    raf.current = requestAnimationFrame(tick);
-    return () => { if (raf.current) cancelAnimationFrame(raf.current); };
-  }, [pct]);
+    cancelAnimation(v);
+    lastShown = target;
+    if (reduce) { v.value = target; return; }
+    // ω≈8.5, ζ≈0.42 — как в вебе
+    v.value = withSpring(target, { stiffness: 72, damping: 7.1, mass: 1 }, done => {
+      'worklet';
+      if (done && zone === 'over') {
+        v.value = withRepeat(withSequence(
+          withTiming(target + 0.5, { duration: 55 }),
+          withTiming(target - 0.45, { duration: 70 }),
+        ), -1, true);
+      }
+    });
+  }, [target, zone, reduce, v]);
 
-  const shown = Math.round(anim);
-  const status = gaugeZone(pct);
-  const color = { good: '#16a34a', ok: t.primary, warn: '#f59e0b', over: '#ef4444' }[status];
+  useAnimatedReaction(() => Math.round(Math.max(0, Math.min(MAX, v.value))), (cur, prev) => {
+    if (cur !== prev) runOnJS(setShown)(cur);
+  });
 
-  // Финик отражает статус: выше плана — волнуется, перерасход — сперва машет
-  // «вы чего, транжиры!», потом стоит угрюмый
-  const calmEmo = (z: Zone): FinikEmotion => z === 'good' ? 'income' : z === 'warn' ? 'overspend' : 'idle';
-  const [barEmo, setBarEmo] = useState<FinikEmotion>(status === 'over' ? 'scold' : calmEmo(status));
+  const needleProps = useAnimatedProps(() => {
+    const c = Math.max(0, Math.min(MAX, v.value));
+    const a = (c / MAX * 180 - 90) * Math.PI / 180;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    return { matrix: [cos, sin, -sin, cos, CX - cos * CX + sin * CY, CY - sin * CX - cos * CY] };
+  });
+  const arcProps = useAnimatedProps(() => {
+    const c = Math.max(0, Math.min(MAX, v.value));
+    return { strokeDashoffset: ARC_LEN * (1 - c / MAX) };
+  });
+
+  // Финик: выше плана — волнуется, перерасход — ругается, потом стоит угрюмый
+  const calm: FinikEmotion = zone === 'good' ? 'income' : zone === 'warn' ? 'overspend' : zone === 'over' ? 'scold' : 'idle';
+  const [emo, setEmo] = useState<FinikEmotion>(calm);
   useEffect(() => {
-    if (status === 'over') {
-      setBarEmo('scold');
-      const id = setTimeout(() => setBarEmo('grumpy'), 2300);
-      return () => clearTimeout(id);
+    setEmo(calm);
+    if (zone !== 'over') return;
+    const id = setTimeout(() => setEmo('grumpy'), 2300);
+    return () => clearTimeout(id);
+  }, [zone, calm]);
+
+  // Деления: мелкие каждые 10%, крупные с подписями — 0/50/100/150
+  const ticks: React.ReactNode[] = [];
+  for (let val = 0; val <= MAX; val += 10) {
+    const major = val % 50 === 0;
+    const [x1, y1] = pt(val, R + SW / 2 + 3), [x2, y2] = pt(val, R + SW / 2 + (major ? 10 : 6));
+    ticks.push(<SvgLine key={`t${val}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={major ? t.text : t.textFaint}
+      strokeWidth={major ? 2 : 1.2} strokeLinecap="round" opacity={major ? 0.55 : 0.5} />);
+    if (major) {
+      const end = val === 0 || val === MAX;
+      const [lx, ly] = end ? [val === 0 ? CX - R : CX + R, CY + SW / 2 + 14] : pt(val, R + SW / 2 + 21);
+      ticks.push(<SvgText key={`l${val}`} x={lx} y={ly + (end ? 0 : 3.5)} textAnchor="middle" fontSize={10.5} fontWeight="700"
+        fill={val === 100 ? t.goldDeep : t.textMuted}>{`${val}%`}</SvgText>);
     }
-    setBarEmo(calmEmo(status));
-  }, [status]);
-  const tip = polar(R - STROKE / 2 - 12, anim);
-  // Направление стрелки и перпендикуляр — чтобы основание было конусом, а не точкой
-  const ang = Math.PI * (1 - Math.min(Math.max(anim, 0), MAX) / MAX);
-  const dir = { x: Math.cos(ang), y: -Math.sin(ang) };
-  const perp = { x: -dir.y, y: dir.x };
-  const BW = 6;
-  const baseL = { x: CX + perp.x * BW, y: CY + perp.y * BW };
-  const baseR = { x: CX - perp.x * BW, y: CY - perp.y * BW };
-  const back = { x: CX - dir.x * 16, y: CY - dir.y * 16 };
+  }
+  // «застёжка» на дорожке шкалы у отметки 100% = план
+  const [kx, ky] = pt(100, R);
+  const ka = (90 - angle(100)) * Math.PI / 180;
+  const kdx = 4.2 * Math.cos(ka), kdy = 4.2 * Math.sin(ka);
+  const band = (a: number, b: number, c: string) =>
+    <Path d={arc(a, b, R - SW / 2 - 3)} fill="none" stroke={c} strokeWidth={3} strokeLinecap="round" opacity={0.75} />;
 
   return (
-    <View style={{ alignItems: 'center' }}>
-      <Svg width="100%" height={168} viewBox="0 0 260 168">
-        <Defs>
-          <LinearGradient id="gGreen" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#34d399" /><Stop offset="1" stopColor="#16a34a" />
-          </LinearGradient>
-          <LinearGradient id="gAmber" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#fbbf24" /><Stop offset="1" stopColor="#f59e0b" />
-          </LinearGradient>
-          <LinearGradient id="gViolet" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={t.primary} /><Stop offset="1" stopColor={t.primary} />
-          </LinearGradient>
-          <LinearGradient id="gRed" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#f87171" /><Stop offset="1" stopColor="#dc2626" />
-          </LinearGradient>
-        </Defs>
-
-        {/* Фон-дорожка с округлыми концами — задаёт единый аккуратный контур */}
-        <Path d={arc(R, 0, MAX)} stroke={t.surface2} strokeWidth={STROKE + 4} fill="none" strokeLinecap="round" />
-        {/* Зоны: стык встык (butt), концы прячутся за округлым фоном */}
-        <Path d={arc(R, 0, 85)}    stroke="url(#gGreen)"  strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
-        <Path d={arc(R, 85, 100)}  stroke="url(#gViolet)" strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
-        <Path d={arc(R, 100, 110)} stroke="url(#gAmber)"  strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
-        <Path d={arc(R, 110, MAX)} stroke="url(#gRed)"    strokeWidth={STROKE} fill="none" strokeLinecap="butt" />
-
-        {/* Засечки на границах зон */}
-        {[0, 85, 100, 110, 160].map(v => {
-          const a = polar(R + STROKE / 2 + 2, v), b = polar(R - STROKE / 2 - 2, v);
-          return <SvgLine key={v} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={t.surface} strokeWidth={2} />;
-        })}
-
-        {/* Стрелка-треугольник + хвостик */}
-        <G>
-          <SvgLine x1={CX} y1={CY} x2={back.x} y2={back.y} stroke={t.text} strokeWidth={4} strokeLinecap="round" />
-          <Polygon points={`${tip.x},${tip.y} ${baseL.x},${baseL.y} ${baseR.x},${baseR.y}`} fill={t.text} />
-          <Circle cx={CX} cy={CY} r={9} fill={t.text} />
-          <Circle cx={CX} cy={CY} r={4} fill={t.surface} />
-        </G>
-
-        {/* Подписи */}
-        {([[0, '0%'], [100, '100%'], [160, '160%']] as const).map(([v, lbl]) => {
-          const p = polar(R + STROKE / 2 + 12, v);
-          return <SvgText key={v} x={p.x} y={p.y + 3} fontSize={11} fontWeight="600" fill={t.textMuted} textAnchor="middle">{lbl}</SvgText>;
-        })}
+    <View>
+      <Svg width="100%" height={210} viewBox="0 0 240 176" accessibilityLabel={`Темп трат: ${pct}% от нормы, ${ZONE_TEXT[zone].toLowerCase()}`}>
+        <Path d={arc(0, MAX, R)} fill="none" stroke={t.surface3} strokeWidth={SW} strokeLinecap="round" />
+        {band(1, LOW - 1.5, t.success)}{band(LOW + 1.5, PLAN - 1.5, t.primary)}
+        {band(PLAN + 1.5, HIGH - 1.5, t.warning)}{band(HIGH + 1.5, MAX - 1, t.danger)}
+        <APath d={arc(0, MAX, R)} fill="none" stroke={color} strokeWidth={SW} strokeLinecap="round"
+          strokeDasharray={[ARC_LEN, ARC_LEN]} animatedProps={arcProps} />
+        {ticks}
+        <Circle cx={kx - kdx} cy={ky - kdy} r={3.6} fill={t.gold} stroke={t.surface} strokeWidth={1.6} />
+        <Circle cx={kx + kdx} cy={ky + kdy} r={3.6} fill={t.gold} stroke={t.surface} strokeWidth={1.6} />
+        <AG animatedProps={needleProps}>
+          <Path d={`M ${CX - 5} ${CY} L ${CX - 1} ${CY - R + 22} Q ${CX} ${CY - R + 19} ${CX + 1} ${CY - R + 22} L ${CX + 5} ${CY} Z`} fill={t.text} />
+        </AG>
+        <Circle cx={CX} cy={CY} r={9} fill={t.surface} stroke={t.text} strokeWidth={2.5} />
+        <Circle cx={CX} cy={CY} r={3.2} fill={t.gold} />
+        <SvgText x={CX} y={CY + 33} textAnchor="middle" fontSize={25} fontWeight="800" fill={color}>{`${pct > MAX ? pct : shown}%`}</SvgText>
+        <SvgText x={CX} y={CY + 49} textAnchor="middle" fontSize={10} fill={t.textMuted}>от нормы трат на сегодня</SvgText>
       </Svg>
 
-      <Text style={{ fontSize: 38, fontWeight: '800', marginTop: 2, color }}>{shown}%</Text>
-      <Text style={{ color: t.textMuted, fontSize: font.xs, letterSpacing: 0.5 }}>ОТ НОРМЫ ТРАТ НА СЕГОДНЯ</Text>
-      <View style={{ alignSelf: 'stretch', minHeight: 84, marginTop: 4, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ position: 'absolute', left: 8, bottom: -4 }}>
-          <Finik emotion={barEmo} size={78} />
-        </View>
-        <Text style={{ color, fontSize: font.md, fontWeight: '800' }}>
-          {ZONE_TEXT[status]}
-        </Text>
+      <View style={styles.verdictRow}>
+        <Finik emotion={emo} size={72} />
+        <StatusChip kind={zone} label={ZONE_TEXT[zone]} />
       </View>
+
+      <View style={styles.stats}>
+        {[
+          ['Потрачено', fmt(spent), false],
+          ['Норма на сегодня', fmt(norm), false],
+          ['Прогноз на месяц', fmt(projected), projected > plan],
+        ].map(([l, val, bad]) => (
+          <View key={String(l)} style={[styles.stat, { backgroundColor: t.surface2, borderColor: t.border }]}>
+            <Text style={{ color: t.textMuted, fontSize: 11, textAlign: 'center' }} numberOfLines={2}>{l}</Text>
+            <Text style={{ color: bad ? t.danger : t.text, fontSize: font.sm, fontWeight: '800', marginTop: 4 }} numberOfLines={1} adjustsFontSizeToFit>{val}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={{ color: t.textFaint, fontSize: 12, textAlign: 'center', marginTop: spacing.sm }}>
+        День {daysPassed} из {daysInMonth} · план на месяц {fmt(plan)}
+      </Text>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  verdictRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 2 },
+  stats: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  stat: { flex: 1, borderWidth: 1, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 6, alignItems: 'center' },
+});

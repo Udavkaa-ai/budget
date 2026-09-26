@@ -65,8 +65,8 @@ export function ChatModal({ visible, onClose, month, year, monthLabel }: {
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
         <View style={[styles.header, { borderBottomColor: t.border }]}>
           <TouchableOpacity onPress={onClose} style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="chevron-back" size={22} color="#a855f7" />
-            <Text style={{ color: '#a855f7' }}>Назад</Text>
+            <Ionicons name="chevron-back" size={22} color={t.primary} />
+            <Text style={{ color: t.primary }}>Назад</Text>
           </TouchableOpacity>
           <Text style={[styles.title, { color: t.text }]}>💬 Чат с ИИ</Text>
           <View style={{ width: 56 }} />
@@ -94,7 +94,7 @@ export function ChatModal({ visible, onClose, month, year, monthLabel }: {
             ))}
             {loading && (
               <View style={[styles.bubble, { backgroundColor: t.surface, alignSelf: 'flex-start' }]}>
-                <ActivityIndicator color="#a855f7" />
+                <ActivityIndicator color={t.primary} />
               </View>
             )}
           </ScrollView>
@@ -112,7 +112,7 @@ export function ChatModal({ visible, onClose, month, year, monthLabel }: {
             <TouchableOpacity
               accessibilityLabel="Отправить сообщение"
               accessibilityRole="button"
-              style={[styles.sendBtn, { backgroundColor: input.trim() && !loading ? '#a855f7' : t.surface2 }]}
+              style={[styles.sendBtn, { backgroundColor: input.trim() && !loading ? t.primary : t.surface2 }]}
               onPress={send}
               disabled={!input.trim() || loading}
             >

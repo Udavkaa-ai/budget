@@ -20,6 +20,7 @@ import { useBlocks } from '../blocks';
 import { useAuth } from '../hooks/useAuth';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { BudgetGauge } from '../components/BudgetGauge';
+import { SectionTitle } from '../components/UI';
 import { haptics } from '../haptics';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 
@@ -318,12 +319,12 @@ export default function SummaryScreen() {
     const heatScale = heatUser ? 1 / memberCount : 1;
     const heatColor = (v: number) =>
       v === 0 ? t.surface2
-      : v < 2000 * heatScale ? '#bbf7d0'
-      : v < 5000 * heatScale ? '#22c55e'
-      : v < 10000 * heatScale ? '#f59e0b'
-      : v < 20000 * heatScale ? '#f97316'
-      : '#ef4444';
-    const heatText = (v: number) => (v === 0 ? t.textMuted : '#1e293b');
+      : v < 2000 * heatScale ? t.heat[0]
+      : v < 5000 * heatScale ? t.heat[1]
+      : v < 10000 * heatScale ? t.heat[2]
+      : v < 20000 * heatScale ? t.heat[3]
+      : t.heat[4];
+    const heatText = (v: number) => (v === 0 ? t.textMuted : t.scheme === 'dark' ? '#F4F2FA' : '#1C1830');
     const dailyPlanShare = plannedMonthly > 0 ? Math.round(plannedMonthly / daysInMonth * heatScale) : 0;
 
     return (
@@ -367,7 +368,7 @@ export default function SummaryScreen() {
             <Text style={[styles.totalLabel, { color: t.textMuted }]}>Потрачено за месяц</Text>
             <Text style={[styles.totalAmt, { color: t.text }]}>{fmt(data?.total ?? 0)}</Text>
             {compare && hasPrev && (
-              <Text style={{ fontSize: font.sm, marginTop: 2, color: (data?.total ?? 0) > prevAgg.total ? '#ef4444' : '#22c55e' }}>
+              <Text style={{ fontSize: font.sm, marginTop: 2, color: (data?.total ?? 0) > prevAgg.total ? t.danger : t.success }}>
                 Прошлый месяц{cmpMode === 'date' && isCur ? ` (до ${daysPassed}-го)` : ''}: {fmt(prevAgg.total)}
                 {prevAgg.total > 0 ? ` (${(data?.total ?? 0) > prevAgg.total ? '▲' : '▼'}${Math.abs(Math.round(((data?.total ?? 0) - prevAgg.total) / prevAgg.total * 100))}%)` : ''}
               </Text>
@@ -389,22 +390,9 @@ export default function SummaryScreen() {
           {blocks.gauge && gaugePct !== null && (
             <View ref={isCenter ? gaugeTarget : undefined} collapsable={false} onLayout={isCenter ? tOffset('summary.gauge') : undefined}>
             <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>💵 Барометр бюджета</Text>
-              <BudgetGauge pct={gaugePct} />
-              <View style={styles.gaugeStats}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Потрачено</Text>
-                  <Text style={{ color: t.text, fontSize: font.sm, fontWeight: '700' }}>{fmt(data?.total ?? 0)}</Text>
-                </View>
-                <View style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>По плану</Text>
-                  <Text style={{ color: t.text, fontSize: font.sm, fontWeight: '700' }}>{fmt(planToDate)}</Text>
-                </View>
-                <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={{ color: t.textMuted, fontSize: font.xs }}>Дней</Text>
-                  <Text style={{ color: t.text, fontSize: font.sm, fontWeight: '700' }}>{daysPassed} из {daysInMonth}</Text>
-                </View>
-              </View>
+              <SectionTitle>Барометр бюджета</SectionTitle>
+              <BudgetGauge pct={gaugePct} spent={data?.total ?? 0} norm={planToDate} plan={plannedMonthly}
+                daysPassed={daysPassed} daysInMonth={daysInMonth} />
             </Card>
             </View>
           )}
@@ -422,17 +410,18 @@ export default function SummaryScreen() {
               const yy = H - Math.min(pct, MAX) / MAX * (H - 15);
               pts.push({ x, y: yy, pct, d });
             }
-            const dotColor = (p: number) => p > 100 ? '#ef4444' : p > 80 ? '#f59e0b' : '#22c55e';
+            // зоны как у спидометра: ≤85 / 85–100 / 100–110 / >110
+            const dotColor = (p: number) => p > 110 ? t.danger : p > 100 ? t.warning : p > 85 ? t.primary : t.success;
             return (
               <Card>
-                <Text style={[styles.sectionTitle, { color: t.text }]}>📈 Скорость трат</Text>
+                <SectionTitle>Скорость трат</SectionTitle>
                 <Svg width="100%" height={H + 20} viewBox={`0 0 ${W} ${H + 20}`}>
                   {[0, 50, 100, 150, 200, 250].map(pv => {
                     const gy = H - Math.min(pv, MAX) / MAX * (H - 15);
                     return (
                       <React.Fragment key={pv}>
                         <SvgLine x1={30} y1={gy} x2={W - 6} y2={gy}
-                          stroke={pv === 100 ? '#f0a5b5' : t.border} strokeWidth={pv === 100 ? 1.5 : 0.6}
+                          stroke={pv === 100 ? t.gold : t.border} strokeWidth={pv === 100 ? 1.5 : 0.6}
                           strokeDasharray={pv === 100 ? '5 4' : undefined} />
                         <SvgText x={26} y={gy + 3} fontSize={8.5} fill={t.textMuted} textAnchor="end">{pv}%</SvgText>
                       </React.Fragment>
@@ -440,7 +429,7 @@ export default function SummaryScreen() {
                   })}
                   <Polyline
                     points={pts.map(p => `${p.x},${p.y}`).join(' ')}
-                    fill="none" stroke="#ef4444" strokeWidth={2.5} strokeLinejoin="round"
+                    fill="none" stroke={t.textFaint} strokeWidth={2} strokeLinejoin="round"
                   />
                   {pts.map(p => (
                     <Circle key={p.d} cx={p.x} cy={p.y} r={3.5} fill={dotColor(p.pct)} />
@@ -461,7 +450,7 @@ export default function SummaryScreen() {
           {/* Heatmap по дням */}
           {blocks.heatmap && monthExp.length > 0 && (
             <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>📅 Расходы по дням</Text>
+              <SectionTitle>Расходы по дням</SectionTitle>
               {memberNames.length > 1 && (
                 <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' }}>
                   <TouchableOpacity
@@ -505,7 +494,7 @@ export default function SummaryScreen() {
                     >
                       <Text numberOfLines={1} style={{ fontSize: font.xs, fontWeight: '700', color: heatText(v) }}>{d}</Text>
                       {v > 0 && (
-                        <Text numberOfLines={1} style={{ fontSize: 8, color: '#1e293b' }}>
+                        <Text numberOfLines={1} style={{ fontSize: 8, color: heatText(v) }}>
                           {v >= 1000 ? `${Math.round(v / 1000)}к` : Math.round(v)}
                         </Text>
                       )}
@@ -548,7 +537,7 @@ export default function SummaryScreen() {
           {/* AI analysis (premium) */}
           {blocks.ai && <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <TouchableOpacity
-              style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? '#a855f7' : t.surface, borderColor: '#a855f7' }]}
+              style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? t.primary : t.surface, borderColor: t.primary }]}
               onPress={() => {
                 if (!premium) {
                   Alert.alert('💎 Премиум', 'ИИ-анализ доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
@@ -557,12 +546,12 @@ export default function SummaryScreen() {
                 runAnalysis();
               }}
             >
-              <Text style={{ color: premium ? '#fff' : '#a855f7', fontWeight: '700' }}>
+              <Text style={{ color: premium ? '#fff' : t.primary, fontWeight: '700' }}>
                 🤖 ИИ-анализ{premium ? '' : ' · 💎'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? t.surface : t.surface, borderColor: '#a855f7' }]}
+              style={[styles.aiBtn, { flex: 1, backgroundColor: premium ? t.surface : t.surface, borderColor: t.primary }]}
               onPress={() => {
                 if (!premium) {
                   Alert.alert('💎 Премиум', 'ИИ-чат доступен в Премиуме. Активировать можно в Настройках (бесплатно на время теста).');
@@ -571,14 +560,14 @@ export default function SummaryScreen() {
                 setChatOpen(true);
               }}
             >
-              <Text style={{ color: '#a855f7', fontWeight: '700' }}>💬 Чат{premium ? '' : ' · 💎'}</Text>
+              <Text style={{ color: t.primary, fontWeight: '700' }}>💬 Чат{premium ? '' : ' · 💎'}</Text>
             </TouchableOpacity>
           </View>}
 
           {/* By user */}
           {blocks.byUser && data && Object.keys(data.byUser).length > 1 && (
             <Card>
-              <Text style={[styles.sectionTitle, { color: t.text }]}>По участникам</Text>
+              <SectionTitle>По участникам</SectionTitle>
               {Object.entries(data.byUser).map(([name, ud]) => {
                 const inc = incomes[name] ?? 0;
                 const topCats = Object.entries(ud.byCategory ?? {})
@@ -604,7 +593,7 @@ export default function SummaryScreen() {
           {/* Categories */}
           <Card>
             <View style={styles.catHeader}>
-              <Text style={[styles.sectionTitle, { color: t.text, marginBottom: 0 }]}>Категории</Text>
+              <SectionTitle style={{ marginBottom: 0, flex: 1 }}>Категории</SectionTitle>
               <TouchableOpacity onPress={openPlanEditor}>
                 <Text style={{ color: t.primary, fontSize: font.sm, fontWeight: '600' }}>⚙️ Лимиты</Text>
               </TouchableOpacity>
@@ -654,16 +643,12 @@ export default function SummaryScreen() {
                         <Text style={{ color: t.text, fontSize: font.lg, fontWeight: '800' }}>{fmt(amt)}</Text>
                       </View>
                       <View style={[styles.gradBarBg, { backgroundColor: t.surface2 }]}>
-                        <LinearGradient
-                          colors={over ? ['#FF5C87', '#FF7AB3'] : ['#8A6BFF', '#FF7AB3']}
-                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                          style={[styles.gradBarFill, { width: `${fillPct * 100}%` }]}
-                        />
+                        <View style={[styles.gradBarFill, { width: `${fillPct * 100}%`, backgroundColor: over ? t.danger : t.primary }]} />
                       </View>
                       {(limit > 0 || !selUser) && (
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, gap: spacing.sm }}>
                           {limit > 0 ? (
-                            <Text numberOfLines={1} style={{ flexShrink: 1, color: over ? '#FF5C87' : t.success, fontSize: font.sm, fontWeight: '600' }}>
+                            <Text numberOfLines={1} style={{ flexShrink: 1, color: over ? t.danger : t.success, fontSize: font.sm, fontWeight: '600' }}>
                               {over ? `перерасход ${fmt(amt - limit)}` : `осталось ${fmt(limit - amt)}`}
                             </Text>
                           ) : <Text style={{ color: t.textMuted, fontSize: font.sm }}>без лимита</Text>}
@@ -881,9 +866,9 @@ const styles = StyleSheet.create({
   catHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   catRow:       { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   catAmt:       { fontSize: font.sm, fontWeight: '700', width: 80, textAlign: 'right' },
-  barBg:        { height: 10, backgroundColor: '#e2e8f0', borderRadius: 5, overflow: 'visible', position: 'relative' },
+  barBg:        { height: 10, backgroundColor: 'rgba(143,137,172,0.18)', borderRadius: 5, overflow: 'visible', position: 'relative' },
   barFill:      { position: 'absolute', top: 0, bottom: 0, borderRadius: 5 },
-  limitLine:    { position: 'absolute', top: -2, bottom: -2, width: 2, backgroundColor: '#f59e0b' },
+  limitLine:    { position: 'absolute', top: -2, bottom: -2, width: 3, borderRadius: 2, backgroundColor: '#FFC24B' },
   aiBtn:        { borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginBottom: spacing.md, borderWidth: 1.5 },
   modalHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   modalTitle:   { fontSize: font.lg, fontWeight: '700' },

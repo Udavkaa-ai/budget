@@ -2,68 +2,95 @@ import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
-// Палитра 1:1 с веб-версией (:root в style.css)
+// Дизайн-система ФИНИК 1:1 с вебом (:root в public/style.css): чистые цвета
+// без градиентов, одна палитра на весь интерфейс. Фишка — «золотая застёжка»
+// кошелька Финика: две золотые точки у активной вкладки и заголовков секций.
 export const palette = {
   primary:     '#5947E0',
-  primaryHi:   '#8A6BFF',
-  primaryDark: '#4233C8',
-  pink:        '#FF7AB3',
-  mint:        '#7AE0C3',
-  red:         '#FF5C87',
-  yellow:      '#FFB47A',
-  green:       '#22c55e',
+  primaryHi:   '#8B7BFF',
+  primaryDark: '#4A39C4',
+  gold:        '#FFC24B',
+  goldDeep:    '#E8A21F',
+  red:         '#D93B55',
+  green:       '#17915C',
+  yellow:      '#C77A12',
+  pink:        '#C94F97',
+  mint:        '#1597A8',
 };
 
-// Ненавязчивый цветовой «дымок» вверху каждой вкладки — свой оттенок,
-// как акцентные фоны в вебе. Верхний цвет тает в прозрачность к ~45% экрана.
+// Раньше — цветной «дымок» вверху вкладки; в плоском дизайне фон ровный.
 export type TabTint = 'home' | 'summary' | 'chart' | 'settings' | 'goals';
+const noTints = { home: 'transparent', summary: 'transparent', chart: 'transparent', settings: 'transparent', goals: 'transparent' } as Record<TabTint, string>;
 
 const light = {
-  bg:          '#EAE4FF',
-  surface:     '#FDFCFF',
-  surface2:    '#F1EDFF',
-  border:      'rgba(89,71,224,0.18)',
-  text:        '#1A1530',
-  textMuted:   '#645E82', /* WCAG AA: #7A7396 давал 3.6–4.3:1, теперь ≥4.9:1 */
-  primary:     palette.primary,
-  primaryText: '#ffffff',
-  accent:      palette.pink,
-  tabBar:      '#FDFCFF',
-  danger:      palette.red,
-  success:     palette.green,
-  gradient:    [palette.primaryHi, palette.primary] as [string, string],
-  titleColor:  palette.primary,
-  tints: {
-    home:     'rgba(137,107,255,0.22)',
-    summary:  'rgba(255,122,179,0.20)',
-    chart:    'rgba(122,224,195,0.22)',
-    settings: 'rgba(122,115,150,0.16)',
-    goals:    'rgba(255,180,122,0.22)',
-  } as Record<TabTint, string>,
+  scheme:      'light' as 'light' | 'dark',
+  bg:          '#F4F2FA',
+  surface:     '#FFFFFF',
+  surface2:    '#F1EEFA',
+  surface3:    '#E8E3F7',
+  border:      '#E6E1F4',
+  borderStrong:'#D3CBEE',
+  seam:        '#CFC6EC',
+  text:        '#1C1830',
+  textMuted:   '#645E82',
+  textFaint:   '#8F89AC',
+  primary:     '#5947E0',
+  primaryStrong:'#5947E0',
+  primarySoft: '#EDEAFD',
+  primaryText: '#FFFFFF',
+  gold:        '#FFC24B',
+  goldDeep:    '#E8A21F',
+  goldSoft:    '#FFF4D9',
+  accent:      '#17915C',
+  tabBar:      '#FFFFFF',
+  danger:      '#D93B55',
+  dangerSoft:  '#FCE7EA',
+  success:     '#17915C',
+  successSoft: '#E2F4EA',
+  warning:     '#C77A12',
+  warningSoft: '#FDF0DD',
+  series:      ['#5947E0', '#1597A8', '#C94F97', '#17915C'],
+  heat:        ['#CDEFD9', '#7FD3A3', '#FFD37A', '#F59A3C', '#E5566B'],
+  overlay:     'rgba(17,16,24,0.42)',
+  // совместимость: где ещё остался LinearGradient — он рисуется ровным цветом
+  gradient:    ['#5947E0', '#5947E0'] as [string, string],
+  titleColor:  '#5947E0',
+  tints:       noTints,
 };
 
-const dark = {
-  bg:          '#17152B',
-  surface:     '#232043',
-  surface2:    '#2F2B56',
-  border:      'rgba(138,107,255,0.30)',
-  text:        '#F3F1FF',
-  textMuted:   '#9D97C4',
-  primary:     palette.primaryHi,
-  primaryText: '#ffffff',
-  accent:      palette.pink,
-  tabBar:      '#232043',
-  danger:      palette.red,
-  success:     palette.green,
-  gradient:    [palette.primaryHi, palette.primary] as [string, string],
-  titleColor:  palette.primaryHi,
-  tints: {
-    home:     'rgba(137,107,255,0.18)',
-    summary:  'rgba(255,122,179,0.15)',
-    chart:    'rgba(122,224,195,0.14)',
-    settings: 'rgba(157,151,196,0.12)',
-    goals:    'rgba(255,180,122,0.15)',
-  } as Record<TabTint, string>,
+const dark: typeof light = {
+  scheme:      'dark',
+  bg:          '#111018',
+  surface:     '#1B1926',
+  surface2:    '#232031',
+  surface3:    '#2C283D',
+  border:      '#2C2840',
+  borderStrong:'#3B3656',
+  seam:        '#464063',
+  text:        '#EEEBF8',
+  textMuted:   '#A39DC6',
+  textFaint:   '#7B7599',
+  primary:     '#8B7BFF',
+  primaryStrong:'#6E5CF0',
+  primarySoft: '#26214A',
+  primaryText: '#FFFFFF',
+  gold:        '#FFC24B',
+  goldDeep:    '#E8A21F',
+  goldSoft:    '#3A2F16',
+  accent:      '#3DCB8C',
+  tabBar:      '#1B1926',
+  danger:      '#FF6B81',
+  dangerSoft:  '#3A1B25',
+  success:     '#3DCB8C',
+  successSoft: '#16332A',
+  warning:     '#FFB547',
+  warningSoft: '#3A2A12',
+  series:      ['#8B7BFF', '#3FC6D6', '#F07CC0', '#3DCB8C'],
+  heat:        ['#1E4A35', '#2E7A55', '#7E6220', '#A85D26', '#B03C52'],
+  overlay:     'rgba(0,0,0,0.6)',
+  gradient:    ['#6E5CF0', '#6E5CF0'],
+  titleColor:  '#8B7BFF',
+  tints:       noTints,
 };
 
 export type Theme = typeof light;
@@ -118,10 +145,14 @@ export const spacing = {
   xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32,
 };
 
-// Радиусы как в вебе: --radius 20, --radius-sm 14, --radius-xs 10
+// Радиусы как в вебе: --r-sm 8, --r-md 12, --r-lg 18
 export const radius = {
-  sm: 10, md: 14, lg: 20, xl: 28,
+  sm: 8, md: 12, lg: 18, xl: 24, pill: 999,
 };
+
+// Тени как --shadow-1 / --shadow-2
+export const shadow1 = { shadowColor: '#1C1830', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 };
+export const shadow2 = { shadowColor: '#1C1830', shadowOpacity: 0.16, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 8 };
 
 export const font = {
   xs: 11, sm: 13, md: 15, lg: 17, xl: 20, xxl: 24, xxxl: 32,

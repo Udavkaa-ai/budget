@@ -9,6 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
+import { SectionTitle } from '../components/UI';
 import { api, invites, csv, pushSettings, support as supportApi, type SupportMessage, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
@@ -553,7 +554,7 @@ export default function SettingsScreen() {
 
         {/* Profile */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Профиль</Text>
+          <SectionTitle>Профиль</SectionTitle>
           <Text style={[styles.profileName, { color: t.text }]}>{user?.name ?? '—'}</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm }}>Семья: {familyName.trim() || user?.family || '—'}</Text>
         </Card>
@@ -561,7 +562,7 @@ export default function SettingsScreen() {
         {/* Family */}
         <View ref={inviteTarget} collapsable={false} onLayout={offset('settings.invite')}>
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Семья</Text>
+          <SectionTitle>Семья</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: 4 }}>Название семьи</Text>
           <Field
             style={{ marginBottom: spacing.md }}
@@ -595,8 +596,8 @@ export default function SettingsScreen() {
         {/* Subscription */}
         <View ref={premiumTarget} collapsable={false} onLayout={offset('settings.premium')}>
         {premium ? (
-          <Card style={{ borderColor: '#a855f7', borderWidth: 1.5 }}>
-            <Text style={[styles.sectionTitle, { color: '#a855f7' }]}>💎 Премиум активен</Text>
+          <Card style={{ borderColor: t.primary, borderWidth: 1.5 }}>
+            <SectionTitle>Премиум активен</SectionTitle>
             <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20 }}>
               Тестовый режим — бесплатно на время тестирования.{'\n'}
               Доступны ИИ-аналитика и сканирование чеков.
@@ -606,8 +607,8 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </Card>
         ) : (
-          <Card style={{ borderColor: '#f59e0b', borderWidth: 1.5 }}>
-            <Text style={[styles.sectionTitle, { color: '#f59e0b' }]}>⭐ Бесплатный тариф</Text>
+          <Card style={{ borderColor: t.warning, borderWidth: 1.5 }}>
+            <SectionTitle>Бесплатный тариф</SectionTitle>
             <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md }}>
               Все основные функции работают без интернета и без стоимости.{'\n'}
               Категории определяет локальный ИИ — быстро, приватно, бесплатно.
@@ -616,7 +617,7 @@ export default function SettingsScreen() {
               {'🤖 ИИ-аналитика\n📸 Сканирование чеков\n— только в Премиуме'}
             </Text>
             <TouchableOpacity
-              style={[styles.upgradeBtn, { backgroundColor: '#f59e0b' }]}
+              style={[styles.upgradeBtn, { backgroundColor: t.warning }]}
               onPress={activatePremium}
             >
               <Text style={{ color: '#fff', fontWeight: '700' }}>Активировать Премиум (тест)</Text>
@@ -627,7 +628,7 @@ export default function SettingsScreen() {
 
         {/* Notifications */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Уведомления</Text>
+          <SectionTitle>Уведомления</SectionTitle>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: t.text }}>🔔 Расходы партнёра</Text>
@@ -646,7 +647,7 @@ export default function SettingsScreen() {
         {/* App lock */}
         <View ref={securityTarget} collapsable={false} onLayout={offset('settings.security')}>
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Безопасность</Text>
+          <SectionTitle>Безопасность</SectionTitle>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: t.text }}>🔒 Замок при открытии</Text>
@@ -670,7 +671,7 @@ export default function SettingsScreen() {
 
         {/* End-to-end encryption */}
         <Card style={e2e.enabled ? { borderColor: t.success, borderWidth: 1.5 } : undefined}>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>🔒 Приватность</Text>
+          <SectionTitle>Приватность</SectionTitle>
           {e2e.enabled ? (
             <>
               <Text style={{ color: t.text, fontSize: font.sm, lineHeight: 20 }}>
@@ -702,7 +703,7 @@ export default function SettingsScreen() {
 
         {/* Theme */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Оформление</Text>
+          <SectionTitle>Оформление</SectionTitle>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {([['light', '☀️ Светлая'], ['dark', '🌙 Тёмная'], ['auto', '🔄 Авто']] as const).map(([m, label]) => (
               <TouchableOpacity
@@ -724,7 +725,7 @@ export default function SettingsScreen() {
 
         {/* Custom categories */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Мои категории</Text>
+          <SectionTitle>Мои категории</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
             Общие для всей семьи. При удалении расходы переносятся в «Прочее».
           </Text>
@@ -764,7 +765,7 @@ export default function SettingsScreen() {
         {/* Analytics constructor */}
         <View ref={blocksTarget} collapsable={false} onLayout={offset('settings.blocks')}>
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Конструктор аналитики</Text>
+          <SectionTitle>Конструктор аналитики</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
             Включайте только те блоки, которыми пользуетесь. Настройка — личная для этого устройства.
           </Text>
@@ -815,7 +816,7 @@ export default function SettingsScreen() {
 
         {/* Data */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Данные</Text>
+          <SectionTitle>Данные</SectionTitle>
           <TouchableOpacity style={styles.row} onPress={exportCsv} disabled={busy}>
             <Text style={{ color: t.text }}>📤 Экспорт в CSV</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
@@ -834,7 +835,7 @@ export default function SettingsScreen() {
 
         {/* Encrypted backups */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Резервные копии</Text>
+          <SectionTitle>Резервные копии</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
             Шифруются на телефоне вашим ключом — сервер содержимое не видит. Без ключа копию не восстановить.
           </Text>
@@ -879,7 +880,7 @@ export default function SettingsScreen() {
 
         {/* Guide & Help */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Помощь</Text>
+          <SectionTitle>Помощь</SectionTitle>
           <TouchableOpacity style={styles.row} onPress={() => openRuStoreListing()}>
             <Text style={{ color: t.text }}>⭐ Оценить приложение в RuStore</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
@@ -896,7 +897,7 @@ export default function SettingsScreen() {
 
         {/* Support */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>Поддержка</Text>
+          <SectionTitle>Поддержка</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 20 }}>
             Нашли ошибку, есть идея или вопрос? Напишите — сообщение придёт напрямую разработчику, ответ появится здесь.
           </Text>
@@ -931,7 +932,7 @@ export default function SettingsScreen() {
 
         {/* About */}
         <Card>
-          <Text style={[styles.sectionTitle, { color: t.textMuted }]}>О приложении</Text>
+          <SectionTitle>О приложении</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия 2.23.0 A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
