@@ -80,11 +80,20 @@ export function BankSettings() {
           ? <Toggle value={st.push} onValueChange={v => { bankNative.setEnabled('push', v); setSt({ ...st, push: v }); }} />
           : <Pressable onPress={() => bankNative.openNotificationAccess()}><Text style={{ color: t.primary, fontWeight: '700' }}>Открыть</Text></Pressable>} />
 
+      {st.smsPermission && !st.smsRead && (
+        <Pressable onPress={async () => { await requestSmsPermission(); load(); }} style={{ marginTop: spacing.sm }}>
+          <Text style={{ color: t.primary, fontWeight: '700', fontSize: 13 }}>Разрешить чтение входящих СМС — подберёт пропущенные ›</Text>
+        </Pressable>
+      )}
       {st.smsPermission && st.sms && st.smsSeen === 0 && (
         <View style={[styles.discover, { backgroundColor: t.warningSoft, borderColor: t.warning, marginTop: spacing.md }]}>
           <Text style={{ color: t.text, fontWeight: '700' }}>СМС не доходят?</Text>
           <Text style={{ color: t.textMuted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>
-            На Xiaomi/POCO/Redmi прошивка отдельно прячет СМС от банков. Откройте: Настройки телефона → Приложения → «ФИНИК · Личный» → Разрешения и разрешите «SMS» и «Сервисные SMS» (или «Уведомления SMS»). Там же включите «Автозапуск». Потом пришлите себе любое СМС — здесь появится «Получено СМС: 1».
+            Прошивки телефонов «усыпляют» приложения в фоне. Откройте настройки телефона → Приложения → «ФИНИК · Личный»:{'\n'}
+            • Tecno/Infinix (HiOS): «Автозапуск» — вкл., «Батарея» → «Без ограничений», в Phone Master уберите ФИНИК из очистки;{'\n'}
+            • Xiaomi/POCO: «Автозапуск» и разрешения «SMS» / «Сервисные SMS»;{'\n'}
+            • Samsung: «Батарея» → «Без ограничений».{'\n'}
+            Даже без этого ФИНИК дочитает свежие СМС от банков из входящих, когда вы его откроете — если разрешено «Чтение СМС».
           </Text>
         </View>
       )}

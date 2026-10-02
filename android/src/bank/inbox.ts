@@ -170,23 +170,25 @@ export async function dismiss(item: InboxItem) { await setStatus(item.id, 'dismi
 export interface BankStatus {
   notificationAccess: boolean; sms: boolean; push: boolean; smsPermission: boolean;
   dropped: number; senders: string[]; packages: string[]; discovered: string[]; discoverUntil: number;
-  smsSeen: number; smsFrom: string[];
+  smsSeen: number; smsFrom: string[]; smsRead: boolean;
 }
 export async function getBankStatus(): Promise<BankStatus | null> {
   if (!Bank) return null;
   const s = JSON.parse(await Bank.status());
   const smsPermission = Platform.OS === 'android'
     ? await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS) : false;
-  return { ...s, smsPermission };
+  const smsRead = Platform.OS === 'android'
+    ? await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS) : false;
+  return { ...s, smsPermission, smsRead };
 }
 export async function requestSmsPermission() {
-  const r = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS, {
-    title: 'Покупки из СМС банка',
-    message: 'ФИНИК будет читать только СМС от отправителей из списка (900, VTB…). Коды подтверждения сразу выбрасываются.',
-    buttonPositive: 'Разрешить',
-    buttonNegative: 'Не сейчас',
-  });
-  return r === PermissionsAndroid.RESULTS.GRANTED;
+  // RECEIVE_SMS — ловить СМС сразу; READ_SMS — дочитать пропущенные из входящих,
+  // если прошивка не пустила СМС в фоне
+  const r = await PermissionsAndroid.requestMultiple([
+    PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+    PermissionsAndroid.PERMISSIONS.READ_SMS,
+  ]);
+  return r[PermissionsAndroid.PERMISSIONS.RECEIVE_SMS] === PermissionsAndroid.RESULTS.GRANTED;
 }
 export const bankNative = {
   setEnabled: (k: 'sms' | 'push', on: boolean) => Bank?.setEnabled(k, on),

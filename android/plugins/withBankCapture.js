@@ -60,6 +60,39 @@ object BankQueue {
     p.edit().putInt("sms_seen", p.getInt("sms_seen", 0) + 1).putStringSet("sms_from", set).apply()
   }
 
+  // Запасной путь для прошивок, которые режут приём СМС в фоне (Tecno/HiOS,
+  // Xiaomi/MIUI…): при открытии ФИНИКа читаем входящие СМС новее последней
+  // просмотренной — только от отправителей из белого списка, коды выбрасываем.
+  // Первый запуск: берём последние сутки, а не всю историю.
+  @Synchronized
+  fun scanInbox(ctx: Context) {
+    val p = prefs(ctx)
+    if (!enabled(ctx, "sms")) return
+    if (ctx.checkSelfPermission(android.Manifest.permission.READ_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+    val now = System.currentTimeMillis()
+    val since = p.getLong("sms_last_ts", now - 86_400_000L)
+    val allowed = senders(ctx)
+    var maxTs = since
+    var found = 0
+    try {
+      ctx.contentResolver.query(
+        android.provider.Telephony.Sms.Inbox.CONTENT_URI,
+        arrayOf("address", "body", "date"), "date > ?", arrayOf(since.toString()), "date ASC",
+      )?.use { c ->
+        while (c.moveToNext()) {
+          val from = c.getString(0) ?: continue
+          val body = c.getString(1) ?: continue
+          val ts = c.getLong(2)
+          if (ts > maxTs) maxTs = ts
+          found++
+          if (from.trim().uppercase() !in allowed) continue
+          offer(ctx, "sms", from, body, ts)
+        }
+      }
+    } catch (e: Exception) { return }
+    p.edit().putLong("sms_last_ts", maxTs).putInt("inbox_seen", p.getInt("inbox_seen", 0) + found).apply()
+  }
+
   @Synchronized
   fun drain(ctx: Context): String {
     val p = prefs(ctx)
@@ -104,6 +137,9 @@ class BankSmsReceiver : BroadcastReceiver() {
       ts = m.timestampMillis
     }
     for ((from, body) in parts) BankQueue.offer(ctx, "sms", from, body.toString(), ts)
+    // уже забрали «вживую» — сканер входящих не возьмёт их повторно
+    val p = ctx.getSharedPreferences("finik_bank", Context.MODE_PRIVATE)
+    if (ts > p.getLong("sms_last_ts", 0)) p.edit().putLong("sms_last_ts", ts).apply()
   }
 }
 `;
@@ -154,7 +190,10 @@ class BankModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
   override fun getName() = "FinikBank"
   private fun prefs() = ctx.getSharedPreferences("finik_bank", 0)
 
-  @ReactMethod fun drain(promise: Promise) = promise.resolve(BankQueue.drain(ctx))
+  @ReactMethod fun drain(promise: Promise) {
+    BankQueue.scanInbox(ctx)
+    promise.resolve(BankQueue.drain(ctx))
+  }
 
   @ReactMethod fun status(promise: Promise) {
     val p = prefs()
@@ -167,7 +206,7 @@ class BankModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
       .put("packages", JSONArray(BankQueue.packages(ctx).toList()))
       .put("discovered", JSONArray((p.getStringSet("discovered", emptySet()) ?: emptySet()).toList()))
       .put("discoverUntil", p.getLong("discover_until", 0))
-      .put("smsSeen", p.getInt("sms_seen", 0))
+      .put("smsSeen", p.getInt("sms_seen", 0) + p.getInt("inbox_seen", 0))
       .put("smsFrom", JSONArray((p.getStringSet("sms_from", emptySet()) ?: emptySet()).toList()))
     promise.resolve(o.toString())
   }
@@ -200,7 +239,7 @@ class BankPackage : ReactPackage {
 `;
 
 module.exports = function withBankCapture(config) {
-  config = AndroidConfig.Permissions.withPermissions(config, ['android.permission.RECEIVE_SMS']);
+  config = AndroidConfig.Permissions.withPermissions(config, ['android.permission.RECEIVE_SMS', 'android.permission.READ_SMS']);
   config = withAndroidManifest(config, cfg => {
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(cfg.modResults);
     app.receiver = (app.receiver || []).filter(r => r.$['android:name'] !== `${PKG}.BankSmsReceiver`);
