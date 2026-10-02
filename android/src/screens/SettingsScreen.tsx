@@ -39,15 +39,13 @@ import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
 import * as e2eData from '../e2e/compute';
 
-const SETTINGS_PAGES: Array<{ id: SettingsPage; title: string; sub: string; icon: string; tone?: 'success' | 'gold'; personal?: boolean }> = [
+const SETTINGS_PAGES: Array<{ id: SettingsPage; title: string; sub: string; icon: string; tone?: 'success' | 'gold' }> = [
   { id: 'family', title: 'Семья и бюджет', sub: 'Семья, приглашения, план, категории, регулярные платежи', icon: 'people-outline' },
-  { id: 'screens', title: 'Экраны и аналитика', sub: 'Что показывать на вкладках Месяц, График и Цели', icon: 'grid-outline' },
-  { id: 'look', title: 'Внешний вид', sub: 'Тема и Финик', icon: 'contrast-outline' },
-  { id: 'notify', title: 'Уведомления', sub: 'О расходах партнёра', icon: 'notifications-outline' },
-  { id: 'security', title: 'Безопасность и приватность', sub: 'Замок, шифрование, резервные копии', icon: 'shield-checkmark-outline', tone: 'success' },
-  { id: 'bank', title: 'Покупки из банка', sub: 'СМС и уведомления банков, «Входящие», журнал', icon: 'card-outline', personal: true },
+  { id: 'look', title: 'Внешний вид и экраны', sub: 'Тема, Финик и что показывать на вкладках', icon: 'contrast-outline' },
+  { id: 'notify', title: isPersonalBuild ? 'Уведомления и банк' : 'Уведомления',
+    sub: isPersonalBuild ? 'О расходах партнёра, покупки из СМС и пушей банков' : 'О расходах партнёра', icon: 'notifications-outline' },
+  { id: 'security', title: 'Безопасность и данные', sub: 'Замок, шифрование, резервные копии, экспорт и импорт', icon: 'shield-checkmark-outline', tone: 'success' },
   { id: 'premium', title: 'Премиум', sub: 'ИИ-разбор, сканирование чеков, анализ месяца', icon: 'diamond-outline', tone: 'gold' },
-  { id: 'data', title: 'Данные', sub: 'Экспорт и импорт CSV', icon: 'download-outline' },
   { id: 'help', title: 'Помощь и поддержка', sub: 'Вопросы и ответы, тур, написать разработчику, оценить', icon: 'help-circle-outline', tone: 'gold' },
 ];
 
@@ -611,7 +609,7 @@ export default function SettingsScreen() {
               </View>
             </Card>
             <Card style={{ paddingVertical: 4, paddingHorizontal: 4 }}>
-              {SETTINGS_PAGES.filter(pg => !pg.personal || isPersonalBuild).map((pg, i) => (
+              {SETTINGS_PAGES.map((pg, i) => (
                 <TouchableOpacity key={pg.id} onPress={() => openPage(pg.id)} activeOpacity={0.7}
                   style={[styles.menuRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border }]}>
                   <View style={[styles.menuIco, { backgroundColor: pg.tone === 'success' ? t.successSoft : pg.tone === 'gold' ? t.goldSoft : t.primarySoft }]}>
@@ -738,39 +736,7 @@ export default function SettingsScreen() {
           </>
         )}
 
-        {page === 'screens' && (
-          <>
-        {/* Analytics constructor */}
-        <View ref={blocksTarget} collapsable={false} onLayout={offset('settings.blocks')}>
-        <Card>
-          <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 19 }}>
-            Включайте только то, чем пользуетесь. Настройка личная для этого устройства.
-          </Text>
-          {BLOCK_GROUPS.map(g => {
-            const off = (g.tab === 'chart' && !blocks.chartTab) || (g.tab === 'goals' && !blocks.goalsTab);
-            return (
-              <View key={g.title} style={{ marginTop: spacing.md }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ color: t.textMuted, fontSize: 12, fontWeight: '800', letterSpacing: 1 }}>{g.title.toUpperCase()}</Text>
-                  {off && <Text style={{ color: t.warning, fontSize: 11, fontWeight: '600' }}>вкладка скрыта</Text>}
-                </View>
-                {'hint' in g && g.hint ? <Text style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>{g.hint}</Text> : null}
-                {g.items.map(b => (
-                  <View key={b.id} style={[styles.toggleRow, off && { opacity: 0.45 }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: t.text, fontWeight: '600' }}>{b.label}</Text>
-                      <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{b.hint}</Text>
-                    </View>
-                    <Toggle value={blocks[b.id]} onValueChange={v => setBlock(b.id, v)} />
-                  </View>
-                ))}
-              </View>
-            );
-          })}
-        </Card>
-        </View>
-          </>
-        )}
+
 
         {page === 'look' && (
           <>
@@ -808,6 +774,37 @@ export default function SettingsScreen() {
             <Toggle value={finikOn} onValueChange={setFinikEnabled} />
           </View>
         </Card>
+
+        {/* Analytics constructor */}
+        <View ref={blocksTarget} collapsable={false} onLayout={offset('settings.blocks')}>
+        <Card>
+          <SectionTitle>Что показывать на вкладках</SectionTitle>
+          <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 19 }}>
+            Включайте только то, чем пользуетесь. Настройка личная для этого устройства.
+          </Text>
+          {BLOCK_GROUPS.map(g => {
+            const off = (g.tab === 'chart' && !blocks.chartTab) || (g.tab === 'goals' && !blocks.goalsTab);
+            return (
+              <View key={g.title} style={{ marginTop: spacing.md }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: t.textMuted, fontSize: 12, fontWeight: '800', letterSpacing: 1 }}>{g.title.toUpperCase()}</Text>
+                  {off && <Text style={{ color: t.warning, fontSize: 11, fontWeight: '600' }}>вкладка скрыта</Text>}
+                </View>
+                {'hint' in g && g.hint ? <Text style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>{g.hint}</Text> : null}
+                {g.items.map(b => (
+                  <View key={b.id} style={[styles.toggleRow, off && { opacity: 0.45 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: t.text, fontWeight: '600' }}>{b.label}</Text>
+                      <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{b.hint}</Text>
+                    </View>
+                    <Toggle value={blocks[b.id]} onValueChange={v => setBlock(b.id, v)} />
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </Card>
+        </View>
           </>
         )}
 
@@ -829,6 +826,9 @@ export default function SettingsScreen() {
             />
           </View>
         </Card>
+
+        {/* Покупки из банка — только личная сборка */}
+        <BankSettings />
           </>
         )}
 
@@ -935,15 +935,29 @@ export default function SettingsScreen() {
             <Text style={{ color: t.textMuted, fontSize: font.sm }}>📥 Ввести ключ с другого устройства</Text>
           </TouchableOpacity>
         </Card>
+
+        {/* Data */}
+        <Card>
+          <SectionTitle>Данные</SectionTitle>
+          <TouchableOpacity style={styles.row} onPress={exportCsv} disabled={busy}>
+            <Text style={{ color: t.text }}>📤 Экспорт в CSV</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.row} onPress={chooseImport} disabled={busy}>
+            <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+          {isE2E() && (
+            <TouchableOpacity style={styles.row} onPress={dedupe} disabled={busy}>
+              <Text style={{ color: t.text }}>🧹 Убрать дубликаты расходов</Text>
+              <Text style={{ color: t.textMuted }}>›</Text>
+            </TouchableOpacity>
+          )}
+        </Card>
           </>
         )}
 
-        {page === 'bank' && (
-          <>
-        {/* Покупки из банка — только личная сборка */}
-        <BankSettings />
-          </>
-        )}
+
 
         {page === 'premium' && (
           <>
@@ -982,28 +996,7 @@ export default function SettingsScreen() {
           </>
         )}
 
-        {page === 'data' && (
-          <>
-        {/* Data */}
-        <Card>
-          <SectionTitle>Данные</SectionTitle>
-          <TouchableOpacity style={styles.row} onPress={exportCsv} disabled={busy}>
-            <Text style={{ color: t.text }}>📤 Экспорт в CSV</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={chooseImport} disabled={busy}>
-            <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
-          {isE2E() && (
-            <TouchableOpacity style={styles.row} onPress={dedupe} disabled={busy}>
-              <Text style={{ color: t.text }}>🧹 Убрать дубликаты расходов</Text>
-              <Text style={{ color: t.textMuted }}>›</Text>
-            </TouchableOpacity>
-          )}
-        </Card>
-          </>
-        )}
+
 
         {page === 'help' && (
           <>

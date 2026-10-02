@@ -85,7 +85,7 @@ const STEPS: Step[] = [
   {
     tab: 'Settings', targetId: 'settings.blocks', icon: 'construct',
     title: 'Соберите аналитику под себя',
-    body: 'Настройки › «Экраны и аналитика»: блоки сгруппированы по вкладкам — Месяц, График, Цели. Оставьте нужное, остальное скройте.',
+    body: 'Настройки › «Внешний вид и экраны»: блоки сгруппированы по вкладкам — Месяц, График, Цели. Оставьте нужное, остальное скройте.',
   },
   {
     tab: 'Settings', targetId: 'settings.security', icon: 'lock-closed',
@@ -140,7 +140,7 @@ export function Tour() {
     // Настройки разбиты на разделы — открываем нужный для подсвечиваемой карточки
     if (step.tab === 'Settings') {
       const map: Record<string, SettingsPage> = {
-        'settings.invite': 'family', 'settings.blocks': 'screens', 'settings.security': 'security', 'settings.premium': 'premium',
+        'settings.invite': 'family', 'settings.blocks': 'look', 'settings.security': 'security', 'settings.premium': 'premium',
       };
       openSettingsPage(step.targetId ? map[step.targetId] ?? null : 'help');
     }

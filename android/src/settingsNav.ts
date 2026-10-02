@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 // Какая страница Настроек открыта (null — главный экран с разделами).
 // Отдельный стор — чтобы вводный тур и ссылки могли открыть нужный раздел.
-export type SettingsPage = 'family' | 'screens' | 'look' | 'notify' | 'security' | 'bank' | 'premium' | 'data' | 'help';
+export type SettingsPage = 'family' | 'look' | 'notify' | 'security' | 'premium' | 'help';
 let _page: SettingsPage | null = null;
 const listeners = new Set<() => void>();
 
