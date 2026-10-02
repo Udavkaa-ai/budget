@@ -75,10 +75,22 @@ export async function generateKey() {
   return _cryptoKey;
 }
 
+// Достаёт ключ (ровно 64 hex-символа) из любого вставленного текста: с переносами
+// и пробелами, с подписью «Отпечаток: …» рядом, с кириллическими «а/с/е»,
+// которые подставляет автозамена клавиатуры. null — если ключа там нет.
+export function extractKeyHex(text) {
+  const s = String(text || '')
+    .replace(/[асеАСЕ]/g, ch => ({ а: 'a', с: 'c', е: 'e', А: 'a', С: 'c', Е: 'e' }[ch]))
+    .replace(/(Отпечаток|отпечаток|fingerprint)\s*:?\s*[0-9a-fA-F]{8,}/g, ' ')
+    .replace(/(?<=[0-9a-fA-F])[\s\u00a0\u200b]+(?=[0-9a-fA-F])/g, '');
+  const m = s.match(/(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])/);
+  return m ? m[0].toLowerCase() : null;
+}
+
 // Импорт ключа с другого устройства (hex-фраза, 64 hex-символа)
 export async function importKeyHex(hex) {
-  const clean = (hex || '').trim().toLowerCase().replace(/[^0-9a-f]/g, '');
-  if (clean.length !== 64) return false;
+  const clean = extractKeyHex(hex);
+  if (!clean) return false;
   _keyBytes = hexToBytes(clean);
   _cryptoKey = await importCryptoKey(_keyBytes);
   localStorage.setItem(KEY_STORE, clean);
@@ -101,8 +113,8 @@ export async function keyFingerprint() {
 // Отпечаток произвольной hex-фразы (не трогая сохранённый ключ) — для проверки
 // вводимого ключа на совпадение с семьёй ДО импорта.
 export async function fingerprintOfHex(hex) {
-  const clean = (hex || '').trim().toLowerCase().replace(/[^0-9a-f]/g, '');
-  if (clean.length !== 64) return null;
+  const clean = extractKeyHex(hex);
+  if (!clean) return null;
   const digest = await crypto.subtle.digest('SHA-256', hexToBytes(clean));
   return bytesToHex(new Uint8Array(digest)).slice(0, 16);
 }
