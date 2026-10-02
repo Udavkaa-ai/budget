@@ -29,10 +29,25 @@ export async function generateKey(): Promise<Uint8Array> {
   return k;
 }
 
+// Достаёт ключ (ровно 64 hex-символа) из любого вставленного текста: с переносами
+// и пробелами, с подписью «Отпечаток: …» рядом (её копирует веб), с кириллическими
+// «а/с/е» от автозамены клавиатуры. null — если ключа там нет. Без lookbehind —
+// на всякий случай для Hermes.
+export function extractKeyHex(text: string): string | null {
+  const LOOK: Record<string, string> = { а: 'a', с: 'c', е: 'e', А: 'a', С: 'c', Е: 'e' };
+  const s = String(text || '')
+    .replace(/[асеАСЕ]/g, ch => LOOK[ch])
+    .replace(/(Отпечаток|отпечаток|fingerprint)\s*:?\s*[0-9a-fA-F]{8,}/g, ' ')
+    .replace(/([0-9a-fA-F])[\s\u00a0\u200b]+(?=[0-9a-fA-F])/g, '$1');
+  const runs = s.match(/[0-9a-fA-F]+/g) || [];
+  const key = runs.find(r => r.length === 64);
+  return key ? key.toLowerCase() : null;
+}
+
 // Импорт ключа с другого устройства (QR/фраза = hex-строка)
 export async function importKey(hex: string): Promise<boolean> {
-  const clean = hex.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
-  if (clean.length !== 64) return false;
+  const clean = extractKeyHex(hex);
+  if (!clean) return false;
   _key = hexToBytes(clean);
   await SecureStore.setItemAsync(KEY_STORE, clean);
   return true;
@@ -58,8 +73,8 @@ export async function keyFingerprint(): Promise<string | null> {
 // Отпечаток произвольной hex-фразы (не трогая сохранённый ключ) — для проверки
 // вводимого ключа на совпадение с семьёй ещё ДО импорта.
 export function fingerprintOfHex(hex: string): string | null {
-  const clean = hex.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
-  if (clean.length !== 64) return null;
+  const clean = extractKeyHex(hex);
+  if (!clean) return null;
   return bytesToHex(sha256(hexToBytes(clean))).slice(0, 16);
 }
 

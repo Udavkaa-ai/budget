@@ -2457,17 +2457,18 @@ async function showE2EKey(phrase) {
   if (!box || !text) return;
   const key = phrase || E2E.exportKeyHex() || '';
   const fp = key ? await E2E.fingerprintOfHex(key) : null;
-  text.textContent = key
-    ? `${key}\n\nОтпечаток: ${fp} (должен совпадать на всех устройствах семьи)`
-    : '(ключ недоступен)';
+  // В поле — только сам ключ (его и копируем); отпечаток — отдельной строкой
+  text.textContent = key || '(ключ недоступен)';
+  const fpEl = document.getElementById('e2e-key-fp');
+  if (fpEl) fpEl.textContent = fp ? `Отпечаток: ${fp} — должен совпадать на всех устройствах семьи` : '';
   box.classList.remove('hidden');
 }
 
 async function doImportE2EKey() {
   const hex = await uiPrompt('Ключ с другого устройства', 'Вставьте ключ семьи (64 символа), полученный с другого устройства.', { placeholder: 'ключ семьи', ok: 'Сохранить' });
   if (!hex) return;
-  const clean = (hex || '').trim().toLowerCase().replace(/[^0-9a-f]/g, '');
-  if (clean.length !== 64) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
+  const clean = E2E.extractKeyHex(hex);
+  if (!clean) { showToastError('Не нашёл ключ: нужны 64 символа из цифр и букв a–f'); return; }
   // Сверяем отпечаток с ключом семьи на сервере. Чужой ключ = записи не
   // расшифруются, и синхронизация молча ломается (раньше проверки не было).
   const fp = await E2E.fingerprintOfHex(clean);
@@ -3723,7 +3724,8 @@ function setupEventListeners() {
   document.getElementById('btn-e2e-showkey')?.addEventListener('click', () => showE2EKey(E2E.exportKeyHex()));
   document.getElementById('btn-e2e-importkey')?.addEventListener('click', doImportE2EKey);
   document.getElementById('btn-e2e-copykey')?.addEventListener('click', () => {
-    const t = document.getElementById('e2e-key-text')?.textContent || '';
+    const t = E2E.extractKeyHex(document.getElementById('e2e-key-text')?.textContent || '') || '';
+    if (!t) return;
     navigator.clipboard?.writeText(t).then(() => showToastSuccess('Ключ скопирован')).catch(() => {});
   });
   document.getElementById('btn-e2e-dedupe')?.addEventListener('click', async () => {

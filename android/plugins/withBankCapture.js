@@ -50,6 +50,16 @@ object BankQueue {
     p.edit().putString("queue", arr.toString()).apply()
   }
 
+  // Диагностика: сколько СМС вообще дошло до ФИНИКа и от кого (только имена
+  // отправителей, без текста) — видно, режет ли прошивка приём СМС
+  @Synchronized
+  fun noteSms(ctx: Context, senders: Collection<String>) {
+    val p = prefs(ctx)
+    val set = (p.getStringSet("sms_from", emptySet()) ?: emptySet()).toMutableSet()
+    for (s in senders) if (set.size < 12) set.add(s.trim())
+    p.edit().putInt("sms_seen", p.getInt("sms_seen", 0) + 1).putStringSet("sms_from", set).apply()
+  }
+
   @Synchronized
   fun drain(ctx: Context): String {
     val p = prefs(ctx)
@@ -81,8 +91,9 @@ import android.provider.Telephony
 class BankSmsReceiver : BroadcastReceiver() {
   override fun onReceive(ctx: Context, intent: Intent) {
     if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
-    if (!BankQueue.enabled(ctx, "sms")) return
     val msgs = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
+    BankQueue.noteSms(ctx, msgs.mapNotNull { it.displayOriginatingAddress })
+    if (!BankQueue.enabled(ctx, "sms")) return
     val allowed = BankQueue.senders(ctx)
     val parts = LinkedHashMap<String, StringBuilder>()
     var ts = System.currentTimeMillis()
@@ -156,6 +167,8 @@ class BankModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
       .put("packages", JSONArray(BankQueue.packages(ctx).toList()))
       .put("discovered", JSONArray((p.getStringSet("discovered", emptySet()) ?: emptySet()).toList()))
       .put("discoverUntil", p.getLong("discover_until", 0))
+      .put("smsSeen", p.getInt("sms_seen", 0))
+      .put("smsFrom", JSONArray((p.getStringSet("sms_from", emptySet()) ?: emptySet()).toList()))
     promise.resolve(o.toString())
   }
 

@@ -22,7 +22,7 @@ import { Field, PrimaryButton } from '../components/UI';
 import { RecurringScreen } from './RecurringScreen';
 import { Finik } from '../components/Finik';
 import { useFinikEnabled, setFinikEnabled } from '../finik';
-import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex } from '../crypto';
+import { loadKey, generateKey, importKey, exportKeyHex, encryptJson, decryptJson, fingerprintOfHex, extractKeyHex } from '../crypto';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { startTour } from '../tour';
 import Constants from 'expo-constants';
@@ -267,9 +267,10 @@ export default function SettingsScreen() {
 
   // Ввод фразы-ключа с другого устройства (для восстановления чужих копий)
   const applyImportedKey = async () => {
-    const clean = keyInput.trim().toLowerCase().replace(/[^0-9a-f]/g, '');
-    if (clean.length !== 64) {
-      showAlert('Не похоже на ключ', 'Фраза должна содержать 64 символа (цифры и буквы a–f). Скопируйте её целиком с устройства, где создавалась копия: 🔑 «Показать ключ шифрования».');
+    const clean = extractKeyHex(keyInput);
+    if (!clean) {
+      const hexCount = (keyInput.match(/[0-9a-fA-F]/g) || []).length;
+      showAlert('Не нашёл ключ', `Ключ — это 64 символа из цифр и букв a–f. Во вставленном тексте таких символов ${hexCount}. Скопируйте ключ целиком кнопкой «Скопировать» на устройстве, где данные открываются правильно.`);
       return;
     }
     const finish = async () => {
@@ -1042,6 +1043,9 @@ export default function SettingsScreen() {
               placeholderTextColor={t.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="off"
+              keyboardType="visible-password"
+              multiline
               autoFocus
             />
             <View style={{ flexDirection: 'row', gap: spacing.md }}>

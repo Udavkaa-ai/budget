@@ -26,6 +26,7 @@ export function BankSettings() {
   const [packages, setPackages] = useState('');
   const [journalOpen, setJournalOpen] = useState(false);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
+  const [openRaw, setOpenRaw] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const s = await getBankStatus().catch(() => null);
@@ -65,7 +66,9 @@ export function BankSettings() {
 
       <Line icon="chatbubble-ellipses-outline" title="СМС от банка"
         ok={st.sms ? st.smsPermission : undefined}
-        hint={!st.smsPermission ? 'Нужно разрешение на приём СМС' : `Отправители: ${st.senders.join(', ')}`}
+        hint={!st.smsPermission ? 'Нужно разрешение на приём СМС'
+          : st.smsSeen === 0 ? 'СМС пока не доходили до ФИНИКа — см. подсказку ниже'
+          : `Получено СМС: ${st.smsSeen} · от: ${st.smsFrom.join(', ') || '—'}`}
         right={st.smsPermission
           ? <Toggle value={st.sms} onValueChange={v => { bankNative.setEnabled('sms', v); setSt({ ...st, sms: v }); }} />
           : <Pressable onPress={async () => { await requestSmsPermission(); load(); }}><Text style={{ color: t.primary, fontWeight: '700' }}>Разрешить</Text></Pressable>} />
@@ -76,6 +79,15 @@ export function BankSettings() {
         right={st.notificationAccess
           ? <Toggle value={st.push} onValueChange={v => { bankNative.setEnabled('push', v); setSt({ ...st, push: v }); }} />
           : <Pressable onPress={() => bankNative.openNotificationAccess()}><Text style={{ color: t.primary, fontWeight: '700' }}>Открыть</Text></Pressable>} />
+
+      {st.smsPermission && st.sms && st.smsSeen === 0 && (
+        <View style={[styles.discover, { backgroundColor: t.warningSoft, borderColor: t.warning, marginTop: spacing.md }]}>
+          <Text style={{ color: t.text, fontWeight: '700' }}>СМС не доходят?</Text>
+          <Text style={{ color: t.textMuted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>
+            На Xiaomi/POCO/Redmi прошивка отдельно прячет СМС от банков. Откройте: Настройки телефона → Приложения → «ФИНИК · Личный» → Разрешения и разрешите «SMS» и «Сервисные SMS» (или «Уведомления SMS»). Там же включите «Автозапуск». Потом пришлите себе любое СМС — здесь появится «Получено СМС: 1».
+          </Text>
+        </View>
+      )}
 
       <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
         <OutlineButton title={pending ? `Входящие · ${pending}` : 'Входящие'} style={{ flex: 1 }} onPress={() => openBankInbox()} />
@@ -122,18 +134,22 @@ export function BankSettings() {
           </View>
           <ScrollView contentContainerStyle={{ padding: spacing.md }}>
             <Text style={{ color: t.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
-              Последние 150 сообщений и что с ними сделал ФИНИК. Хранится только на этом телефоне.
+              Последние 150 сообщений и что с ними сделал ФИНИК. Хранится только на этом телефоне. Нажмите на запись, чтобы увидеть текст сообщения (коды подтверждения не сохраняются) — его можно выделить и прислать разработчику, чтобы дописать шаблон.
             </Text>
             {journal.length === 0 && <Text style={{ color: t.textFaint, textAlign: 'center', marginTop: 40 }}>Пока пусто</Text>}
             {journal.map(j => (
-              <View key={j.id} style={[styles.jRow, { borderBottomColor: t.border }]}>
+              <Pressable key={j.id} onPress={() => j.raw && setOpenRaw(o => o === j.id ? null : j.id)} style={[styles.jRow, { borderBottomColor: t.border }]}>
                 <Text style={{ color: t.textFaint, fontSize: 11 }}>
                   {new Date(j.ts).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {j.source === 'sms' ? 'СМС' : j.source === 'push' ? 'пуш' : 'поделиться'}{j.from ? ` · ${j.from}` : ''}
                 </Text>
                 <Text style={{ color: j.kind === 'purchase' ? t.text : j.kind === 'unknown' ? t.warning : t.textMuted, fontSize: 14, marginTop: 2 }}>
                   <Text style={{ fontWeight: '700' }}>{KIND_LABEL[j.kind] || j.kind}</Text> · {j.summary}
+                  {j.raw ? <Text style={{ color: t.primary, fontSize: 12 }}>  {openRaw === j.id ? 'скрыть текст' : 'текст ›'}</Text> : null}
                 </Text>
-              </View>
+                {openRaw === j.id && j.raw && (
+                  <Text selectable style={[styles.raw, { color: t.text, backgroundColor: t.surface2, borderColor: t.border }]}>{j.raw}</Text>
+                )}
+              </Pressable>
             ))}
           </ScrollView>
         </SafeAreaView>
@@ -150,4 +166,5 @@ const styles = StyleSheet.create({
   found: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
   jHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
   jRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  raw: { marginTop: 6, padding: 10, borderRadius: radius.sm, borderWidth: 1, fontSize: 13, lineHeight: 18 },
 });

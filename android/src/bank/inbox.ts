@@ -22,7 +22,7 @@ export interface InboxItem extends ParsedBank {
   category: string;        // подсказка классификатора
   status: InboxStatus;
 }
-export interface JournalEntry { id: number; ts: number; source: string; from: string; kind: string; summary: string }
+export interface JournalEntry { id: number; ts: number; source: string; from: string; kind: string; summary: string; raw?: string }
 
 const Bank = NativeModules.FinikBank as undefined | {
   drain(): Promise<string>;
@@ -42,32 +42,36 @@ const listeners = new Set<() => void>();
 export function onInboxChange(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
 const notify = () => listeners.forEach(l => l());
 
+let rawColumn = false;
 async function db() {
   const d = await openDb();
   await d.execAsync(`CREATE TABLE IF NOT EXISTS bank_inbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL, status TEXT NOT NULL, ts INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS bank_journal (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT, sender TEXT, kind TEXT, summary TEXT);`);
+  // текст сообщения (кроме кодов) — чтобы по журналу можно было дописать шаблон
+  if (!rawColumn) { try { await d.execAsync('ALTER TABLE bank_journal ADD COLUMN raw TEXT'); } catch { /* уже есть */ } rawColumn = true; }
   return d;
 }
 
 const fmt = (n?: number) => n == null ? '—' : new Intl.NumberFormat('ru-RU').format(n) + ' ₽';
 
-async function journal(source: string, from: string, p: ParsedBank, extra = '') {
+async function journal(source: string, from: string, p: ParsedBank, extra = '', raw = '') {
   const d = await db();
   const summary = p.kind === 'ignore'
     ? `пропущено: ${p.reason}`                       // текст кода не пишем даже в журнал
     : `${fmt(p.amount)}${p.merchant ? ' · ' + p.merchant : ''}${p.reason ? ' · ' + p.reason : ''}${extra}`;
-  await d.runAsync('INSERT INTO bank_journal (ts, source, sender, kind, summary) VALUES (?, ?, ?, ?, ?)',
-    [Date.now(), source, from, p.kind, summary]);
+  // Текст пропущенных сообщений (коды) не сохраняем никогда
+  await d.runAsync('INSERT INTO bank_journal (ts, source, sender, kind, summary, raw) VALUES (?, ?, ?, ?, ?, ?)',
+    [Date.now(), source, from, p.kind, summary, p.kind === 'ignore' ? null : raw.slice(0, 500)]);
   await d.runAsync('DELETE FROM bank_journal WHERE id NOT IN (SELECT id FROM bank_journal ORDER BY id DESC LIMIT 150)');
 }
 
 export async function getJournal(): Promise<JournalEntry[]> {
   const d = await db();
-  const rows = await d.getAllAsync<{ id: number; ts: number; source: string; sender: string; kind: string; summary: string }>(
+  const rows = await d.getAllAsync<{ id: number; ts: number; source: string; sender: string; kind: string; summary: string; raw: string | null }>(
     'SELECT * FROM bank_journal ORDER BY id DESC LIMIT 150');
-  return rows.map(r => ({ id: r.id, ts: r.ts, source: r.source, from: r.sender, kind: r.kind, summary: r.summary }));
+  return rows.map(r => ({ id: r.id, ts: r.ts, source: r.source, from: r.sender, kind: r.kind, summary: r.summary, raw: r.raw || undefined }));
 }
 
 export async function getInbox(status: InboxStatus = 'pending'): Promise<InboxItem[]> {
@@ -88,11 +92,11 @@ async function isDuplicate(amount: number, ts: number): Promise<boolean> {
 export async function ingest(text: string, from: string, source: InboxItem['source'], ts = Date.now()): Promise<InboxItem | null> {
   const p = parseBankMessage(text, from);
   if (p.kind === 'ignore' || p.kind === 'unknown' || !p.amount) {
-    await journal(source, from, p);
+    await journal(source, from, p, '', text);
     return null;
   }
-  if (p.kind === 'income') { await journal(source, from, p, ' · доход, не расход'); return null; }
-  if (await isDuplicate(p.amount, ts)) { await journal(source, from, p, ' · дубль'); return null; }
+  if (p.kind === 'income') { await journal(source, from, p, ' · доход, не расход', text); return null; }
+  if (await isDuplicate(p.amount, ts)) { await journal(source, from, p, ' · дубль', text); return null; }
   let category = p.kind === 'transfer' ? 'Прочее' : 'Прочее';
   try {
     const r = await predict(p.merchant || '', getCategories());
@@ -101,7 +105,7 @@ export async function ingest(text: string, from: string, source: InboxItem['sour
   const item = { ...p, source, from, ts, category };
   const d = await db();
   const res = await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify(item), 'pending', ts]);
-  await journal(source, from, p, ' · во «Входящих»');
+  await journal(source, from, p, ' · во «Входящих»', text);
   notify();
   return { ...item, id: Number(res.lastInsertRowId), status: 'pending' };
 }
@@ -166,6 +170,7 @@ export async function dismiss(item: InboxItem) { await setStatus(item.id, 'dismi
 export interface BankStatus {
   notificationAccess: boolean; sms: boolean; push: boolean; smsPermission: boolean;
   dropped: number; senders: string[]; packages: string[]; discovered: string[]; discoverUntil: number;
+  smsSeen: number; smsFrom: string[];
 }
 export async function getBankStatus(): Promise<BankStatus | null> {
   if (!Bank) return null;
