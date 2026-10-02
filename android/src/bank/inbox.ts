@@ -13,7 +13,7 @@ import { parseBankMessage, isSensitive, type ParsedBank } from './parse';
 // перехваченные СМС/уведомления (нативный модуль FinikBank).
 // Всё хранится только на телефоне (SQLite); исходные тексты — тоже только тут.
 
-export type InboxStatus = 'pending' | 'added' | 'dismissed';
+export type InboxStatus = 'pending' | 'added' | 'dismissed' | 'income';
 export interface InboxItem extends ParsedBank {
   id: number;
   source: 'sms' | 'push' | 'share';
@@ -81,11 +81,14 @@ export async function getInbox(status: InboxStatus = 'pending'): Promise<InboxIt
   return rows.map(r => ({ ...(JSON.parse(r.payload)), id: r.id, status: r.status as InboxStatus }));
 }
 
-// Одна покупка часто приходит дважды (СМС + пуш) — та же сумма в пределах 10 минут
-async function isDuplicate(amount: number, ts: number): Promise<boolean> {
+// Одна операция часто приходит дважды (СМС + пуш, или пуш обновился) — тот же
+// банк, тот же тип и та же сумма в пределах 10 минут
+const WINDOW = 600_000;
+async function nearby(ts: number) {
   const d = await db();
-  const rows = await d.getAllAsync<{ payload: string }>('SELECT payload FROM bank_inbox WHERE ts BETWEEN ? AND ?', [ts - 600_000, ts + 600_000]);
-  return rows.some(r => (JSON.parse(r.payload) as ParsedBank).amount === amount);
+  const rows = await d.getAllAsync<{ id: number; payload: string; status: string }>(
+    'SELECT id, payload, status FROM bank_inbox WHERE ts BETWEEN ? AND ?', [ts - WINDOW, ts + WINDOW]);
+  return rows.map(r => ({ id: r.id, status: r.status, p: JSON.parse(r.payload) as ParsedBank }));
 }
 
 // Принять одно сообщение: разобрать, отбросить лишнее, положить во «Входящие»
@@ -95,15 +98,40 @@ export async function ingest(text: string, from: string, source: InboxItem['sour
     await journal(source, from, p, '', text);
     return null;
   }
-  if (p.kind === 'income') { await journal(source, from, p, ' · доход, не расход', text); return null; }
-  if (await isDuplicate(p.amount, ts)) { await journal(source, from, p, ' · дубль', text); return null; }
-  let category = p.kind === 'transfer' ? 'Прочее' : 'Прочее';
+  const near = await nearby(ts);
+  if (near.some(n => n.p.kind === p.kind && n.p.bank === p.bank && n.p.amount === p.amount)) {
+    await journal(source, from, p, ' · дубль', text);
+    return null;
+  }
+  const d = await db();
+
+  // Поступление: запоминаем (во «Входящих» не показываем). Если рядом висит
+  // исходящий перевод на ту же сумму из другого банка — это перевод между
+  // своими счетами, а не расход: убираем его из «Входящих».
+  if (p.kind === 'income') {
+    await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify({ ...p, source, from, ts }), 'income', ts]);
+    const own = near.find(n => n.p.kind === 'transfer' && n.status === 'pending' && n.p.amount === p.amount && n.p.bank !== p.bank);
+    if (own) {
+      await d.runAsync(`UPDATE bank_inbox SET status = 'dismissed' WHERE id = ?`, [own.id]);
+      await journal(source, from, p, ' · перевод между своими счетами — убран из «Входящих»', text);
+      notify();
+    } else {
+      await journal(source, from, p, ' · доход, не расход', text);
+    }
+    return null;
+  }
+  if (p.kind === 'transfer' && near.some(n => n.p.kind === 'income' && n.p.amount === p.amount && n.p.bank !== p.bank)) {
+    await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify({ ...p, source, from, ts, category: 'Прочее' }), 'dismissed', ts]);
+    await journal(source, from, p, ' · перевод между своими счетами — не расход', text);
+    return null;
+  }
+
+  let category = 'Прочее';
   try {
     const r = await predict(p.merchant || '', getCategories());
     category = r.mode === 'auto' ? r.category : r.top3[0] || category;
   } catch { /* классификатор не готов — «Прочее» */ }
   const item = { ...p, source, from, ts, category };
-  const d = await db();
   const res = await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify(item), 'pending', ts]);
   await journal(source, from, p, ' · во «Входящих»', text);
   notify();
