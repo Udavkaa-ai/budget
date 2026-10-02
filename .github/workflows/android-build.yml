@@ -22,13 +22,15 @@ on:
 
 jobs:
   build:
-    name: Build ${{ github.event.inputs.build_type || 'standalone' }} APK
+    name: Build ${{ github.event.inputs.build_type || (contains(github.event.head_commit.message, '[personal]') && 'personal') || 'standalone' }} APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       # Resolved build type: dispatch input, or 'standalone' for push builds.
       # To build a Google Play AAB: Run workflow → build_type: store.
-      BT: ${{ github.event.inputs.build_type || 'standalone' }}
+      # Коммит с меткой [personal] в сообщении собирает личную сборку (её же
+      # можно запустить вручную: Run workflow → build_type: personal).
+      BT: ${{ github.event.inputs.build_type || (contains(github.event.head_commit.message, '[personal]') && 'personal') || 'standalone' }}
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────────
