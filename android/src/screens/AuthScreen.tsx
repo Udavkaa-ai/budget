@@ -3,6 +3,7 @@ import { showAlert } from '../dialog';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { APP_SCHEME } from '../appScheme';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme, spacing, font, radius } from '../theme';
@@ -74,7 +75,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
       await setServerUrl(srv);
       // Открываем OAuth-страницу сервера в браузер-сессии; сервер редиректит
       // обратно с токеном в query (?token=). Один флоу на всех провайдеров.
-      const redirectUri = AuthSession.makeRedirectUri({ scheme: 'familybudget' });
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: APP_SCHEME });
       const result = await WebBrowser.openAuthSessionAsync(
         `${srv}/auth/${provider}/mobile?redirect=${encodeURIComponent(redirectUri)}`,
         redirectUri,

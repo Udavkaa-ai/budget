@@ -284,12 +284,26 @@ app.post('/api/auth/link-google', authMiddleware, authLimiter, async (req, res) 
   }
 });
 
+// Куда вернуть пользователя с JWT после входа. Только наши приложения (схемы
+// вариантов сборки) или страница этого же сервера — иначе подготовленная
+// ссылка могла бы увести токен на чужой сайт.
+const APP_REDIRECT_RE = /^(familybudget|familybudgetpersonal|familybudgetdemo):\/\//;
+function safeRedirect(req, redirect) {
+  const r = String(redirect || '');
+  if (APP_REDIRECT_RE.test(r)) return r;
+  try {
+    const u = new URL(r);
+    if ((u.protocol === 'https:' || u.protocol === 'http:') && u.host === req.headers.host) return r;
+  } catch { /* не URL */ }
+  return 'familybudget://auth';
+}
+
 // Mobile OAuth: open in WebView, redirect back with JWT in query string
 app.get('/auth/google/mobile', async (req, res) => {
   const { redirect } = req.query;
   // Store redirect URI in session-like param (passed through Google state param)
   if (!config.googleClientId) return res.status(503).send('Google OAuth не настроен');
-  const state = encodeURIComponent(redirect || 'familybudget://auth');
+  const state = encodeURIComponent(safeRedirect(req, redirect));
   const callbackUrl = encodeURIComponent(`${req.protocol}://${req.headers.host}/auth/google/mobile/callback`);
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${config.googleClientId}&redirect_uri=${callbackUrl}&response_type=code&scope=openid%20email%20profile&state=${state}`;
   res.redirect(url);
@@ -297,7 +311,7 @@ app.get('/auth/google/mobile', async (req, res) => {
 
 app.get('/auth/google/mobile/callback', async (req, res) => {
   const { code, state } = req.query;
-  const redirectUri = decodeURIComponent(state || 'familybudget://auth');
+  const redirectUri = safeRedirect(req, decodeURIComponent(state || ''));
   // Exchange code for id_token using server-side client secret
   // (requires GOOGLE_CLIENT_SECRET env var — same as web OAuth)
   try {
@@ -343,18 +357,21 @@ app.get('/auth/google/mobile/callback', async (req, res) => {
 function packState(redirect, link) {
   return Buffer.from(JSON.stringify({ r: redirect || 'familybudget://auth', l: link || '' })).toString('base64url');
 }
-function unpackState(state) {
+function unpackState(state, req) {
+  let out;
   try {
     const s = JSON.parse(Buffer.from(String(state || ''), 'base64url').toString());
-    return { redirect: s.r || 'familybudget://auth', link: s.l || '' };
+    out = { redirect: s.r || 'familybudget://auth', link: s.l || '' };
   } catch {
-    return { redirect: state ? decodeURIComponent(state) : 'familybudget://auth', link: '' };
+    out = { redirect: state ? decodeURIComponent(state) : 'familybudget://auth', link: '' };
   }
+  // state приходит от провайдера и может быть подделан — проверяем ещё раз
+  return { ...out, redirect: safeRedirect(req, out.redirect) };
 }
 
 // Единый финал: режим привязки (миграция) или обычный вход.
 async function finishOAuth(res, provider, profile, state) {
-  const { redirect, link } = unpackState(state);
+  const { redirect, link } = unpackState(state, res.req);
   const { id, email, name } = profile;
   if (link) {
     // Миграция: вешаем провайдера на текущий аккаунт (данные семьи не трогаем)
@@ -378,7 +395,7 @@ async function finishOAuth(res, provider, profile, state) {
 // ── Яндекс (oauth.yandex.ru) ──
 app.get('/auth/yandex/mobile', (req, res) => {
   if (!config.yandexClientId) return res.status(503).send('Яндекс OAuth не настроен');
-  const state = packState(req.query.redirect, req.query.link);
+  const state = packState(safeRedirect(req, req.query.redirect), req.query.link);
   const callbackUrl = `${req.protocol}://${req.headers.host}/auth/yandex/mobile/callback`;
   const url = `https://oauth.yandex.ru/authorize?response_type=code&client_id=${config.yandexClientId}`
     + `&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(state)}`;
@@ -387,7 +404,7 @@ app.get('/auth/yandex/mobile', (req, res) => {
 
 app.get('/auth/yandex/mobile/callback', async (req, res) => {
   const { code, state } = req.query;
-  const { redirect } = unpackState(state);
+  const { redirect } = unpackState(state, req);
   try {
     const callbackUrl = `${req.protocol}://${req.headers.host}/auth/yandex/mobile/callback`;
     const tokenRes = await fetch('https://oauth.yandex.ru/token', {
@@ -430,7 +447,7 @@ app.get('/auth/vk/mobile', (req, res) => {
   const verifier = crypto.randomBytes(48).toString('base64url');
   const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
   const nonce = crypto.randomBytes(16).toString('base64url');
-  vkPkce.set(nonce, { verifier, state: packState(req.query.redirect, req.query.link), ts: Date.now() });
+  vkPkce.set(nonce, { verifier, state: packState(safeRedirect(req, req.query.redirect), req.query.link), ts: Date.now() });
   const callbackUrl = `${req.protocol}://${req.headers.host}/auth/vk/mobile/callback`;
   const url = `https://id.vk.com/authorize?response_type=code&client_id=${config.vkClientId}`
     + `&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(nonce)}`
@@ -442,7 +459,7 @@ app.get('/auth/vk/mobile/callback', async (req, res) => {
   const { code, state: nonce, device_id } = req.query;
   const entry = vkPkce.get(nonce);
   if (entry) vkPkce.delete(nonce);
-  const { redirect } = unpackState(entry?.state);
+  const { redirect } = unpackState(entry?.state, req);
   try {
     if (!entry) throw new Error('pkce state expired');
     const callbackUrl = `${req.protocol}://${req.headers.host}/auth/vk/mobile/callback`;

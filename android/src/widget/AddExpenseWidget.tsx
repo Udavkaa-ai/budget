@@ -1,4 +1,5 @@
 import React from 'react';
+import { APP_SCHEME } from '../appScheme';
 import { FlexWidget, TextWidget } from 'react-native-android-widget';
 
 // Виджет на домашний экран: тап открывает приложение сразу на форме добавления
@@ -8,7 +9,7 @@ export function AddExpenseWidget() {
   return (
     <FlexWidget
       clickAction="OPEN_URI"
-      clickActionData={{ uri: 'familybudget://add' }}
+      clickActionData={{ uri: `${APP_SCHEME}://add` }}
       style={{
         height: 'match_parent',
         width: 'match_parent',

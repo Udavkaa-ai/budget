@@ -5,6 +5,7 @@ import { predict, learn } from '../classifier';
 import { getCategories } from '../categories';
 import { expenses } from '../api/client';
 import { queueExpense, isNetworkError } from '../offline';
+import { IS_PERSONAL } from '../appScheme';
 import { parseBankMessage, isSensitive, type ParsedBank } from './parse';
 
 // «Входящие из банка»: распознанные покупки и переводы ждут подтверждения
@@ -35,7 +36,7 @@ const Bank = NativeModules.FinikBank as undefined | {
 const Share = NativeModules.FinikShare as undefined | { consume(): Promise<string | null> };
 
 // Перехват СМС/уведомлений есть только в личной сборке (и только там есть натив)
-export const isPersonalBuild = Constants.expoConfig?.extra?.variant === 'personal' && !!Bank;
+export const isPersonalBuild = !!Bank && (IS_PERSONAL || Constants.expoConfig?.extra?.variant === 'personal');
 
 const listeners = new Set<() => void>();
 export function onInboxChange(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
