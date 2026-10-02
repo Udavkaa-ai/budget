@@ -140,7 +140,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
                 style={{ marginBottom: spacing.md }}
                 value={serverUrl}
                 onChangeText={setServerUrlState}
-                placeholder="https://your-app.railway.app"
+                placeholder="https://semejnyj-budzet-udavkaa.amvera.io"
                 autoCapitalize="none"
                 keyboardType="url"
                 autoCorrect={false}

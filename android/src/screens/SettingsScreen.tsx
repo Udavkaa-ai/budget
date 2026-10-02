@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Toggle } from '../components/UI';
 import { showAlert } from '../dialog';
 import { haptics } from '../haptics';
+import { BankSettings } from '../components/BankSettings';
 import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
@@ -906,6 +907,9 @@ export default function SettingsScreen() {
         </Card>
 
         {/* Support */}
+        {/* Покупки из банка — только личная сборка */}
+        <BankSettings />
+
         <Card>
           <SectionTitle>Поддержка</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 20 }}>
@@ -946,7 +950,7 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <SectionTitle>О приложении</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.25.2'} A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.26.0'} A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.

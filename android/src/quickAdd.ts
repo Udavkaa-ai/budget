@@ -2,11 +2,21 @@
 // уведомляет; HomeScreen открывает шторку добавления (при холодном старте —
 // забирает отложенный флаг при монтировании).
 let pending = false;
+let pendingText: string | null = null;
 const listeners = new Set<() => void>();
 
-export function requestQuickAdd() {
+// text — готовый текст для ИИ-разбора (например, присланный через «Поделиться»)
+export function requestQuickAdd(text?: string) {
   pending = true;
+  if (text) pendingText = text;
   listeners.forEach(l => l());
+}
+
+// Забрать текст для поля «Текстом» (один раз)
+export function consumeQuickAddText(): string | null {
+  const t = pendingText;
+  pendingText = null;
+  return t;
 }
 
 // Забрать отложенный запрос (для холодного старта, когда HomeScreen ещё не был готов).

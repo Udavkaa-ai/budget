@@ -16,6 +16,7 @@ import { DayPickerModal } from '../components/Pickers';
 import { Finik } from '../components/Finik';
 import { checkOnAddExpense } from '../achievements';
 import { beginSystemUi, endSystemUi } from '../applock';
+import { onQuickAdd, consumeQuickAddText } from '../quickAdd';
 
 function todayStr() {
   const d = new Date();
@@ -64,6 +65,14 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   useEffect(() => {
     if (premium) setMode('text');
   }, [premium]);
+
+  // «Поделиться → ФИНИК» с текстом, который не похож на банковское сообщение:
+  // подставляем его в поле «Текстом» для ИИ-разбора
+  useEffect(() => {
+    const take = () => { const txt = consumeQuickAddText(); if (txt) { setMode('text'); setFreeText(txt); } };
+    take();
+    return onQuickAdd(take);
+  }, []);
 
   // Predict category as user types
   useEffect(() => {

@@ -1,7 +1,12 @@
-// Демо-вариант сборки: тот же код, но другой package (ставится рядом с основным),
-// название с «Демо», флаг extra.isDemo (включает вход по паролю lena/Lena).
-// Включается переменной APP_VARIANT=demo (в CI, build_type: demo).
-// Обычная сборка — без изменений (возвращаем app.json как есть).
+// Варианты сборки (переменная APP_VARIANT, в CI — build_type):
+//   (пусто)   — обычная публичная сборка (RuStore). Как app.json + «Поделиться».
+//   demo      — демо: отдельный package, имя «Демо», вход lena/Lena.
+//   personal  — ЛИЧНАЯ сборка владельца: отдельный package, имя «ФИНИК · Личный»,
+//               чтение банковских СМС и уведомлений (plugins/withBankCapture).
+//               Только в ней есть разрешение RECEIVE_SMS и сервис уведомлений —
+//               в публичный APK этот код и разрешения не попадают вообще.
+const fs = require('fs');
+const path = require('path');
 const base = require('./app.json').expo;
 
 module.exports = () => {
@@ -11,9 +16,36 @@ module.exports = () => {
   const versionCode = process.env.APP_VERSION_CODE
     ? parseInt(process.env.APP_VERSION_CODE, 10)
     : base.android.versionCode;
+  const variant = process.env.APP_VARIANT || '';
+  // «Поделиться → ФИНИК» — во всех сборках (без новых разрешений)
+  const plugins = [...(base.plugins || []), './plugins/withShareText'];
 
-  if (process.env.APP_VARIANT !== 'demo') {
-    return { expo: { ...base, android: { ...base.android, versionCode } } };
+  if (variant === 'personal') {
+    const pkg = 'com.familybudget.app.personal';
+    // Пуш работает, только если в google-services.json есть клиент для этого
+    // package (добавить приложение в Firebase). Иначе собираем без FCM.
+    let gs = '';
+    try { gs = fs.readFileSync(path.join(__dirname, base.android.googleServicesFile || ''), 'utf8'); } catch { /* нет файла */ }
+    const { googleServicesFile, ...androidRest } = base.android;
+    return {
+      expo: {
+        ...base,
+        name: 'ФИНИК · Личный',
+        scheme: 'familybudgetpersonal',
+        plugins: [...plugins, './plugins/withBankCapture'],
+        android: {
+          ...androidRest,
+          ...(gs.includes(pkg) ? { googleServicesFile } : {}),
+          package: pkg,
+          versionCode,
+        },
+        extra: { ...(base.extra || {}), variant: 'personal' },
+      },
+    };
+  }
+
+  if (variant !== 'demo') {
+    return { expo: { ...base, plugins, android: { ...base.android, versionCode } } };
   }
 
   // Для демо-пакета убираем googleServicesFile (он привязан к основному package
@@ -25,6 +57,7 @@ module.exports = () => {
       ...base,
       name: 'Бюджет · Демо',
       scheme: 'familybudgetdemo',
+      plugins,
       android: {
         ...androidRest,
         package: 'com.familybudget.app.demo',

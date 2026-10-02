@@ -1,0 +1,153 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, Pressable, Modal, ScrollView, TextInput, AppState, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme, spacing, radius, font } from '../theme';
+import { Card } from './Card';
+import { SectionTitle, Toggle, OutlineButton, SecondaryButton } from './UI';
+import { openBankInbox, useBankInboxCount } from './BankInbox';
+import {
+  isPersonalBuild, getBankStatus, requestSmsPermission, bankNative, getJournal, drainNative,
+  type BankStatus, type JournalEntry,
+} from '../bank/inbox';
+import { haptics } from '../haptics';
+
+// Раздел «Покупки из банка» — только в личной сборке (в публичной не рендерится:
+// там нет нативного модуля FinikBank).
+const KIND_LABEL: Record<string, string> = {
+  purchase: 'покупка', transfer: 'перевод', income: 'доход', ignore: 'пропущено', unknown: 'не распознано',
+};
+
+export function BankSettings() {
+  const t = useTheme();
+  const pending = useBankInboxCount();
+  const [st, setSt] = useState<BankStatus | null>(null);
+  const [senders, setSenders] = useState('');
+  const [packages, setPackages] = useState('');
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journal, setJournal] = useState<JournalEntry[]>([]);
+
+  const load = useCallback(async () => {
+    const s = await getBankStatus().catch(() => null);
+    setSt(s);
+    if (s) { setSenders(s.senders.join(', ')); setPackages(s.packages.join(', ')); }
+  }, []);
+  useEffect(() => {
+    load();
+    // вернулись из системных настроек доступа к уведомлениям — обновляем статус
+    const sub = AppState.addEventListener('change', a => { if (a === 'active') load(); });
+    return () => sub.remove();
+  }, [load]);
+
+  if (!isPersonalBuild || !st) return null;
+
+  const list = (v: string) => v.split(/[,\s]+/).map(x => x.trim()).filter(Boolean);
+  const openJournal = async () => { await drainNative(); setJournal(await getJournal()); setJournalOpen(true); };
+  const discovering = st.discoverUntil > Date.now();
+
+  const Line = ({ icon, title, hint, ok, right }: { icon: string; title: string; hint: string; ok?: boolean; right?: React.ReactNode }) => (
+    <View style={[styles.line, { borderBottomColor: t.border }]}>
+      <Ionicons name={icon as never} size={20} color={ok === false ? t.warning : t.primary} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: t.text, fontSize: font.md, fontWeight: '600' }}>{title}</Text>
+        <Text style={{ color: ok === false ? t.warning : t.textMuted, fontSize: 12, marginTop: 2 }}>{hint}</Text>
+      </View>
+      {right}
+    </View>
+  );
+
+  return (
+    <Card>
+      <SectionTitle>Покупки из банка</SectionTitle>
+      <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 19, marginBottom: spacing.sm }}>
+        Только в вашей личной сборке. Сообщения разбираются на телефоне; коды подтверждения выбрасываются сразу и нигде не сохраняются. Пропущено кодов: {st.dropped}.
+      </Text>
+
+      <Line icon="chatbubble-ellipses-outline" title="СМС от банка"
+        ok={st.sms ? st.smsPermission : undefined}
+        hint={!st.smsPermission ? 'Нужно разрешение на приём СМС' : `Отправители: ${st.senders.join(', ')}`}
+        right={st.smsPermission
+          ? <Toggle value={st.sms} onValueChange={v => { bankNative.setEnabled('sms', v); setSt({ ...st, sms: v }); }} />
+          : <Pressable onPress={async () => { await requestSmsPermission(); load(); }}><Text style={{ color: t.primary, fontWeight: '700' }}>Разрешить</Text></Pressable>} />
+
+      <Line icon="notifications-outline" title="Уведомления банков"
+        ok={st.push ? st.notificationAccess : undefined}
+        hint={!st.notificationAccess ? 'Включите ФИНИК в «Доступе к уведомлениям»' : `Приложения: ${st.packages.length}`}
+        right={st.notificationAccess
+          ? <Toggle value={st.push} onValueChange={v => { bankNative.setEnabled('push', v); setSt({ ...st, push: v }); }} />
+          : <Pressable onPress={() => bankNative.openNotificationAccess()}><Text style={{ color: t.primary, fontWeight: '700' }}>Открыть</Text></Pressable>} />
+
+      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+        <OutlineButton title={pending ? `Входящие · ${pending}` : 'Входящие'} style={{ flex: 1 }} onPress={() => openBankInbox()} />
+        <SecondaryButton title="Журнал" style={{ flex: 1 }} onPress={openJournal} />
+      </View>
+
+      <Text style={[styles.label, { color: t.textMuted }]}>ОТПРАВИТЕЛИ СМС</Text>
+      <TextInput value={senders} onChangeText={setSenders} autoCapitalize="characters"
+        onEndEditing={() => { bankNative.setSenders(list(senders)); load(); }}
+        style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]} />
+
+      <Text style={[styles.label, { color: t.textMuted }]}>ПРИЛОЖЕНИЯ БАНКОВ (ПАКЕТЫ)</Text>
+      <TextInput value={packages} onChangeText={setPackages} autoCapitalize="none" multiline
+        onEndEditing={() => { bankNative.setPackages(list(packages)); load(); }}
+        style={[styles.input, { color: t.text, borderColor: t.border, backgroundColor: t.surface2, minHeight: 64 }]} />
+
+      <View style={[styles.discover, { backgroundColor: t.surface2, borderColor: t.border }]}>
+        <Text style={{ color: t.text, fontWeight: '700' }}>Не ловятся пуши какого-то банка?</Text>
+        <Text style={{ color: t.textMuted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>
+          Включите поиск на 10 минут и сделайте покупку. ФИНИК запомнит только название приложения, которое прислало уведомление с суммой в рублях — сам текст не сохраняется.
+        </Text>
+        {st.discovered.length > 0 && st.discovered.map(p => (
+          <View key={p} style={styles.found}>
+            <Text style={{ color: t.text, flex: 1, fontSize: 13 }} numberOfLines={1}>{p}</Text>
+            {!st.packages.includes(p) && (
+              <Pressable onPress={() => { haptics.success(); bankNative.setPackages([...st.packages, p]); load(); }}>
+                <Text style={{ color: t.primary, fontWeight: '700' }}>Добавить</Text>
+              </Pressable>
+            )}
+          </View>
+        ))}
+        <Pressable onPress={() => { bankNative.startDiscover(10); haptics.select(); load(); }} style={{ marginTop: spacing.sm }}>
+          <Text style={{ color: t.primary, fontWeight: '700' }}>
+            {discovering ? `Ищу… до ${new Date(st.discoverUntil).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}` : 'Найти приложение банка'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <Modal visible={journalOpen} animationType="slide" onRequestClose={() => setJournalOpen(false)}>
+        <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: t.bg }}>
+          <View style={[styles.jHead, { borderBottomColor: t.border, backgroundColor: t.surface }]}>
+            <Text style={{ color: t.text, fontSize: 20, fontWeight: '800' }}>Журнал банка</Text>
+            <Pressable onPress={() => setJournalOpen(false)} hitSlop={10}><Ionicons name="close" size={24} color={t.textMuted} /></Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            <Text style={{ color: t.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
+              Последние 150 сообщений и что с ними сделал ФИНИК. Хранится только на этом телефоне.
+            </Text>
+            {journal.length === 0 && <Text style={{ color: t.textFaint, textAlign: 'center', marginTop: 40 }}>Пока пусто</Text>}
+            {journal.map(j => (
+              <View key={j.id} style={[styles.jRow, { borderBottomColor: t.border }]}>
+                <Text style={{ color: t.textFaint, fontSize: 11 }}>
+                  {new Date(j.ts).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {j.source === 'sms' ? 'СМС' : j.source === 'push' ? 'пуш' : 'поделиться'}{j.from ? ` · ${j.from}` : ''}
+                </Text>
+                <Text style={{ color: j.kind === 'purchase' ? t.text : j.kind === 'unknown' ? t.warning : t.textMuted, fontSize: 14, marginTop: 2 }}>
+                  <Text style={{ fontWeight: '700' }}>{KIND_LABEL[j.kind] || j.kind}</Text> · {j.summary}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+    </Card>
+  );
+}
+
+const styles = StyleSheet.create({
+  line: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  label: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, marginTop: spacing.lg, marginBottom: 6 },
+  input: { borderWidth: 1, borderRadius: radius.md, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14 },
+  discover: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.lg },
+  found: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
+  jHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth },
+  jRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+});

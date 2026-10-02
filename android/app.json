@@ -2,7 +2,7 @@
   "expo": {
     "name": "ФИНИК",
     "slug": "family-budget",
-    "version": "2.25.3",
+    "version": "2.26.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

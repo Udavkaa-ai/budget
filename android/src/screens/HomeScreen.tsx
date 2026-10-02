@@ -23,6 +23,7 @@ import { SuccessFlash } from '../components/SuccessFlash';
 import { haptics } from '../haptics';
 import { useTourTarget } from '../tourTargets';
 import { onQuickAdd, consumeQuickAdd } from '../quickAdd';
+import { BankInboxBanner } from '../components/BankInbox';
 import { openHelp } from '../help';
 
 function todayStr() {
@@ -303,6 +304,8 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         </View>
+
+        <BankInboxBanner />
 
         <View style={[styles.totalCard, { backgroundColor: t.surface, borderColor: t.border }]}>
           <Text style={[styles.totalLabel, { color: t.textMuted }]}>Итого за день</Text>

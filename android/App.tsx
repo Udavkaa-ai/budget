@@ -25,6 +25,9 @@ import { requestQuickAdd } from './src/quickAdd';
 import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { checkUpdateNotices } from './src/updateNotices';
+import { showAlert } from './src/dialog';
+import { BankInboxHost, openBankInbox } from './src/components/BankInbox';
+import { consumeShared, drainNative, isPersonalBuild } from './src/bank/inbox';
 import { initClassifier } from './src/classifier';
 import { importSeed } from './src/classifier/db';
 import { initPremium } from './src/premium';
@@ -133,6 +136,26 @@ function Root() {
     return () => sub.remove();
   }, [user]);
 
+  // «Поделиться → ФИНИК»: банковское сообщение — во «Входящие», любой другой
+  // текст — в окно добавления (ИИ-разбор). Личная сборка: забираем перехваченные
+  // СМС/уведомления при запуске, возврате в приложение и раз в 30 секунд.
+  useEffect(() => {
+    if (!user) return;
+    const check = async () => {
+      const shared = await consumeShared().catch(() => null);
+      if (shared) {
+        if (shared.item) openBankInbox();
+        else if (shared.sensitive) showAlert('Это код подтверждения', 'Такие сообщения ФИНИК не принимает — коды не должны попадать никуда, кроме банка.');
+        else { goToTab('Home'); requestQuickAdd(shared.text); }
+      }
+      if (isPersonalBuild) drainNative().catch(() => {});
+    };
+    check();
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') check(); });
+    const timer = isPersonalBuild ? setInterval(() => { drainNative().catch(() => {}); }, 30_000) : null;
+    return () => { sub.remove(); if (timer) clearInterval(timer); };
+  }, [user]);
+
   // Офлайн-очередь: пробуем дослать при возврате в приложение и раз в 30 секунд
   useEffect(() => {
     if (!user) return;
@@ -185,6 +208,7 @@ function Root() {
       <Tour />
       <HelpScreen />
       <AchievementToast />
+      <BankInboxHost />
     </View>
   );
 }
