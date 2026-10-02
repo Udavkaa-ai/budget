@@ -109,10 +109,10 @@
         <button id="btn-summary-compare" class="btn-compare">Сравнить</button>
       </div>
       <div id="summary-total-bar" class="total-bar card"></div>
-      <div id="summary-by-user" class="summary-by-user"></div>
+      <div id="summary-by-user" class="summary-by-user" data-block="byUser"></div>
 
       <!-- Heatmap -->
-      <div id="summary-heatmap" class="card heatmap-card">
+      <div id="summary-heatmap" class="card heatmap-card" data-block="heatmap">
         <div class="heatmap-header">
           <span class="heatmap-title">Расходы по дням</span>
           <div class="heatmap-legend">
@@ -129,7 +129,7 @@
       </div>
 
       <!-- Speed chart -->
-      <div class="card speed-chart-card">
+      <div class="card speed-chart-card" data-block="speed">
         <div class="speed-chart-header">
           <span class="speed-chart-title">Скорость трат</span>
           <div class="speed-chart-nav">
@@ -141,10 +141,10 @@
         <div id="speed-chart-container"><div class="loading">Загрузка...</div></div>
       </div>
 
-      <div id="summary-categories" class="category-list"></div>
+      <div id="summary-categories" class="category-list" data-block="categories"></div>
 
       <!-- Family spending overview -->
-      <div class="card family-overview-card">
+      <div class="card family-overview-card" data-block="family">
         <div class="settings-title">Семейные расходы за месяц</div>
         <div id="family-overview-list"><div class="loading">Загрузка...</div></div>
       </div>
@@ -167,7 +167,7 @@
         <div id="category-detail-list" class="expenses-list"></div>
       </div>
 
-      <div class="card analysis-cta-card" data-finik-walk>
+      <div class="card analysis-cta-card" data-finik-walk data-block="ai">
         <button id="btn-get-analysis" class="btn btn-primary btn-full">🤖 Финансовый анализ</button>
         <button id="btn-ai-chat" class="btn btn-secondary btn-full" style="margin-top:8px">💬 Чат с ИИ-советником</button>
         <button id="btn-pdf-report" class="btn btn-secondary btn-full" style="margin-top:8px">Отчёт за месяц (PDF)</button>
@@ -184,7 +184,7 @@
       <div id="chart-cards" class="chart-cards"></div>
 
       <!-- Cashflow -->
-      <div class="card" style="margin-top:16px">
+      <div class="card" style="margin-top:16px" data-block="cashflow">
         <div class="settings-title">Кэшфлоу</div>
 
         <div id="cf-balance-members"></div>
@@ -211,13 +211,13 @@
     <div id="screen-goals" class="screen">
 
       <!-- Барометр бюджета -->
-      <div class="card bablometr-card">
+      <div class="card bablometr-card" data-block="gauge">
         <div class="bablometr-title">Барометр бюджета</div>
         <div id="bablometr-content"><div class="loading">Загрузка...</div></div>
       </div>
 
       <!-- Лимиты по категориям -->
-      <div id="goals-plan-section">
+      <div id="goals-plan-section" data-block="limits">
         <div class="card summary-plan-card">
           <div class="settings-title">Лимиты по категориям</div>
           <div id="plan-table"></div>
@@ -226,7 +226,7 @@
       </div>
 
       <!-- Goals / цели -->
-      <div class="goals-section">
+      <div class="goals-section" data-block="goalsList">
         <div class="goals-section-header">
           <span class="settings-title" style="margin:0">Цели</span>
           <button id="btn-add-goal" class="btn btn-primary btn-sm">+ Новая</button>
@@ -235,7 +235,7 @@
       </div>
 
       <!-- Мои достижения -->
-      <div class="card achievements-card">
+      <div class="card achievements-card" data-block="achievements">
         <div class="achievements-header">
           <span id="ach-finik" class="ach-finik"></span>
           <span class="settings-title" style="margin:0;flex:1">Мои достижения</span>
@@ -266,7 +266,7 @@
           <button id="btn-link-vk" class="btn btn-full" style="background:#0077FF;color:#fff;border:none">Привязать VK</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="family-name-section">
           <div class="settings-title">Семья</div>
           <div class="form-group">
             <label>Название семьи</label>
@@ -275,7 +275,7 @@
           <button id="btn-save-family-name" class="btn btn-primary btn-full">Сохранить</button>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="planned-section">
           <div class="settings-title">Плановый бюджет</div>
           <div class="form-group">
             <label>Плановые расходы на месяц, ₽</label>
@@ -293,10 +293,19 @@
           <span class="rec-entry-chev">›</span>
         </button>
 
-        <div class="settings-section">
-          <div class="settings-title">Оформление</div>
+        <div class="settings-section" id="theme-section">
+          <div class="settings-title">Тема</div>
+          <div class="theme-pills" role="radiogroup" aria-label="Тема оформления">
+            <button class="pill" data-theme-pref="auto">Как в системе</button>
+            <button class="pill" data-theme-pref="light">Светлая</button>
+            <button class="pill" data-theme-pref="dark">Тёмная</button>
+          </div>
+        </div>
+
+        <div class="settings-section" id="finik-section">
+          <div class="settings-title">Финик</div>
           <label class="toggle-row">
-            <span class="toggle-label">Маскот Финик</span>
+            <span class="toggle-label">Показывать Финика</span>
             <span class="toggle-wrap">
               <input type="checkbox" id="finik-toggle" />
               <span class="toggle-slider"></span>
@@ -346,13 +355,12 @@
           </div>
         </div>
 
-        <div class="settings-section">
-          <div class="settings-title">Конструктор аналитики</div>
-          <div class="settings-hint">Включайте только те блоки, которыми пользуетесь. Настройка личная для этого устройства.</div>
+        <div class="settings-section" id="blocks-section">
+          <div class="settings-hint">Включайте только то, чем пользуетесь. Настройка личная для этого устройства.</div>
           <div id="blocks-constructor"></div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="custom-cats-section">
           <div class="settings-title">Мои категории</div>
           <div style="color:var(--text-muted);font-size:13px;margin-bottom:8px">
             Общие для всей семьи. При удалении расходы переносятся в «Прочее».
@@ -365,8 +373,8 @@
           </div>
         </div>
 
-        <div class="settings-section">
-          <div class="settings-title">Данные</div>
+        <div class="settings-section" id="data-section">
+          <div class="settings-title">Экспорт и импорт</div>
           <a id="btn-export" class="btn btn-outline btn-full" href="/api/export" download>📥 Экспорт CSV</a>
           <div style="margin-top:8px">
             <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
@@ -377,15 +385,15 @@
           <div id="import-result" class="hidden" style="margin-top:8px"></div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="about-section">
           <div class="settings-title">О приложении</div>
           <div class="settings-info">
-            <div style="color:var(--text-muted);font-size:13px">Версия 2.16.0 W</div>
+            <div style="color:var(--text-muted);font-size:13px">Версия 2.17.0 W</div>
           </div>
         </div>
 
         <div class="settings-section" id="help-section">
-          <div class="settings-title">Помощь</div>
+          <div class="settings-title">Справка</div>
           <div class="help-actions">
             <button id="btn-open-help" class="btn btn-outline btn-full">Вопросы и ответы</button>
             <button id="btn-start-tour" class="btn btn-outline btn-full">Пройти вводный тур</button>
@@ -404,7 +412,7 @@
         </div>
 
         <div class="card settings-section" id="invite-section">
-          <div class="settings-title">Пригласить партнёра</div>
+          <div class="settings-title">Пригласить в семью</div>
           <p class="settings-hint">Партнёр войдёт через Google и введёт код, чтобы видеть общий бюджет.</p>
           <button id="btn-create-invite" class="btn btn-primary btn-full">🔗 Создать ссылку-приглашение</button>
           <div id="invite-result" class="hidden">

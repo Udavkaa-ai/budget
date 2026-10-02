@@ -1,26 +1,48 @@
 import { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-// Конструктор аналитики: каждый блок можно включить/выключить в Настройках.
+// Конструктор экранов: блоки сгруппированы по вкладкам (как в вебе).
 // Настройка локальная для устройства — у каждого члена семьи свой набор.
-export const BLOCKS = [
-  { id: 'gauge',    label: '💵 Барометр бюджета',      hint: 'Факт/план на экране «Месяц»' },
-  { id: 'heatmap',  label: '📅 Расходы по дням',       hint: 'Календарь-тепловая карта' },
-  { id: 'speed',    label: '📈 Скорость трат',         hint: '% факт/план по дням месяца' },
-  { id: 'byUser',   label: '👥 По участникам',         hint: 'Кто сколько потратил, % дохода' },
-  { id: 'ai',       label: '🤖 Кнопка ИИ-анализа',     hint: 'На экране «Месяц» (Премиум)' },
-  { id: 'months6',  label: '📊 Расходы за 6 месяцев',  hint: 'Столбики на вкладке «График»' },
-  { id: 'chartTab', label: '📈 Вкладка «График»',      hint: 'Дневной график и кэшфлоу' },
-  { id: 'goalsTab', label: '🎯 Вкладка «Цели»',        hint: 'Накопления и прогресс' },
-] as const;
+export type BlockId =
+  | 'chartTab' | 'goalsTab'
+  | 'gauge' | 'speed' | 'heatmap' | 'ai' | 'byUser' | 'categories'
+  | 'chartCum' | 'chartDaily' | 'chartBalance' | 'cashflow' | 'months6'
+  | 'limits' | 'goalsList' | 'achievements';
+export interface BlockItem { id: BlockId; label: string; hint: string }
+export interface BlockGroup { tab: 'summary' | 'chart' | 'goals' | null; title: string; hint?: string; items: BlockItem[] }
 
-export type BlockId = typeof BLOCKS[number]['id'];
+export const BLOCK_GROUPS: BlockGroup[] = [
+  { tab: null, title: 'Вкладки внизу', hint: 'Бюджет, Месяц и Настройки показываются всегда', items: [
+    { id: 'chartTab', label: 'График', hint: 'Траты против плана, по дням, остатки, кэшфлоу' },
+    { id: 'goalsTab', label: 'Цели', hint: 'Лимиты, копилки, достижения' },
+  ] },
+  { tab: 'summary', title: 'Месяц', items: [
+    { id: 'gauge', label: 'Барометр бюджета', hint: 'Темп трат относительно нормы' },
+    { id: 'speed', label: 'Скорость трат', hint: '% от нормы по дням месяца' },
+    { id: 'heatmap', label: 'Календарь трат', hint: 'Тепловая карта по дням' },
+    { id: 'ai', label: 'ИИ-анализ и чат', hint: 'Кнопки на экране (Премиум)' },
+    { id: 'byUser', label: 'По участникам', hint: 'Кто сколько потратил и % дохода' },
+    { id: 'categories', label: 'Категории', hint: 'Разбивка с лимитами' },
+  ] },
+  { tab: 'chart', title: 'График', items: [
+    { id: 'chartCum', label: 'Траты за месяц', hint: 'Против плана, прогноз, перерасход' },
+    { id: 'chartDaily', label: 'Траты по дням', hint: 'Столбики по участникам и дневная норма' },
+    { id: 'chartBalance', label: 'Остаток на счетах', hint: 'Если заполнен кэшфлоу' },
+    { id: 'cashflow', label: 'Кэшфлоу', hint: 'Остатки на 1-е число и дни дохода' },
+    { id: 'months6', label: 'Расходы за 6 месяцев', hint: 'Топ категорий по месяцам' },
+  ] },
+  { tab: 'goals', title: 'Цели', items: [
+    { id: 'limits', label: 'Лимиты по категориям', hint: 'Сколько можно тратить на категорию' },
+    { id: 'goalsList', label: 'Копилки', hint: 'Цели и прогресс накоплений' },
+    { id: 'achievements', label: 'Достижения', hint: 'Награды Финика' },
+  ] },
+];
+export const BLOCKS: BlockItem[] = BLOCK_GROUPS.flatMap(g => g.items);
+
 export type BlockState = Record<BlockId, boolean>;
 
 const KEY = 'analytics_blocks';
-const DEFAULTS: BlockState = {
-  gauge: true, heatmap: true, speed: true, byUser: true, ai: true, months6: true, chartTab: true, goalsTab: true,
-};
+const DEFAULTS = Object.fromEntries(BLOCKS.map(b => [b.id, true])) as BlockState;
 
 let _state: BlockState = { ...DEFAULTS };
 const listeners = new Set<() => void>();

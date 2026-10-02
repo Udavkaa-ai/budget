@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useBlocks } from '../blocks';
 import { showAlert } from '../dialog';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ function fmt(n: number) {
 
 export default function GoalsScreen() {
   const t = useTheme();
+  const blocks = useBlocks();
   const { cats: allCats, icon: catIcon, custom } = useCategories();
   const { unlocked, count, total } = useAchievements();
   const [list, setList] = useState<Goal[]>([]);
@@ -155,6 +157,7 @@ export default function GoalsScreen() {
         ? <ActivityIndicator style={{ marginTop: 60 }} color={t.primary} />
         : (
           <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+            {blocks.limits && (<>
             {/* Лимиты по категориям — как в вебе */}
             <FadeInItem index={0}>
             <Card>
@@ -194,7 +197,9 @@ export default function GoalsScreen() {
               <PrimaryButton title="Сохранить" onPress={saveLimits} loading={savingLimits} style={{ marginTop: spacing.sm }} />
             </Card>
             </FadeInItem>
+            </>)}
 
+            {blocks.goalsList && (<>
             {list.length === 0 && (
               <Text style={[styles.empty, { color: t.textMuted }]}>Нет целей. Добавьте первую!</Text>
             )}
@@ -234,7 +239,9 @@ export default function GoalsScreen() {
                 </FadeInItem>
               );
             })}
+            </>)}
 
+            {blocks.achievements && (<>
             {/* Мои достижения */}
             <FadeInItem index={list.length + 1}>
             <Card>
@@ -269,6 +276,7 @@ export default function GoalsScreen() {
               })}
             </Card>
             </FadeInItem>
+            </>)}
           </ScrollView>
         )}
 

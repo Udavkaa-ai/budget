@@ -588,6 +588,7 @@ export default function SummaryScreen() {
             </Card>
           )}
 
+          {blocks.categories && (<>
           {/* Categories */}
           <Card>
             <View style={styles.catHeader}>
@@ -624,6 +625,7 @@ export default function SummaryScreen() {
               <Text style={{ color: t.textMuted, marginTop: spacing.md }}>За этот месяц ещё нет расходов — они появятся здесь, как только вы их добавите</Text>
             )}
           </Card>
+          </>)}
 
           {cats.map(([cat, amt]) => {
             const limit = selUser ? 0 : budgets[cat] ?? 0;

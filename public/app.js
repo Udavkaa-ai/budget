@@ -444,6 +444,7 @@ async function refreshSupportBadge() {
     const n = r?.unread || 0;
     const b = document.getElementById('admin-support-badge');
     if (b) { b.textContent = n; b.classList.toggle('hidden', !n); }
+    setSettingsBadge('admin', n);
   } catch { /* не критично */ }
 }
 
@@ -503,6 +504,7 @@ async function loadInboxThreads() {
   total.textContent = r?.unread || 0; total.classList.toggle('hidden', !r?.unread);
   const b = document.getElementById('admin-support-badge');
   if (b) { b.textContent = r?.unread || 0; b.classList.toggle('hidden', !r?.unread); }
+  setSettingsBadge('admin', r?.unread || 0);
   renderInboxList();
 }
 
@@ -645,6 +647,7 @@ function initInbox() {
 // ── Поддержка у пользователя: переписка и красная точка на вкладке «Настройки»
 function setSupportDot(n) {
   document.querySelector('.nav-btn[data-screen="settings"]')?.classList.toggle('has-dot', n > 0);
+  setSettingsBadge('help', n, true);
 }
 async function refreshSupportUnread() {
   try { const r = await apiJson('GET', '/api/support/unread'); setSupportDot(r?.unread || 0); } catch { /* не критично */ }
@@ -866,7 +869,7 @@ function loadScreen(name) {
     case 'budget': loadBudget(); break;
     case 'summary': loadSummary(); break;
     case 'chart': loadChart(); loadCashflowSection(); break;
-    case 'settings': loadSupportThread(); loadSettingsScreen(); break;
+    case 'settings': if (settingsPage) closeSettingsPage(); else renderSettingsRoot(); loadSupportThread(); loadSettingsScreen(); break;
     case 'goals': loadGoalsScreen(); break;
     case 'recurring': loadRecurring(); break;
   }
@@ -2143,7 +2146,7 @@ function renderChartCards(box, data) {
   const maxDaily = Math.max(0, ...daily.filter(v => v != null));
 
   box.innerHTML = `
-    <div class="card chart-card">
+    <div class="card chart-card" data-block="chartCum">
       <div class="chart-card-head">
         <div class="settings-title">Траты за месяц</div>
         ${zone ? `<span class="gauge-chip gauge-chip--${zone.key}">${zone.verdict}</span>` : ''}
@@ -2161,9 +2164,9 @@ function renderChartCards(box, data) {
         ${overDays ? '<span><i class="lg-over"></i>Выше плана</span>' : ''}
       </div>
       ${overSince ? `<div class="chart-alert">Траты выше плана с ${overSince} ${MONTHS_GEN_ALL[cm - 1]} — на ${fmt(cum[lastDay - 1] - planAt(lastDay))} больше нормы</div>` : ''}
-      ${plan ? '' : '<p class="settings-hint">Укажите плановые расходы в настройках — появится линия плана.</p>'}
+      ${plan ? '' : '<p class="settings-hint">Укажите плановые расходы: Настройки › «Семья и бюджет» — появится линия плана.</p>'}
     </div>
-    <div class="card chart-card">
+    <div class="card chart-card" data-block="chartDaily">
       <div class="chart-card-head"><div class="settings-title">Траты по дням</div>
         <span class="chart-card-meta">в среднем ${fmt(Math.round(perDay))} в день</span></div>
       <div class="chart-box"><canvas id="ch-daily" aria-label="Траты по дням"></canvas></div>
@@ -2174,7 +2177,7 @@ function renderChartCards(box, data) {
       </div>
     </div>
     ${bal ? `
-    <div class="card chart-card">
+    <div class="card chart-card" data-block="chartBalance">
       <div class="chart-card-head"><div class="settings-title">Остаток на счетах</div>
         <span class="chart-card-meta${balNow < 0 ? ' is-over' : ''}">${fmt(balNow)}</span></div>
       <div class="chart-box chart-box--sm"><canvas id="ch-bal" aria-label="Остаток на счетах"></canvas></div>
@@ -2775,22 +2778,41 @@ async function renderOAuthLinkSection() {
 
 // ─── Конструктор аналитики: блоки вкл/выкл, хранится на устройстве ───────────
 
-const ANALYTICS_BLOCKS = [
-  { id: 'gauge',   label: '💸 Барометр бюджета',        sel: '.bablometr-card' },
-  { id: 'heatmap', label: '🗓 Расходы по дням',         sel: '#summary-heatmap' },
-  { id: 'speed',   label: '📈 Скорость трат',           sel: '.speed-chart-card' },
-  { id: 'byUser',  label: '👥 По участникам',           sel: '#summary-by-user' },
-  { id: 'family',  label: '👨‍👩‍👧 Семейные расходы',       sel: '.family-overview-card' },
-  { id: 'ai',      label: '🤖 Кнопки ИИ-анализа и PDF', sel: null },
-  { id: 'chartTab', label: '📉 Вкладка «График»',       sel: null },
-  { id: 'goalsTab', label: '🎯 Вкладка «Цели»',         sel: null },
+// Конструктор экранов: блоки сгруппированы по вкладкам. Элементы страницы
+// помечены data-block="id"; выключенные прячутся одной CSS-вставкой, так что
+// это работает и для карточек, которые рисуются позже (графики).
+const BLOCK_GROUPS = [
+  { tab: null, title: 'Вкладки внизу', hint: 'Бюджет, Месяц и Настройки показываются всегда', items: [
+    { id: 'chartTab', label: 'График', hint: 'Траты против плана, по дням, остатки, кэшфлоу' },
+    { id: 'goalsTab', label: 'Цели', hint: 'Барометр, лимиты, копилки, достижения' },
+  ] },
+  { tab: 'summary', title: 'Месяц', items: [
+    { id: 'byUser', label: 'По участникам', hint: 'Кто сколько потратил и % дохода' },
+    { id: 'heatmap', label: 'Календарь трат', hint: 'Тепловая карта по дням' },
+    { id: 'speed', label: 'Скорость трат', hint: '% от нормы по дням месяца' },
+    { id: 'categories', label: 'Категории', hint: 'Разбивка с лимитами' },
+    { id: 'family', label: 'Семейные расходы', hint: 'Сводка по всей семье' },
+    { id: 'ai', label: 'ИИ-анализ и отчёт PDF', hint: 'Кнопки внизу экрана' },
+  ] },
+  { tab: 'chart', title: 'График', items: [
+    { id: 'chartCum', label: 'Траты за месяц', hint: 'Против плана, прогноз, перерасход' },
+    { id: 'chartDaily', label: 'Траты по дням', hint: 'Столбики по участникам и дневная норма' },
+    { id: 'chartBalance', label: 'Остаток на счетах', hint: 'Если заполнен кэшфлоу' },
+    { id: 'cashflow', label: 'Кэшфлоу', hint: 'Остатки на 1-е число и дни дохода' },
+  ] },
+  { tab: 'goals', title: 'Цели', items: [
+    { id: 'gauge', label: 'Барометр бюджета', hint: 'Темп трат относительно нормы' },
+    { id: 'limits', label: 'Лимиты по категориям', hint: 'Сколько можно тратить на категорию' },
+    { id: 'goalsList', label: 'Копилки', hint: 'Цели и прогресс накоплений' },
+    { id: 'achievements', label: 'Достижения', hint: 'Награды Финика' },
+  ] },
 ];
+const ALL_BLOCKS = BLOCK_GROUPS.flatMap(g => g.items.map(i => i.id));
 
 function getBlocks() {
-  try {
-    return { gauge: true, heatmap: true, speed: true, byUser: true, family: true, ai: true, chartTab: true, goalsTab: true,
-      ...JSON.parse(localStorage.getItem('analytics_blocks') || '{}') };
-  } catch { return {}; }
+  const def = Object.fromEntries(ALL_BLOCKS.map(id => [id, true]));
+  try { return { ...def, ...JSON.parse(localStorage.getItem('analytics_blocks') || '{}') }; }
+  catch { return def; }
 }
 
 function setBlockEnabled(id, v) {
@@ -2798,38 +2820,41 @@ function setBlockEnabled(id, v) {
   b[id] = v;
   localStorage.setItem('analytics_blocks', JSON.stringify(b));
   applyBlockVisibility();
+  renderBlocksConstructor();
 }
 
 function applyBlockVisibility() {
   const b = getBlocks();
-  for (const blk of ANALYTICS_BLOCKS) {
-    if (!blk.sel) continue;
-    document.querySelectorAll(blk.sel).forEach(el => el.style.display = b[blk.id] === false ? 'none' : '');
-  }
-  const ai1 = document.getElementById('btn-get-analysis');
-  const ai2 = document.getElementById('btn-pdf-report');
-  if (ai1) ai1.style.display = b.ai === false ? 'none' : '';
-  if (ai2) ai2.style.display = b.ai === false ? 'none' : '';
+  let st = document.getElementById('blocks-style');
+  if (!st) { st = document.createElement('style'); st.id = 'blocks-style'; document.head.appendChild(st); }
+  st.textContent = ALL_BLOCKS.filter(id => b[id] === false).map(id => `[data-block="${id}"]{display:none!important}`).join('\n');
   const chartNav = document.querySelector('.nav-btn[data-screen="chart"]');
   const goalsNav = document.querySelector('.nav-btn[data-screen="goals"]');
   if (chartNav) chartNav.style.display = b.chartTab === false ? 'none' : '';
   if (goalsNav) goalsNav.style.display = b.goalsTab === false ? 'none' : '';
+  placeClasp(false);
 }
 
 function renderBlocksConstructor() {
   const box = document.getElementById('blocks-constructor');
   if (!box) return;
   const b = getBlocks();
-  box.innerHTML = ANALYTICS_BLOCKS.map(blk => `
-    <label class="push-toggle-row" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;cursor:pointer">
-      <span class="toggle-label">${blk.label}</span>
-      <span class="toggle-wrap">
-        <input type="checkbox" class="block-toggle" data-block="${blk.id}" ${b[blk.id] === false ? '' : 'checked'} />
-        <span class="toggle-slider"></span>
-      </span>
-    </label>`).join('');
+  const tabOff = tab => (tab === 'chart' && b.chartTab === false) || (tab === 'goals' && b.goalsTab === false);
+  box.innerHTML = BLOCK_GROUPS.map(g => `
+    <div class="blk-group${tabOff(g.tab) ? ' off' : ''}">
+      <div class="blk-group-title">${esc(g.title)}${tabOff(g.tab) ? '<span>вкладка скрыта</span>' : ''}</div>
+      ${g.hint ? `<div class="settings-hint" style="margin:-2px 0 6px">${esc(g.hint)}</div>` : ''}
+      ${g.items.map(it => `
+        <label class="blk-row">
+          <span class="blk-text"><span class="blk-label">${esc(it.label)}</span><span class="blk-hint">${esc(it.hint)}</span></span>
+          <span class="toggle-wrap">
+            <input type="checkbox" class="block-toggle" data-id="${it.id}" ${b[it.id] === false ? '' : 'checked'} />
+            <span class="toggle-slider"></span>
+          </span>
+        </label>`).join('')}
+    </div>`).join('');
   box.querySelectorAll('.block-toggle').forEach(inp => {
-    inp.addEventListener('change', () => setBlockEnabled(inp.dataset.block, inp.checked));
+    inp.addEventListener('change', () => setBlockEnabled(inp.dataset.id, inp.checked));
   });
 }
 
@@ -3398,7 +3423,7 @@ async function initApp() {
   refreshSupportUnread();
   if (new URLSearchParams(location.search).get('support')) {
     window.history.replaceState({}, '', location.pathname);
-    setTimeout(() => { navigate('settings'); setTimeout(() => document.getElementById('support-section')?.scrollIntoView({ block: 'center' }), 400); }, 300);
+    setTimeout(() => { navigate('settings'); openSettingsPage('help'); setTimeout(() => document.getElementById('support-section')?.scrollIntoView({ block: 'center' }), 400); }, 300);
   }
   // Пуш «новое сообщение в поддержку» ведёт сюда — сразу открываем мессенджер
   if (currentUser?.isAdmin && new URLSearchParams(location.search).get('admin') === 'support') {
@@ -3823,6 +3848,8 @@ function setupEventListeners() {
   // Принудительное обновление у всех пользователей
   document.getElementById('btn-open-admin').addEventListener('click', () => openAdminPanel());
   initInbox();
+  initSettingsPages();
+  initThemePills();
   document.getElementById('btn-support-close')?.addEventListener('click', closeSupportThread);
   document.getElementById('btn-support-send')?.addEventListener('click', sendSupportMessage);
   document.getElementById('btn-close-admin').addEventListener('click', () => closeAdminPanel());
@@ -4269,7 +4296,7 @@ async function loadSpeedometer() {
   const daysElapsed = now.getDate();
   const plannedMonthly = appSettings.plannedMonthly || 0;
   if (!plannedMonthly) {
-    container.innerHTML = '<div class="empty-state">Укажите плановые расходы в настройках — тогда барометр бюджета заработает</div>';
+    container.innerHTML = '<div class="empty-state">Укажите плановые расходы: Настройки › «Семья и бюджет» — тогда барометр бюджета заработает</div>';
     return;
   }
   try {
@@ -5219,19 +5246,19 @@ const HELP_SECTIONS = [
     { q: 'Как установить на телефон?', a: 'iPhone: откройте сайт в Safari → «Поделиться» → «На экран „Домой“». Android: меню браузера → «Установить приложение» — или скачайте ФИНИК из RuStore. Компьютер: значок установки в адресной строке Chrome/Edge.' },
   ] },
   { title: 'Семья', items: [
-    { q: 'Как добавить близких?', a: 'Настройки → «Пригласить партнёра» → отправьте ссылку. Открыть её можно с любого устройства: iPhone, Android или компьютера. После входа все видят общий бюджет в реальном времени.' },
+    { q: 'Как добавить близких?', a: 'Настройки › «Семья и бюджет» › «Пригласить в семью» › отправьте ссылку. Открыть её можно с любого устройства: iPhone, Android или компьютера. После входа все видят общий бюджет в реальном времени.' },
     { q: 'Что за фильтр «Все / Я / Партнёр»?', a: 'На экране «Бюджет» можно смотреть траты всей семьи вместе или каждого отдельно. Цвета участников одинаковые во всех графиках.' },
   ] },
   { title: 'Барометр и графики', items: [
     { q: 'Что показывает барометр бюджета?', a: 'Сколько потрачено относительно нормы на сегодняшний день: если план 90 000 ₽ и прошла треть месяца, норма — 30 000 ₽. Зоны шкалы: до 85% — «Экономим» (зелёная), 85–100% — «В графике», 100–110% — «Выше плана» (жёлтая, Финик волнуется), больше 110% — «Перерасход» (красная, Финик ворчит). Золотая застёжка на шкале — отметка плана, 100%.' },
     { q: 'Как читать график трат?', a: 'Верхний график — сколько потрачено с начала месяца (сплошная линия) против плана (пунктир), точками — прогноз до конца месяца. Где траты выше плана, линия и заливка становятся красными, а флажок «с N» отмечает день, когда начался перерасход. Ниже — траты по дням с дневной нормой: красная точка над столбиком — день дороже нормы.' },
-    { q: 'Где задать план?', a: 'Настройки → «Плановый бюджет». Лимиты по отдельным категориям — на экране «Цели».' },
-    { q: 'Конструктор аналитики', a: 'В Настройках можно скрыть блоки и вкладки, которыми не пользуетесь. Настройка своя на каждом устройстве.' },
+    { q: 'Где задать план?', a: 'Настройки › «Семья и бюджет» › «Плановый бюджет». Лимиты по отдельным категориям — на экране «Цели».' },
+    { q: 'Как убрать лишние графики и блоки?', a: 'Настройки › «Экраны и аналитика». Блоки сгруппированы по вкладкам — Месяц, График, Цели; там же можно скрыть сами вкладки. Настройка своя на каждом устройстве.' },
   ] },
   { title: 'Приватность и поддержка', items: [
-    { q: 'Что даёт шифрование?', a: 'Настройки → «Приватность». Расходы шифруются прямо на устройстве, сервер хранит только непрозрачные данные. Ключ есть только у вас — сохраните его: без ключа данные не восстановить.' },
-    { q: 'Светлая и тёмная тема', a: 'Оформление следует теме телефона или компьютера — переключите её в системе, и ФИНИК подстроится.' },
-    { q: 'Как написать разработчику?', a: 'Настройки → «Поддержка». Сообщение придёт напрямую разработчику, а ответ появится там же — на вкладке «Настройки» загорится точка.' },
+    { q: 'Что даёт шифрование?', a: 'Настройки › «Безопасность и приватность». Расходы шифруются прямо на устройстве, сервер хранит только непрозрачные данные. Ключ есть только у вас — сохраните его: без ключа данные не восстановить.' },
+    { q: 'Светлая и тёмная тема', a: 'Настройки › «Внешний вид»: как в системе, светлая или тёмная.' },
+    { q: 'Как написать разработчику?', a: 'Настройки › «Помощь и поддержка». Сообщение придёт напрямую разработчику, а ответ появится там же — на вкладке «Настройки» загорится точка.' },
   ] },
 ];
 
@@ -5271,9 +5298,9 @@ const TOUR_STEPS = [
   { screen: 'summary', target: '#summary-total-bar', emo: 'inspect', title: 'Итоги месяца', body: 'Сколько потрачено за месяц, разбивка по категориям, тепловая карта дней и ИИ-разбор с советами.' },
   { screen: 'goals', target: '#bablometr-content .speedometer-svg', emo: 'overspend', title: 'Барометр бюджета', body: 'Стрелка — траты относительно нормы на сегодня. Зелёная зона — экономим, фиолетовая — в графике, жёлтая — выше плана, красная — перерасход. Я тоже подскажу настроением.' },
   { screen: 'chart', target: '#chart-cards .chart-box--hero', emo: 'thinking', title: 'Графики', body: 'Траты против плана и прогноз до конца месяца. Где начался перерасход — видно красным. Ведите пальцем по графику, чтобы смотреть дни.' },
-  { screen: 'settings', target: '#invite-section', emo: 'wave', title: 'Позовите семью', body: 'Отправьте ссылку-приглашение — открыть можно на iPhone, Android или компьютере. Все вносят траты и видят общий бюджет сразу.' },
-  { screen: 'settings', target: '#support-section', emo: 'record', title: 'Поддержка', body: 'Нашли ошибку или есть идея — напишите прямо отсюда. Ответ разработчика придёт сюда же.' },
-  { emo: 'goal', title: 'Готово!', body: 'Вопросы и ответы и повтор тура — в Настройках, раздел «Помощь». Удачного планирования!' },
+  { screen: 'settings', page: 'family', target: '#invite-section', emo: 'wave', title: 'Позовите семью', body: 'Отправьте ссылку-приглашение — открыть можно на iPhone, Android или компьютере. Все вносят траты и видят общий бюджет сразу.' },
+  { screen: 'settings', page: 'help', target: '#support-section', emo: 'record', title: 'Поддержка', body: 'Нашли ошибку или есть идея — напишите прямо отсюда. Ответ разработчика придёт сюда же.' },
+  { emo: 'goal', title: 'Готово!', body: 'Вопросы и ответы и повтор тура — в Настройках, раздел «Помощь и поддержка». Удачного планирования!' },
 ];
 let tourIdx = 0, tourSteps = [];
 
@@ -5304,6 +5331,8 @@ async function showTourStep() {
   const el = document.getElementById('tour');
   const spot = el.querySelector('.tour-spot'), card = el.querySelector('.tour-card');
   if (step.screen && currentScreen !== step.screen) { navigate(step.screen); await new Promise(r => setTimeout(r, 700)); }
+  if (step.page) { openSettingsPage(step.page, { history: false }); await new Promise(r => setTimeout(r, 200)); }
+  else if (step.screen === 'settings' && settingsPage) closeSettingsPage();
   let target = step.target ? document.querySelector(step.target) : null;
   if (target && !target.offsetParent && target !== document.getElementById('fab-add')) target = null;
   if (target) { target.scrollIntoView({ block: 'center', behavior: motionOK() ? 'smooth' : 'auto' }); await new Promise(r => setTimeout(r, motionOK() ? 380 : 30)); }
@@ -5350,6 +5379,139 @@ function initHelpAndTour() {
   try { seen = localStorage.getItem(TOUR_KEY) === '1'; } catch { seen = true; }
   if (!seen) setTimeout(startTour, 1200);
 }
+
+// ─── НАСТРОЙКИ: разделы со страницами ─────────────────────────────────────────
+// Главный экран — карточка профиля и список разделов; каждый раздел открывается
+// отдельной страницей с «‹ Настройки». Сами блоки остаются в index.html и при
+// запуске переносятся в свои страницы (логика у них прежняя).
+const SET_ICONS = {
+  family: '<path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 19c0-3 2.2-5 5-5s5 2 5 5M11 19c0-3 2.2-5 5-5s5 2 5 5"/>',
+  screens: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M13 16.5h7M16.5 13v7"/>',
+  look: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor" stroke="none"/>',
+  notify: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  security: '<path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  data: '<path d="M12 4v10M8 10l4 4 4-4M5 18h14"/>',
+  help: '<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6M12 17h.01"/>',
+  admin: '<path d="M4 7h16M4 12h16M4 17h10"/><circle cx="18" cy="17" r="2"/>',
+};
+const SETTINGS_PAGES = [
+  { id: 'family', title: 'Семья и бюджет', sub: 'Название, приглашения, план, категории, регулярные платежи',
+    sections: ['#family-name-section', '#invite-section', '#planned-section', '#custom-cats-section', '#btn-open-recurring'] },
+  { id: 'screens', title: 'Экраны и аналитика', sub: 'Что показывать на вкладках Месяц, График и Цели',
+    sections: ['#blocks-section'] },
+  { id: 'look', title: 'Внешний вид', sub: 'Тема и Финик', sections: ['#theme-section', '#finik-section'] },
+  { id: 'notify', title: 'Уведомления', sub: 'О расходах партнёра', sections: ['#push-settings-section'] },
+  { id: 'security', title: 'Безопасность и приватность', sub: 'Аккаунт, способы входа, шифрование',
+    sections: ['#google-account-section', '#oauth-link-section', '#e2e-section'] },
+  { id: 'data', title: 'Данные', sub: 'Экспорт и импорт CSV', sections: ['#data-section'] },
+  { id: 'help', title: 'Помощь и поддержка', sub: 'Вопросы и ответы, тур, написать разработчику',
+    sections: ['#help-section', '#support-section', '#about-section'] },
+  { id: 'admin', title: 'Администрирование', sub: 'Сообщения поддержки, панель, обновление', admin: true,
+    sections: ['#admin-panel-btn-section', '#admin-update-section'] },
+];
+let settingsPage = null;
+
+function initSettingsPages() {
+  const list = document.querySelector('#screen-settings .settings-list');
+  if (!list || list.dataset.paged) return;
+  list.dataset.paged = '1';
+  const root = document.createElement('div');
+  root.className = 'set-root';
+  root.innerHTML = `
+    <div class="card set-profile">
+      <div class="set-ava" id="set-ava"></div>
+      <div class="set-who"><b id="set-name"></b><span id="set-family"></span></div>
+    </div>
+    <div class="card set-menu">
+      ${SETTINGS_PAGES.map(pg => `
+        <button class="set-row${pg.admin ? ' hidden' : ''}" data-page="${pg.id}">
+          <span class="set-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${SET_ICONS[pg.id]}</svg></span>
+          <span class="set-text"><span class="set-title">${pg.title}</span><span class="set-sub">${pg.sub}</span></span>
+          <span class="set-badge hidden"></span>
+          <span class="set-chev">›</span>
+        </button>`).join('')}
+    </div>
+    <button class="btn btn-secondary btn-full set-logout" id="set-logout">Выйти из аккаунта</button>`;
+  for (const pg of SETTINGS_PAGES) {
+    const page = document.createElement('div');
+    page.className = 'set-page hidden';
+    page.dataset.page = pg.id;
+    page.innerHTML = `<div class="set-page-head"><button class="set-back" type="button">‹ Настройки</button><h2>${pg.title}</h2></div>`;
+    for (const sel of pg.sections) { const el = list.querySelector(sel) || document.querySelector(sel); if (el) page.appendChild(el); }
+    list.appendChild(page);
+  }
+  list.prepend(root);
+  root.querySelectorAll('.set-row').forEach(r => r.addEventListener('click', () => openSettingsPage(r.dataset.page)));
+  list.querySelectorAll('.set-back').forEach(b => b.addEventListener('click', () => (history.state?.setPage ? history.back() : closeSettingsPage())));
+  root.querySelector('#set-logout').addEventListener('click', async () => {
+    if (await uiConfirm('Выйти из аккаунта?', 'Данные останутся на сервере — войти можно снова в любой момент.', { ok: 'Выйти', danger: true })) logout();
+  });
+  window.addEventListener('popstate', () => { if (settingsPage) closeSettingsPage(); });
+}
+
+function renderSettingsRoot() {
+  const name = currentUser?.name || '';
+  const ava = document.getElementById('set-ava');
+  if (ava) { ava.textContent = name.trim().slice(0, 1).toUpperCase() || '?'; ava.style.background = avatarColor(currentUser?.login || name); }
+  const n = document.getElementById('set-name'); if (n) n.textContent = name;
+  const f = document.getElementById('set-family');
+  if (f) f.textContent = appSettings?.familyName ? `Семья «${appSettings.familyName}»` : 'Семья без названия';
+  document.querySelector('.set-row[data-page="admin"]')?.classList.toggle('hidden', !currentUser?.isAdmin);
+  // раздел пустой (например, уведомления не поддерживаются браузером) — прячем строку
+  for (const pg of SETTINGS_PAGES) {
+    if (pg.admin) continue;
+    const page = document.querySelector(`.set-page[data-page="${pg.id}"]`);
+    const visible = page && [...page.children].some(c => !c.classList.contains('set-page-head') && !c.classList.contains('hidden'));
+    document.querySelector(`.set-row[data-page="${pg.id}"]`)?.classList.toggle('hidden', !visible);
+  }
+}
+
+function openSettingsPage(id, { history: push = true } = {}) {
+  const list = document.querySelector('#screen-settings .settings-list');
+  if (!list) return;
+  settingsPage = id;
+  list.querySelector('.set-root')?.classList.add('hidden');
+  list.querySelectorAll('.set-page').forEach(p => p.classList.toggle('hidden', p.dataset.page !== id));
+  document.querySelector('.main-content')?.scrollTo?.(0, 0);
+  if (push) history.pushState({ setPage: id }, '');
+  if (id === 'screens') renderBlocksConstructor();
+}
+
+function closeSettingsPage() {
+  const list = document.querySelector('#screen-settings .settings-list');
+  if (!list) return;
+  settingsPage = null;
+  list.querySelectorAll('.set-page').forEach(p => p.classList.add('hidden'));
+  list.querySelector('.set-root')?.classList.remove('hidden');
+  renderSettingsRoot();
+  document.querySelector('.main-content')?.scrollTo?.(0, 0);
+}
+
+// Значки на строках разделов: непрочитанный ответ поддержки, сообщения админу
+function setSettingsBadge(page, n, dotOnly = false) {
+  const b = document.querySelector(`.set-row[data-page="${page}"] .set-badge`);
+  if (!b) return;
+  b.classList.toggle('hidden', !n);
+  b.classList.toggle('dot', dotOnly);
+  b.textContent = dotOnly ? '' : String(n || '');
+}
+
+// ─── Тема: как в системе / светлая / тёмная (личная настройка устройства) ──────
+function applyThemePref(pref) {
+  let p = pref;
+  if (!p) { try { p = localStorage.getItem('theme_pref') || 'auto'; } catch { p = 'auto'; } }
+  if (p === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = p;
+  document.querySelectorAll('[data-theme-pref]').forEach(b => b.classList.toggle('active', b.dataset.themePref === p));
+}
+function initThemePills() {
+  document.querySelectorAll('[data-theme-pref]').forEach(b => b.addEventListener('click', () => {
+    try { localStorage.setItem('theme_pref', b.dataset.themePref); } catch { /* приватный режим */ }
+    applyThemePref(b.dataset.themePref);
+  }));
+  applyThemePref();
+}
+applyThemePref();
 
 // ─── ДИАЛОГИ ──────────────────────────────────────────────────────────────────
 // Фирменные окна вместо системных confirm()/prompt() (1:1 с приложением,

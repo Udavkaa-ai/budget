@@ -1,5 +1,5 @@
 // Service Worker — network-first: всегда свежие файлы, кэш только при офлайне
-const CACHE = 'budget-v36';
+const CACHE = 'budget-v37';
 const STATIC = [
   '/', '/style.css', '/app.js', '/e2e.js', '/finik-rig.js', '/manifest.json',
   '/vendor/chart.umd.min.js', '/vendor/hammer.min.js',

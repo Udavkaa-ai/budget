@@ -132,7 +132,9 @@ function Legend({ items }: { items: Array<{ kind: 'line' | 'dash' | 'dot' | 'sq'
   );
 }
 
-export function MonthCharts({ data, plan, month, year }: { data: UnifiedChart; plan: number; month: number; year: number }) {
+export function MonthCharts({ data, plan, month, year, show = { cum: true, daily: true, balance: true } }: {
+  data: UnifiedChart; plan: number; month: number; year: number; show?: { cum: boolean; daily: boolean; balance: boolean };
+}) {
   const t = useTheme();
   const [sel, setSel] = useState<number | null>(null);
   const pick = (d: number) => { if (d !== sel) haptics.select(); setSel(d); };
@@ -216,6 +218,7 @@ export function MonthCharts({ data, plan, month, year }: { data: UnifiedChart; p
 
   return (
     <>
+      {show.cum && (
       <Card>
         <View style={styles.head}>
           <SectionTitle style={{ marginBottom: 0, flex: 1 }}>Траты за месяц</SectionTitle>
@@ -279,7 +282,9 @@ export function MonthCharts({ data, plan, month, year }: { data: UnifiedChart; p
         {!plan && <Text style={{ color: t.textMuted, fontSize: 13, marginTop: spacing.sm }}>Укажите плановые расходы в настройках — появится линия плана.</Text>}
         <Text style={{ color: t.textFaint, fontSize: 12, marginTop: spacing.sm, textAlign: 'center' }}>Ведите пальцем по графику, чтобы смотреть дни</Text>
       </Card>
+      )}
 
+      {show.daily && (
       <Card>
         <View style={styles.head}>
           <SectionTitle style={{ marginBottom: 0, flex: 1 }}>Траты по дням</SectionTitle>
@@ -323,8 +328,9 @@ export function MonthCharts({ data, plan, month, year }: { data: UnifiedChart; p
           ...(dailyOver ? [{ kind: 'overDot' as const, label: `Выше нормы · ${dailyOver} ${plural(dailyOver, 'день', 'дня', 'дней')}` }] : []),
         ]} />
       </Card>
+      )}
 
-      {bal && (
+      {bal && show.balance && (
         <Card>
           <View style={styles.head}>
             <SectionTitle style={{ marginBottom: 0, flex: 1 }}>Остаток на счетах</SectionTitle>

@@ -11,6 +11,7 @@ import { goToTab } from '../navigation';
 import { measureTarget, measureNode, scrollTargetIntoView, type Rect } from '../tourTargets';
 import { openHelp } from '../help';
 import { haptics } from '../haptics';
+import { openSettingsPage, type SettingsPage } from '../settingsNav';
 import { Finik, type FinikEmotion } from './Finik';
 
 // Эмоция Финика для каждой карточки инструктажа (по заголовку — устойчиво к фильтрации шагов)
@@ -84,7 +85,7 @@ const STEPS: Step[] = [
   {
     tab: 'Settings', targetId: 'settings.blocks', icon: 'construct',
     title: 'Соберите аналитику под себя',
-    body: 'Барометр бюджета, тепловую карту, графики и другие блоки можно включать и выключать. Оставьте те, что нравятся, остальное скройте.',
+    body: 'Настройки › «Экраны и аналитика»: блоки сгруппированы по вкладкам — Месяц, График, Цели. Оставьте нужное, остальное скройте.',
   },
   {
     tab: 'Settings', targetId: 'settings.security', icon: 'lock-closed',
@@ -99,12 +100,12 @@ const STEPS: Step[] = [
   {
     tab: 'Settings', icon: 'chatbubbles',
     title: 'Поддержка',
-    body: 'Нашли ошибку или есть идея — напишите разработчику прямо из Настроек, раздел «Поддержка». Ответ придёт туда же, а на вкладке загорится значок.',
+    body: 'Нашли ошибку или есть идея — напишите разработчику: Настройки › «Помощь и поддержка». Ответ придёт туда же, а на вкладке загорится значок.',
   },
   {
     icon: 'checkmark-circle',
     title: 'Готово!',
-    body: 'Это всё основное. «Вопросы и ответы» и повтор тура — в Настройках. Понравилось — оцените нас в RuStore. Удачного планирования!',
+    body: 'Это всё основное. «Вопросы и ответы» и повтор тура — Настройки › «Помощь и поддержка». Понравилось — оцените нас в RuStore. Удачного планирования!',
     targetId: '__help',
   },
 ];
@@ -136,6 +137,13 @@ export function Tour() {
     let cancelled = false;
     setSpot(null);
     if (step.tab) goToTab(step.tab);
+    // Настройки разбиты на разделы — открываем нужный для подсвечиваемой карточки
+    if (step.tab === 'Settings') {
+      const map: Record<string, SettingsPage> = {
+        'settings.invite': 'family', 'settings.blocks': 'screens', 'settings.security': 'security', 'settings.premium': 'premium',
+      };
+      openSettingsPage(step.targetId ? map[step.targetId] ?? null : 'help');
+    }
     (async () => {
       if (!step.targetId || step.targetId.startsWith('__')) return;
       await new Promise(r => setTimeout(r, 240));

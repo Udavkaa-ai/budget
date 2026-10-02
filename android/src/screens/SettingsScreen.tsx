@@ -3,7 +3,11 @@ import { Toggle } from '../components/UI';
 import { showAlert } from '../dialog';
 import { haptics } from '../haptics';
 import { BankSettings } from '../components/BankSettings';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Modal, TextInput } from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Modal, TextInput, BackHandler } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSupportUnread } from '../supportStore';
+import { isPersonalBuild } from '../bank/inbox';
+import { openSettingsPage, useSettingsPage, type SettingsPage } from '../settingsNav';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -14,7 +18,7 @@ import { SectionTitle } from '../components/UI';
 import { api, invites, csv, pushSettings, support as supportApi, type SupportMessage, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
-import { BLOCKS, useBlocks, setBlock } from '../blocks';
+import { BLOCK_GROUPS, useBlocks, setBlock } from '../blocks';
 import { useCategories, refreshCategories } from '../categories';
 import { useLockEnabled, setLockEnabled, canUseBiometrics, authenticate, useHasPin, setPin, clearPin } from '../applock';
 import { PinPad } from '../components/PinPad';
@@ -34,6 +38,18 @@ import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } 
 import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
 import * as e2eData from '../e2e/compute';
+
+const SETTINGS_PAGES: Array<{ id: SettingsPage; title: string; sub: string; icon: string; tone?: 'success' | 'gold'; personal?: boolean }> = [
+  { id: 'family', title: 'Семья и бюджет', sub: 'Семья, приглашения, план, категории, регулярные платежи', icon: 'people-outline' },
+  { id: 'screens', title: 'Экраны и аналитика', sub: 'Что показывать на вкладках Месяц, График и Цели', icon: 'grid-outline' },
+  { id: 'look', title: 'Внешний вид', sub: 'Тема и Финик', icon: 'contrast-outline' },
+  { id: 'notify', title: 'Уведомления', sub: 'О расходах партнёра', icon: 'notifications-outline' },
+  { id: 'security', title: 'Безопасность и приватность', sub: 'Замок, шифрование, резервные копии', icon: 'shield-checkmark-outline', tone: 'success' },
+  { id: 'bank', title: 'Покупки из банка', sub: 'СМС и уведомления банков, «Входящие», журнал', icon: 'card-outline', personal: true },
+  { id: 'premium', title: 'Премиум', sub: 'ИИ-разбор, сканирование чеков, анализ месяца', icon: 'diamond-outline', tone: 'gold' },
+  { id: 'data', title: 'Данные', sub: 'Экспорт и импорт CSV', icon: 'download-outline' },
+  { id: 'help', title: 'Помощь и поддержка', sub: 'Вопросы и ответы, тур, написать разработчику, оценить', icon: 'help-circle-outline', tone: 'gold' },
+];
 
 export default function SettingsScreen() {
   const t = useTheme();
@@ -75,6 +91,21 @@ export default function SettingsScreen() {
       ],
     );
   };
+  // Разделы Настроек: главный экран со списком, каждый раздел — своя страница
+  const page = useSettingsPage();
+  const supportUnread = useSupportUnread();
+  const openPage = (p: SettingsPage) => { haptics.select(); openSettingsPage(p); };
+  const closePage = () => openSettingsPage(null);
+  useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [page]);
+  // «Назад» на Android возвращает из раздела на главный экран Настроек
+  useFocusEffect(React.useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (page !== null) { openSettingsPage(null); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [page]));
+
   // Цели тура + прокрутка длинного экрана к нужной карточке
   const scrollRef = React.useRef<ScrollView>(null);
   const inviteTarget = useTourTarget('settings.invite');
@@ -566,13 +597,56 @@ export default function SettingsScreen() {
       </View>
       <ScrollView ref={scrollRef} contentContainerStyle={{ padding: spacing.md }}>
 
-        {/* Profile */}
-        <Card>
-          <SectionTitle>Профиль</SectionTitle>
-          <Text style={[styles.profileName, { color: t.text }]}>{user?.name ?? '—'}</Text>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Семья: {familyName.trim() || user?.family || '—'}</Text>
-        </Card>
+        {page === null && (
+          <>
+            <Card style={styles.profileCard}>
+              <View style={[styles.ava, { backgroundColor: t.primary }]}>
+                <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800' }}>{(user?.name || '?').trim().slice(0, 1).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.profileName, { color: t.text }]} numberOfLines={1}>{user?.name ?? '—'}</Text>
+                <Text style={{ color: t.textMuted, fontSize: font.sm }} numberOfLines={1}>
+                  {familyName.trim() ? `Семья «${familyName.trim()}»` : 'Семья без названия'}
+                </Text>
+              </View>
+            </Card>
+            <Card style={{ paddingVertical: 4, paddingHorizontal: 4 }}>
+              {SETTINGS_PAGES.filter(pg => !pg.personal || isPersonalBuild).map((pg, i) => (
+                <TouchableOpacity key={pg.id} onPress={() => openPage(pg.id)} activeOpacity={0.7}
+                  style={[styles.menuRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border }]}>
+                  <View style={[styles.menuIco, { backgroundColor: pg.tone === 'success' ? t.successSoft : pg.tone === 'gold' ? t.goldSoft : t.primarySoft }]}>
+                    <Ionicons name={pg.icon as never} size={20} color={pg.tone === 'success' ? t.success : pg.tone === 'gold' ? t.goldDeep : t.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: t.text, fontSize: font.md, fontWeight: '700' }}>{pg.title}</Text>
+                    <Text style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2, lineHeight: 17 }}>{pg.sub}</Text>
+                  </View>
+                  {pg.id === 'help' && supportUnread > 0 && <View style={[styles.menuDot, { backgroundColor: t.danger }]} />}
+                  <Text style={{ color: t.textFaint, fontSize: 22 }}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </Card>
+        {/* Logout */}
+        <TouchableOpacity
+          style={[styles.logoutBtn, { borderColor: t.danger }]}
+          onPress={handleLogout}
+        >
+          <Text style={{ color: t.danger, fontWeight: '600' }}>Выйти из аккаунта</Text>
+        </TouchableOpacity>
+          </>
+        )}
 
+        {page !== null && (
+          <View style={styles.pageHead}>
+            <TouchableOpacity onPress={closePage} hitSlop={10}>
+              <Text style={{ color: t.primary, fontSize: font.md, fontWeight: '700' }}>‹ Настройки</Text>
+            </TouchableOpacity>
+            <Text style={[styles.pageTitle, { color: t.text }]}>{SETTINGS_PAGES.find(pg => pg.id === page)?.title}</Text>
+          </View>
+        )}
+
+        {page === 'family' && (
+          <>
         {/* Family */}
         <View ref={inviteTarget} collapsable={false} onLayout={offset('settings.invite')}>
         <Card>
@@ -607,39 +681,138 @@ export default function SettingsScreen() {
         </Card>
         </View>
 
-        {/* Subscription */}
-        <View ref={premiumTarget} collapsable={false} onLayout={offset('settings.premium')}>
-        {premium ? (
-          <Card style={{ borderColor: t.primary, borderWidth: 1.5 }}>
-            <SectionTitle>Премиум активен</SectionTitle>
-            <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20 }}>
-              Тестовый режим — бесплатно на время тестирования.{'\n'}
-              Доступны ИИ-аналитика и сканирование чеков.
-            </Text>
-            <TouchableOpacity onPress={deactivatePremium} style={{ marginTop: spacing.md }}>
-              <Text style={{ color: t.textMuted, fontSize: font.sm }}>Отключить</Text>
-            </TouchableOpacity>
-          </Card>
-        ) : (
-          <Card style={{ borderColor: t.warning, borderWidth: 1.5 }}>
-            <SectionTitle>Бесплатный тариф</SectionTitle>
-            <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md }}>
-              Все основные функции работают без интернета и без стоимости.{'\n'}
-              Категории определяет локальный ИИ — быстро, приватно, бесплатно.
-            </Text>
-            <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.md }}>
-              {'🤖 ИИ-аналитика\n📸 Сканирование чеков\n— только в Премиуме'}
-            </Text>
+        {/* Custom categories */}
+        <Card>
+          <SectionTitle>Мои категории</SectionTitle>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
+            Общие для всей семьи. При удалении расходы переносятся в «Прочее».
+          </Text>
+          {custom.map(c => (
+            <View key={c.name} style={styles.row}>
+              <Text style={{ color: t.text }}>{c.emoji} {c.name}</Text>
+              <TouchableOpacity onPress={() => removeCategory(c.name)} style={{ padding: 4 }}>
+                <Text style={{ color: t.danger }}>Удалить</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+            <TextInput
+              style={[styles.input, { width: 64, marginBottom: 0, textAlign: 'center', color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              value={newCatEmoji}
+              onChangeText={setNewCatEmoji}
+              placeholder="🎣"
+              placeholderTextColor={t.textMuted}
+            />
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+              value={newCatName}
+              onChangeText={setNewCatName}
+              placeholder="Название (напр. Рыбалка)"
+              placeholderTextColor={t.textMuted}
+            />
             <TouchableOpacity
-              style={[styles.upgradeBtn, { backgroundColor: t.warning }]}
-              onPress={activatePremium}
+              style={[styles.upgradeBtn, { backgroundColor: t.primary, paddingHorizontal: spacing.lg }]}
+              onPress={addCategory}
+              disabled={busy}
             >
-              <Text style={{ color: '#fff', fontWeight: '700' }}>Активировать Премиум (тест)</Text>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>+</Text>
             </TouchableOpacity>
-          </Card>
-        )}
-        </View>
+          </View>
+        </Card>
 
+        {/* Планирование */}
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setRecurringVisible(true)}
+          style={{
+            backgroundColor: t.primary, borderRadius: 18, padding: 16, marginBottom: 12,
+            flexDirection: 'row', alignItems: 'center', gap: 14,
+          }}>
+          <Text style={{ fontSize: 30 }}>🔁</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Регулярные платежи</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 }}>
+              Подписки, аренда, проездной · автопоиск в истории
+            </Text>
+          </View>
+          <Text style={{ color: '#fff', fontSize: 22 }}>›</Text>
+        </TouchableOpacity>
+          </>
+        )}
+
+        {page === 'screens' && (
+          <>
+        {/* Analytics constructor */}
+        <View ref={blocksTarget} collapsable={false} onLayout={offset('settings.blocks')}>
+        <Card>
+          <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 19 }}>
+            Включайте только то, чем пользуетесь. Настройка личная для этого устройства.
+          </Text>
+          {BLOCK_GROUPS.map(g => {
+            const off = (g.tab === 'chart' && !blocks.chartTab) || (g.tab === 'goals' && !blocks.goalsTab);
+            return (
+              <View key={g.title} style={{ marginTop: spacing.md }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: t.textMuted, fontSize: 12, fontWeight: '800', letterSpacing: 1 }}>{g.title.toUpperCase()}</Text>
+                  {off && <Text style={{ color: t.warning, fontSize: 11, fontWeight: '600' }}>вкладка скрыта</Text>}
+                </View>
+                {'hint' in g && g.hint ? <Text style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>{g.hint}</Text> : null}
+                {g.items.map(b => (
+                  <View key={b.id} style={[styles.toggleRow, off && { opacity: 0.45 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: t.text, fontWeight: '600' }}>{b.label}</Text>
+                      <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{b.hint}</Text>
+                    </View>
+                    <Toggle value={blocks[b.id]} onValueChange={v => setBlock(b.id, v)} />
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </Card>
+        </View>
+          </>
+        )}
+
+        {page === 'look' && (
+          <>
+        {/* Theme */}
+        <Card>
+          <SectionTitle>Оформление</SectionTitle>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            {([['light', '☀️ Светлая'], ['dark', '🌙 Тёмная'], ['auto', '🔄 Авто']] as const).map(([m, label]) => (
+              <TouchableOpacity
+                key={m}
+                style={{
+                  flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center',
+                  backgroundColor: themeMode === m ? t.primary : t.surface2,
+                }}
+                onPress={() => setThemeMode(m)}
+              >
+                <Text style={{ color: themeMode === m ? '#fff' : t.text, fontSize: font.sm }}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
+            «Авто» следует системной теме телефона
+          </Text>
+        </Card>
+
+        {/* Маскот */}
+        <Card>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: t.text }}>🧮 Маскот Финик</Text>
+              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
+                Виртуальный бухгалтер, который реагирует на ваши деньги
+              </Text>
+            </View>
+            <Toggle value={finikOn} onValueChange={setFinikEnabled} />
+          </View>
+        </Card>
+          </>
+        )}
+
+        {page === 'notify' && (
+          <>
         {/* Notifications */}
         <Card>
           <SectionTitle>Уведомления</SectionTitle>
@@ -656,7 +829,11 @@ export default function SettingsScreen() {
             />
           </View>
         </Card>
+          </>
+        )}
 
+        {page === 'security' && (
+          <>
         {/* App lock */}
         <View ref={securityTarget} collapsable={false} onLayout={offset('settings.security')}>
         <Card>
@@ -714,137 +891,6 @@ export default function SettingsScreen() {
           )}
         </Card>
 
-        {/* Theme */}
-        <Card>
-          <SectionTitle>Оформление</SectionTitle>
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            {([['light', '☀️ Светлая'], ['dark', '🌙 Тёмная'], ['auto', '🔄 Авто']] as const).map(([m, label]) => (
-              <TouchableOpacity
-                key={m}
-                style={{
-                  flex: 1, borderRadius: radius.md, padding: spacing.md, alignItems: 'center',
-                  backgroundColor: themeMode === m ? t.primary : t.surface2,
-                }}
-                onPress={() => setThemeMode(m)}
-              >
-                <Text style={{ color: themeMode === m ? '#fff' : t.text, fontSize: font.sm }}>{label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
-            «Авто» следует системной теме телефона
-          </Text>
-        </Card>
-
-        {/* Custom categories */}
-        <Card>
-          <SectionTitle>Мои категории</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
-            Общие для всей семьи. При удалении расходы переносятся в «Прочее».
-          </Text>
-          {custom.map(c => (
-            <View key={c.name} style={styles.row}>
-              <Text style={{ color: t.text }}>{c.emoji} {c.name}</Text>
-              <TouchableOpacity onPress={() => removeCategory(c.name)} style={{ padding: 4 }}>
-                <Text style={{ color: t.danger }}>Удалить</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-            <TextInput
-              style={[styles.input, { width: 64, marginBottom: 0, textAlign: 'center', color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
-              value={newCatEmoji}
-              onChangeText={setNewCatEmoji}
-              placeholder="🎣"
-              placeholderTextColor={t.textMuted}
-            />
-            <TextInput
-              style={[styles.input, { flex: 1, marginBottom: 0, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
-              value={newCatName}
-              onChangeText={setNewCatName}
-              placeholder="Название (напр. Рыбалка)"
-              placeholderTextColor={t.textMuted}
-            />
-            <TouchableOpacity
-              style={[styles.upgradeBtn, { backgroundColor: t.primary, paddingHorizontal: spacing.lg }]}
-              onPress={addCategory}
-              disabled={busy}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700' }}>+</Text>
-            </TouchableOpacity>
-          </View>
-        </Card>
-
-        {/* Analytics constructor */}
-        <View ref={blocksTarget} collapsable={false} onLayout={offset('settings.blocks')}>
-        <Card>
-          <SectionTitle>Конструктор аналитики</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
-            Включайте только те блоки, которыми пользуетесь. Настройка — личная для этого устройства.
-          </Text>
-          {BLOCKS.map(b => (
-            <View key={b.id} style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: t.text }}>{b.label}</Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>{b.hint}</Text>
-              </View>
-              <Toggle
-                value={blocks[b.id]}
-                onValueChange={v => setBlock(b.id, v)}
-              />
-            </View>
-          ))}
-        </Card>
-        </View>
-
-        {/* Планирование */}
-        <TouchableOpacity activeOpacity={0.85} onPress={() => setRecurringVisible(true)}
-          style={{
-            backgroundColor: t.primary, borderRadius: 18, padding: 16, marginBottom: 12,
-            flexDirection: 'row', alignItems: 'center', gap: 14,
-          }}>
-          <Text style={{ fontSize: 30 }}>🔁</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Регулярные платежи</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 }}>
-              Подписки, аренда, проездной · автопоиск в истории
-            </Text>
-          </View>
-          <Text style={{ color: '#fff', fontSize: 22 }}>›</Text>
-        </TouchableOpacity>
-
-        {/* Маскот */}
-        <Card>
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: t.text }}>🧮 Маскот Финик</Text>
-              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
-                Виртуальный бухгалтер, который реагирует на ваши деньги
-              </Text>
-            </View>
-            <Toggle value={finikOn} onValueChange={setFinikEnabled} />
-          </View>
-        </Card>
-
-        {/* Data */}
-        <Card>
-          <SectionTitle>Данные</SectionTitle>
-          <TouchableOpacity style={styles.row} onPress={exportCsv} disabled={busy}>
-            <Text style={{ color: t.text }}>📤 Экспорт в CSV</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={chooseImport} disabled={busy}>
-            <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
-          {isE2E() && (
-            <TouchableOpacity style={styles.row} onPress={dedupe} disabled={busy}>
-              <Text style={{ color: t.text }}>🧹 Убрать дубликаты расходов</Text>
-              <Text style={{ color: t.textMuted }}>›</Text>
-            </TouchableOpacity>
-          )}
-        </Card>
-
         {/* Encrypted backups */}
         <Card>
           <SectionTitle>Резервные копии</SectionTitle>
@@ -889,7 +935,78 @@ export default function SettingsScreen() {
             <Text style={{ color: t.textMuted, fontSize: font.sm }}>📥 Ввести ключ с другого устройства</Text>
           </TouchableOpacity>
         </Card>
+          </>
+        )}
 
+        {page === 'bank' && (
+          <>
+        {/* Покупки из банка — только личная сборка */}
+        <BankSettings />
+          </>
+        )}
+
+        {page === 'premium' && (
+          <>
+        {/* Subscription */}
+        <View ref={premiumTarget} collapsable={false} onLayout={offset('settings.premium')}>
+        {premium ? (
+          <Card style={{ borderColor: t.primary, borderWidth: 1.5 }}>
+            <SectionTitle>Премиум активен</SectionTitle>
+            <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20 }}>
+              Тестовый режим — бесплатно на время тестирования.{'\n'}
+              Доступны ИИ-аналитика и сканирование чеков.
+            </Text>
+            <TouchableOpacity onPress={deactivatePremium} style={{ marginTop: spacing.md }}>
+              <Text style={{ color: t.textMuted, fontSize: font.sm }}>Отключить</Text>
+            </TouchableOpacity>
+          </Card>
+        ) : (
+          <Card style={{ borderColor: t.warning, borderWidth: 1.5 }}>
+            <SectionTitle>Бесплатный тариф</SectionTitle>
+            <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md }}>
+              Все основные функции работают без интернета и без стоимости.{'\n'}
+              Категории определяет локальный ИИ — быстро, приватно, бесплатно.
+            </Text>
+            <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.md }}>
+              {'🤖 ИИ-аналитика\n📸 Сканирование чеков\n— только в Премиуме'}
+            </Text>
+            <TouchableOpacity
+              style={[styles.upgradeBtn, { backgroundColor: t.warning }]}
+              onPress={activatePremium}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Активировать Премиум (тест)</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+        </View>
+          </>
+        )}
+
+        {page === 'data' && (
+          <>
+        {/* Data */}
+        <Card>
+          <SectionTitle>Данные</SectionTitle>
+          <TouchableOpacity style={styles.row} onPress={exportCsv} disabled={busy}>
+            <Text style={{ color: t.text }}>📤 Экспорт в CSV</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.row} onPress={chooseImport} disabled={busy}>
+            <Text style={{ color: t.text }}>📥 Импорт из CSV-файла</Text>
+            <Text style={{ color: t.textMuted }}>›</Text>
+          </TouchableOpacity>
+          {isE2E() && (
+            <TouchableOpacity style={styles.row} onPress={dedupe} disabled={busy}>
+              <Text style={{ color: t.text }}>🧹 Убрать дубликаты расходов</Text>
+              <Text style={{ color: t.textMuted }}>›</Text>
+            </TouchableOpacity>
+          )}
+        </Card>
+          </>
+        )}
+
+        {page === 'help' && (
+          <>
         {/* Guide & Help */}
         <Card>
           <SectionTitle>Помощь</SectionTitle>
@@ -906,10 +1023,6 @@ export default function SettingsScreen() {
             <Text style={{ color: t.textMuted }}>›</Text>
           </TouchableOpacity>
         </Card>
-
-        {/* Support */}
-        {/* Покупки из банка — только личная сборка */}
-        <BankSettings />
 
         <Card>
           <SectionTitle>Поддержка</SectionTitle>
@@ -951,20 +1064,14 @@ export default function SettingsScreen() {
         {/* About */}
         <Card>
           <SectionTitle>О приложении</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.26.0'} A</Text>
+          <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.27.0'} A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
             Классификатор категорий работает полностью на устройстве.{'\n'}
             Ваши данные не передаются без разрешения.
           </Text>
         </Card>
-
-        {/* Logout */}
-        <TouchableOpacity
-          style={[styles.logoutBtn, { borderColor: t.danger }]}
-          onPress={handleLogout}
-        >
-          <Text style={{ color: t.danger, fontWeight: '600' }}>Выйти из аккаунта</Text>
-        </TouchableOpacity>
+          </>
+        )}
 
       </ScrollView>
 
@@ -1087,6 +1194,13 @@ const styles = StyleSheet.create({
   title:        { fontSize: font.xxl, fontWeight: '800' },
   sectionTitle: { fontSize: font.sm, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   profileName:  { fontSize: font.xl, fontWeight: '700', marginBottom: 2 },
+  profileCard:  { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  ava:          { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  menuRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 12, paddingHorizontal: 10 },
+  menuIco:      { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  menuDot:      { width: 10, height: 10, borderRadius: 5 },
+  pageHead:     { gap: 4, marginBottom: spacing.md, marginHorizontal: 2 },
+  pageTitle:    { fontSize: 22, fontWeight: '800', letterSpacing: -0.2 },
   row:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md },
   toggleRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   upgradeBtn:   { borderRadius: radius.md, padding: spacing.md, alignItems: 'center' },

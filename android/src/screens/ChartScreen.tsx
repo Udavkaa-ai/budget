@@ -200,10 +200,12 @@ export default function ChartScreen() {
 
           {unified && (
             <View ref={chartTarget} collapsable={false}>
-              <MonthCharts data={unified} plan={plannedMonthly} month={month} year={year} />
+              <MonthCharts data={unified} plan={plannedMonthly} month={month} year={year}
+                show={{ cum: blocks.chartCum, daily: blocks.chartDaily, balance: blocks.chartBalance }} />
             </View>
           )}
 
+          {blocks.cashflow && (<>
           {/* Кэшфлоу редактор */}
           <Card>
             <SectionTitle>Кэшфлоу</SectionTitle>
@@ -297,6 +299,7 @@ export default function ChartScreen() {
 
             <PrimaryButton title="Сохранить кэшфлоу" onPress={saveCf} loading={savingCf} />
           </Card>
+          </>)}
 
           {/* 6 месяцев: топ-3 категорий по месяцам, по тапу — разбор месяца */}
           {blocks.months6 !== false && months6.length > 0 && <SixMonths months={months6} />}
