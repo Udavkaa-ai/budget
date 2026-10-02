@@ -89,10 +89,10 @@ export function BankSettings() {
         <View style={[styles.discover, { backgroundColor: t.warningSoft, borderColor: t.warning, marginTop: spacing.md }]}>
           <Text style={{ color: t.text, fontWeight: '700' }}>СМС не доходят?</Text>
           <Text style={{ color: t.textMuted, fontSize: 12, lineHeight: 17, marginTop: 4 }}>
-            Прошивки телефонов «усыпляют» приложения в фоне. Откройте настройки телефона → Приложения → «ФИНИК · Личный»:{'\n'}
-            • Tecno/Infinix (HiOS): «Автозапуск» — вкл., «Батарея» → «Без ограничений», в Phone Master уберите ФИНИК из очистки;{'\n'}
+            Прошивки телефонов «усыпляют» приложения в фоне. Откройте настройки телефона › Приложения › «ФИНИК · Личный»:{'\n'}
+            • Tecno/Infinix (HiOS): «Автозапуск» — вкл., «Батарея» › «Без ограничений», в Phone Master уберите ФИНИК из очистки;{'\n'}
             • Xiaomi/POCO: «Автозапуск» и разрешения «SMS» / «Сервисные SMS»;{'\n'}
-            • Samsung: «Батарея» → «Без ограничений».{'\n'}
+            • Samsung: «Батарея» › «Без ограничений».{'\n'}
             Даже без этого ФИНИК дочитает свежие СМС от банков из входящих, когда вы его откроете — если разрешено «Чтение СМС».
           </Text>
         </View>

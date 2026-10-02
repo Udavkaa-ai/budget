@@ -16,7 +16,7 @@ async function set(k: string, v: string) { try { await SecureStore.setItemAsync(
 function showWebVersion() {
   showAlert(
     'ФИНИК есть и в браузере',
-    `Откройте ${WEB_URL.replace('https://', '')} на компьютере, iPhone или любом телефоне и войдите тем же аккаунтом — там та же семья и те же расходы.\n\nНа iPhone веб-версию можно добавить на экран «Домой»: «Поделиться» → «На экран „Домой“».`,
+    `Откройте ${WEB_URL.replace('https://', '')} на компьютере, iPhone или любом телефоне и войдите тем же аккаунтом — там та же семья и те же расходы.\n\nНа iPhone веб-версию можно добавить на экран «Домой»: «Поделиться» › «На экран „Домой“».`,
     [
       { text: 'Понятно', style: 'cancel' },
       { text: 'Открыть сайт', primary: true, onPress: () => { Linking.openURL(WEB_URL).catch(() => {}); } },
