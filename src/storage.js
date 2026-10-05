@@ -202,6 +202,7 @@ export async function appendExpenses(expenses, familyId) {
       description: clampDescription(exp.description),
       amount: exp.amount,
       user: exp.user || '',
+      ...(exp.addedBy ? { addedBy: exp.addedBy } : {}),
       family: f,
       createdAt: timestamp
     });
@@ -568,8 +569,8 @@ export function getTodayFeed(familyId, localDateStr) {
   const prefix = localDateStr || new Date().toISOString().slice(0, 10);
   const entries = (data.expenses || [])
     .filter(e => fam(e.family) === f && e.createdAt && e.createdAt.startsWith(prefix))
-    .map(({ id, date, category, description, amount, user, createdAt }) => ({
-      type: 'expense', id, date, category, description, amount, user, createdAt,
+    .map(({ id, date, category, description, amount, user, createdAt, addedBy }) => ({
+      type: 'expense', id, date, category, description, amount, user, createdAt, ...(addedBy ? { addedBy } : {}),
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { entries };
@@ -579,8 +580,8 @@ export function getDayExpenses(dateKey, familyId, userName = null) {
   const f = fam(familyId);
   const entries = (data.expenses || [])
     .filter(e => fam(e.family) === f && e.date === dateKey && (!userName || e.user === userName))
-    .map(({ id, date, category, description, amount, user, createdAt }) => ({
-      id, date, category, description, amount, user, createdAt,
+    .map(({ id, date, category, description, amount, user, createdAt, addedBy }) => ({
+      id, date, category, description, amount, user, createdAt, ...(addedBy ? { addedBy } : {}),
     }))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return { entries };
