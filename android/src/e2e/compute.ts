@@ -17,9 +17,11 @@ function bump() { syncNow().catch(() => {}); }
 
 // ─── Расходы ─────────────────────────────────────────────────────────────────
 
-export async function addExpenses(items: Array<{ date: string; category: string; amount: number; description: string }>, user: string) {
+export async function addExpenses(items: Array<{ date: string; category: string; amount: number; description: string; forUser?: string }>, user: string) {
   for (const e of items) {
-    await addLocalExpense({ date: e.date, category: e.category, amount: e.amount, description: e.description, user, createdAt: nowStr() });
+    const other = !!e.forUser && e.forUser !== user;
+    await addLocalExpense({ date: e.date, category: e.category, amount: e.amount, description: e.description,
+      user: other ? e.forUser! : user, ...(other ? { addedBy: user } : {}), createdAt: nowStr() });
   }
   bump();
 }
@@ -216,6 +218,7 @@ export async function restoreLocalSnapshot(snap: any): Promise<void> {
       await upsertLocalExpenseById(String(e.id), {
         date: e.date, category: e.category, amount: e.amount,
         description: e.description ?? '', user: e.user ?? '', createdAt: e.createdAt ?? nowStr(),
+        ...(e.addedBy ? { addedBy: e.addedBy } : {}),
       });
     }
   } else {
@@ -224,6 +227,7 @@ export async function restoreLocalSnapshot(snap: any): Promise<void> {
       await addLocalExpense({
         date: e.date, category: e.category, amount: e.amount,
         description: e.description ?? '', user: e.user ?? '', createdAt: e.createdAt ?? nowStr(),
+        ...(e.addedBy ? { addedBy: e.addedBy } : {}),
       });
     }
   }

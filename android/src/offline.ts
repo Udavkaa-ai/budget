@@ -8,6 +8,7 @@ export interface QueuedExpense {
   category: string;
   amount: number;
   description: string;
+  forUser?: string;    // расход за другого члена семьи
 }
 
 export interface OutboxItem extends QueuedExpense {
@@ -68,7 +69,7 @@ export async function flushOutbox(): Promise<number> {
     for (const it of items) {
       try {
         await expenses.add({
-          expenses: [{ date: it.date, category: it.category, amount: it.amount, description: it.description }],
+          expenses: [{ date: it.date, category: it.category, amount: it.amount, description: it.description, ...(it.forUser ? { forUser: it.forUser } : {}) }],
         });
         await removeFromOutbox(it.outboxId);
         sent++;

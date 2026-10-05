@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius } from '../theme';
 import { useCategories } from '../categories';
 import { getInbox, accept, dismiss, onInboxChange, type InboxItem } from '../bank/inbox';
+import { familyUsers, nameAcc } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 import { PrimaryButton, SecondaryButton, SectionTitle } from './UI';
 import { showAlert } from '../dialog';
 import { haptics } from '../haptics';
@@ -31,6 +33,14 @@ const when = (ts: number) => {
   const hm = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
   return d.toDateString() === now.toDateString() ? `сегодня, ${hm}` : `${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })}, ${hm}`;
 };
+// Члены семьи — чтобы записать трату на того, кто платил моей картой
+let _members: string[] = [];
+function useMembers() {
+  const [m, setM] = useState(_members);
+  useEffect(() => { familyUsers().then(l => { _members = l; setM(l); }).catch(() => {}); }, []);
+  return m;
+}
+
 const SOURCE: Record<InboxItem['source'], string> = { sms: 'СМС', push: 'уведомление', share: '«Поделиться»' };
 
 function Row({ item }: { item: InboxItem }) {
@@ -40,11 +50,15 @@ function Row({ item }: { item: InboxItem }) {
   const [desc, setDesc] = useState(item.merchant || '');
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { user } = useAuth();
+  const me = user?.name || '';
+  const others = useMembers().filter(n => n !== me);
+  const [who, setWho] = useState('');           // '' — мой расход
   const transfer = item.kind === 'transfer';
 
   const add = async () => {
     setBusy(true);
-    try { await accept(item, cat, desc); haptics.success(); }
+    try { await accept(item, cat, desc, who || undefined); haptics.success(); }
     catch (e) { showAlert('Не удалось добавить', String(e)); }
     finally { setBusy(false); }
   };
@@ -82,9 +96,28 @@ function Row({ item }: { item: InboxItem }) {
           ))}
         </ScrollView>
       )}
+      {others.length > 0 && (
+        <View style={styles.whoRow}>
+          <Text style={{ color: t.textMuted, fontSize: 12, fontWeight: '700' }}>Чей расход:</Text>
+          {['', ...others].map(n => {
+            const on = who === n;
+            return (
+              <Pressable key={n || '_me'} onPress={() => { haptics.select(); setWho(n); }}
+                style={[styles.whoChip, { backgroundColor: on ? t.primarySoft : t.surface2, borderColor: on ? t.primary : 'transparent' }]}>
+                <Text style={{ color: on ? t.primary : t.textMuted, fontWeight: '700', fontSize: 13 }}>{n || 'Мой'}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+      {!!who && (
+        <Text style={{ color: t.textFaint, fontSize: 12, marginTop: 6 }}>
+          Запишется на {nameAcc(who)} с пометкой «{me} за {nameAcc(who)}»
+        </Text>
+      )}
       <View style={styles.btns}>
         <SecondaryButton title="Скрыть" style={{ flex: 1 }} onPress={() => { haptics.light(); dismiss(item); }} />
-        <PrimaryButton title="Добавить" style={{ flex: 1.4 }} loading={busy} onPress={add} />
+        <PrimaryButton title={who ? `Добавить за ${nameAcc(who)}` : 'Добавить'} style={{ flex: 1.4 }} loading={busy} onPress={add} />
       </View>
     </View>
   );
@@ -158,6 +191,8 @@ const styles = StyleSheet.create({
   amount: { fontSize: 18, fontWeight: '800' },
   catChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 12, marginTop: spacing.sm },
   catOpt: { width: 64, alignItems: 'center', paddingVertical: 6, borderRadius: radius.md, borderWidth: 1.5, marginRight: 6, gap: 2 },
+  whoRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
+  whoChip: { borderWidth: 1, borderRadius: radius.pill, paddingVertical: 5, paddingHorizontal: 12 },
   btns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   banner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.sm, paddingVertical: 12, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1 },
 });

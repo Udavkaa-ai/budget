@@ -117,11 +117,33 @@ export interface Expense {
   description: string;
   user: string;
   createdAt: string;
+  addedBy?: string;   // внёс другой член семьи (карта мужа, тратила жена)
 }
 
 export interface AddExpensePayload {
-  expenses: Array<{ date: string; category: string; amount: number; description: string }>;
+  // forUser — записать расход на другого члена семьи (сервер помечает addedBy)
+  expenses: Array<{ date: string; category: string; amount: number; description: string; forUser?: string }>;
 }
+
+// Винительный падеж имени для «за кого»: Марина › Марину, Антон › Антона.
+// Нерусские и необычные окончания оставляем как есть.
+export function nameAcc(n: string): string {
+  const m = /^(.*?)([а-яё])$/i.exec(n.trim());
+  if (!m) return n;
+  const [, stem, last] = m, up = last !== last.toLowerCase(), l = last.toLowerCase();
+  const fix = (x: string) => up ? x.toUpperCase() : x;
+  if (l === 'а') return stem + fix('у');
+  if (l === 'я') return stem + fix('ю');
+  if (l === 'й' || l === 'ь') return stem + fix('я');
+  if ('бвгджзклмнпрстфхцчшщ'.includes(l)) return n.trim() + fix('а');
+  return n;
+}
+
+// «Удав за Марину» — для расходов, внесённых за другого
+export const whoLabel = (e: Pick<Expense, 'user' | 'addedBy'>) => e.addedBy ? `${e.addedBy} за ${nameAcc(e.user)}` : e.user;
+
+// Имена членов семьи (для выбора «чей расход»)
+export const familyUsers = () => api.get<Array<{ name: string }>>('/api/users').then(l => l.map(u => u.name).filter(Boolean));
 
 export const expenses = {
   add:    (payload: AddExpensePayload) => isE2E()

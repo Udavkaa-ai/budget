@@ -175,8 +175,11 @@ async function setStatus(id: number, status: InboxStatus) {
 }
 
 // Подтвердить: становится обычным расходом (офлайн — в очередь), классификатор учится
-export async function accept(item: InboxItem, category: string, description?: string) {
+// forUser — расход другого члена семьи (тратила жена с моей карты):
+// запишется на неё с пометкой «Удав за Марину»
+export async function accept(item: InboxItem, category: string, description?: string, forUser?: string) {
   const exp = {
+    ...(forUser ? { forUser } : {}),
     date: toDate(item.ts),
     category,
     amount: item.amount || 0,

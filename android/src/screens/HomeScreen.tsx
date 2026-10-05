@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { useTheme, spacing, font, radius } from '../theme';
-import { expenses as expApi, type Expense } from '../api/client';
+import { expenses as expApi, whoLabel, type Expense } from '../api/client';
 import { AddExpenseSheet } from '../components/AddExpenseSheet';
 import { useCategories } from '../categories';
 import { useSocket } from '../hooks/useSocket';
@@ -119,7 +119,8 @@ export default function HomeScreen() {
         .map(o => ({
           id: `off_${o.outboxId}`,
           date: o.date, category: o.category, amount: o.amount,
-          description: o.description, user: user?.name ?? '', createdAt: o.createdAt,
+          description: o.description, user: o.forUser || (user?.name ?? ''), createdAt: o.createdAt,
+          ...(o.forUser ? { addedBy: user?.name ?? '' } : {}),
           pending: true,
         } as Expense & { pending: boolean }));
     } catch { /* ignore */ }
@@ -259,14 +260,15 @@ export default function HomeScreen() {
         style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
         onLongPress={() => {
           if (pending) { deleteExpense(e.id); }
-          else if (e.user === user?.name) { haptics.select(); openEdit(e); }
+          // своё — и то, что сам внёс за другого члена семьи
+          else if (e.user === user?.name || e.addedBy === user?.name) { haptics.select(); openEdit(e); }
         }}
       >
         <Text style={{ fontSize: 24 }}>{catIcon2(e.category)}</Text>
         <View style={styles.itemMid}>
           <Text style={[styles.itemDesc, { color: t.text }]}>{e.description}</Text>
           <Text style={[styles.itemMeta, { color: t.textMuted }]}>
-            {pending ? '⏳ ожидает синхронизации · ' : ''}{e.category} · {e.user}
+            {pending ? '⏳ ожидает синхронизации · ' : ''}{e.category} · {whoLabel(e)}
           </Text>
         </View>
         <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>

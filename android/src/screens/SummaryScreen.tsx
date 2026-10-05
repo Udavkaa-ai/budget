@@ -7,7 +7,7 @@ import Svg, { Line as SvgLine, Polyline, Circle, Text as SvgText } from 'react-n
 import { Ionicons } from '@expo/vector-icons';
 import PagerView from 'react-native-pager-view';
 import { useTheme, spacing, font, radius } from '../theme';
-import { summary as summaryApi, budgetPlan, ai, expenses as expApi, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
+import { summary as summaryApi, budgetPlan, ai, expenses as expApi, whoLabel, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
 import { useCategories } from '../categories';
 import { MonthPickerModal } from '../components/Pickers';
@@ -521,7 +521,7 @@ export default function SummaryScreen() {
                           <Text style={{ width: 26, fontSize: 16 }}>{catIcon2(e.category)}</Text>
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: t.text }} numberOfLines={1}>{e.description}</Text>
-                            <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>{e.user} · {e.category}</Text>
+                            <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>{whoLabel(e)} · {e.category}</Text>
                           </View>
                           <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
                         </View>
@@ -809,7 +809,7 @@ export default function SummaryScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: t.text, fontWeight: '500' }}>{e.description}</Text>
                     <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
-                      {e.user} · {e.date}
+                      {whoLabel(e)} · {e.date}
                     </Text>
                   </View>
                   <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>

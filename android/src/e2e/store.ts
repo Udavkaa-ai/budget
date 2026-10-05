@@ -26,6 +26,8 @@ async function db(): Promise<SQLite.SQLiteDatabase> {
     );
     CREATE TABLE IF NOT EXISTS meta ( k TEXT PRIMARY KEY, v TEXT );
   `);
+  // addedBy — кто внёс расход за другого члена семьи
+  try { await _db.execAsync('ALTER TABLE exp ADD COLUMN addedBy TEXT'); } catch { /* уже есть */ }
   return _db;
 }
 
@@ -44,9 +46,9 @@ export async function addLocalExpense(e: Omit<Expense, 'id'>): Promise<string> {
   const d = await db();
   const id = genId();
   await d.runAsync(
-    `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt)
-     VALUES (?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
-    [id, now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt],
+    `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt, addedBy)
+     VALUES (?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt, e.addedBy ?? null],
   );
   notify();
   return id;
@@ -71,7 +73,7 @@ export async function deleteLocalExpense(id: string): Promise<void> {
 }
 
 function rowToExpense(r: any): Expense {
-  return { id: r.id, date: r.date, category: r.category, amount: r.amount, description: r.description, user: r.user, createdAt: r.createdAt };
+  return { id: r.id, date: r.date, category: r.category, amount: r.amount, description: r.description, user: r.user, createdAt: r.createdAt, ...(r.addedBy ? { addedBy: r.addedBy } : {}) };
 }
 
 export async function allLocalExpenses(): Promise<Expense[]> {
@@ -111,14 +113,14 @@ export async function applyRemoteExpense(id: string, ver: number, deleted: boole
   }
   if (row) {
     await d.runAsync(
-      `UPDATE exp SET ver=?, deleted=0, dirty=0, date=?, category=?, amount=?, description=?, "user"=?, createdAt=? WHERE id=?`,
-      [ver, payload.date, payload.category, payload.amount, payload.description, payload.user, payload.createdAt, id],
+      `UPDATE exp SET ver=?, deleted=0, dirty=0, date=?, category=?, amount=?, description=?, "user"=?, createdAt=?, addedBy=? WHERE id=?`,
+      [ver, payload.date, payload.category, payload.amount, payload.description, payload.user, payload.createdAt, payload.addedBy ?? null, id],
     );
   } else {
     await d.runAsync(
-      `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt)
-       VALUES (?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
-      [id, ver, payload.date, payload.category, payload.amount, payload.description, payload.user, payload.createdAt],
+      `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt, addedBy)
+       VALUES (?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, ver, payload.date, payload.category, payload.amount, payload.description, payload.user, payload.createdAt, payload.addedBy ?? null],
     );
   }
 }
@@ -133,14 +135,14 @@ export async function upsertLocalExpenseById(id: string, e: Omit<Expense, 'id'>)
   const row = await d.getFirstAsync<{ id: string }>('SELECT id FROM exp WHERE id=?', [id]);
   if (row) {
     await d.runAsync(
-      `UPDATE exp SET ver=?, deleted=0, dirty=1, date=?, category=?, amount=?, description=?, "user"=?, createdAt=? WHERE id=?`,
-      [now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt, id],
+      `UPDATE exp SET ver=?, deleted=0, dirty=1, date=?, category=?, amount=?, description=?, "user"=?, createdAt=?, addedBy=? WHERE id=?`,
+      [now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt, e.addedBy ?? null, id],
     );
   } else {
     await d.runAsync(
-      `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt)
-       VALUES (?, ?, 0, 1, ?, ?, ?, ?, ?, ?)`,
-      [id, now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt],
+      `INSERT INTO exp (id, ver, deleted, dirty, date, category, amount, description, "user", createdAt, addedBy)
+       VALUES (?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, now(), e.date, e.category, e.amount, e.description, e.user, e.createdAt, e.addedBy ?? null],
     );
   }
   notify();
