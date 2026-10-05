@@ -169,7 +169,7 @@ function nowMs() { return Date.now(); }
 function genId() { return `e_${nowMs().toString(36)}_${Math.floor(Math.random() * 1e9).toString(36)}`; }
 
 function rowToExpense(r, id) {
-  return { id, date: r.date, category: r.category, amount: r.amount, description: r.description, user: r.user, createdAt: r.createdAt };
+  return { id, date: r.date, category: r.category, amount: r.amount, description: r.description, user: r.user, createdAt: r.createdAt, ...(r.addedBy ? { addedBy: r.addedBy } : {}) };
 }
 
 function addLocalExpense(e) {
@@ -179,6 +179,7 @@ function addLocalExpense(e) {
     ver: nowMs(), deleted: false, dirty: true,
     date: e.date, category: e.category, amount: e.amount,
     description: e.description || '', user: e.user || '', createdAt: e.createdAt || new Date().toISOString(),
+    ...(e.addedBy ? { addedBy: e.addedBy } : {}),
   };
   saveStore();
   return id;
@@ -226,6 +227,7 @@ function applyRemoteExpense(id, ver, deleted, payload) {
     ver, deleted: false, dirty: false,
     date: payload.date, category: payload.category, amount: payload.amount,
     description: payload.description, user: payload.user, createdAt: payload.createdAt,
+    ...(payload.addedBy ? { addedBy: payload.addedBy } : {}),
   };
 }
 
@@ -440,7 +442,7 @@ function feedToday(isoDate) {
   const prefix = isoDate || new Date().toISOString().slice(0, 10);
   const entries = allLocalExpenses()
     .filter(e => e.createdAt && e.createdAt.startsWith(prefix))
-    .map(({ id, date, category, description, amount, user, createdAt }) => ({ type: 'expense', id, date, category, description, amount, user, createdAt }))
+    .map(({ id, date, category, description, amount, user, createdAt, addedBy }) => ({ type: 'expense', id, date, category, description, amount, user, createdAt, ...(addedBy ? { addedBy } : {}) }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { entries };
 }

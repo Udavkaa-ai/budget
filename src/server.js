@@ -566,7 +566,14 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Пустой список расходов' });
   }
 
-  const withUser = expenses.map(e => ({ ...e, user: req.user.name }));
+  // forUser — внести расход за другого члена семьи (тратила жена с карты мужа):
+  // расход записывается на него, а addedBy помнит, кто внёс. Только своя семья.
+  const members = new Set(getUsers().filter(u => (u.family || 'family1') === req.user.family).map(u => u.name));
+  const withUser = expenses.map(({ forUser, addedBy: _a, ...e }) => (
+    forUser && forUser !== req.user.name && members.has(forUser)
+      ? { ...e, user: forUser, addedBy: req.user.name }
+      : { ...e, user: req.user.name }
+  ));
   await appendExpenses(withUser, req.user.family);
 
   // Уведомляем только пользователей той же семьи
@@ -581,7 +588,9 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
       ? (withUser[0].description || withUser[0].category)
       : `${withUser.length} расхода(ов)`;
     sendPushToSubscriptions(subs, {
-      title: `💸 ${req.user.name} добавил расход`,
+      title: withUser.every(e => e.addedBy)
+        ? `💸 ${req.user.name} внёс расход · ${withUser[0].user}`
+        : `💸 ${req.user.name} добавил расход`,
       body: `${desc} — ${total.toLocaleString('ru')} ₽`,
       url: '/',
       by: req.user.name,

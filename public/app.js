@@ -930,7 +930,7 @@ async function loadBudget() {
         const expList = document.createElement('div');
         expList.className = 'expenses-list';
         for (const exp of udata.expenses) {
-          expList.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showUser: false }));
+          expList.appendChild(buildExpenseItem(exp, isMyExpense(exp), { showUser: false }));
         }
         section.appendChild(expList);
         list.appendChild(section);
@@ -943,7 +943,7 @@ async function loadBudget() {
         list.innerHTML = '<div class="empty-state finik-empty">' + finik('record', 'finik-lg') + '<span>Пока нет расходов за этот день — добавьте первый</span></div>';
       } else {
         for (const exp of udata.expenses) {
-          list.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showUser: false }));
+          list.appendChild(buildExpenseItem(exp, isMyExpense(exp), { showUser: false }));
         }
       }
     }
@@ -1762,7 +1762,7 @@ async function showHeatmapDayDetail(dateStr, dayNum, detailEl) {
         <span class="feed-cat-icon">${CATEGORY_ICONS[e.category] || '❓'}</span>
         <div class="feed-entry-info">
           <span class="feed-entry-desc">${esc(e.description || e.category)}</span>
-          <span class="feed-entry-meta">${esc(e.user || '')}${e.category ? ` · ${esc(e.category)}` : ''}</span>
+          <span class="feed-entry-meta">${esc(whoLabel(e))}${e.category ? ` · ${esc(e.category)}` : ''}</span>
         </div>
         <span class="feed-entry-amt">${fmt(e.amount)}</span>
       </div>`).join('');
@@ -2061,7 +2061,7 @@ async function loadCategoryDetail(cat, month, year) {
     }
 
     for (const exp of [...expenses].reverse()) {
-      listEl.appendChild(buildExpenseItem(exp, exp.user === currentUser.name, { showDate: true, showCategory: false }));
+      listEl.appendChild(buildExpenseItem(exp, isMyExpense(exp), { showDate: true, showCategory: false }));
     }
   } catch {
     listEl.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
@@ -3192,6 +3192,28 @@ async function confirmParsedExpenses() {
 
 // ─── EXPENSE ITEM BUILDER ─────────────────────────────────────────────────────
 
+// Расход, внесённый за другого члена семьи (карта мужа, тратила жена):
+// считается расходом того, за кого внесли, а подпись — «Удав за Марину»
+function whoLabel(e) {
+  return e.addedBy ? `${e.addedBy} за ${nameAcc(e.user || '')}` : (e.user || '');
+}
+// Винительный падеж имени: Марина › Марину, Антон › Антона (как в приложении)
+function nameAcc(n) {
+  const m = /^(.*?)([а-яё])$/i.exec(n.trim());
+  if (!m) return n;
+  const [, stem, last] = m, up = last !== last.toLowerCase(), l = last.toLowerCase();
+  const fix = x => up ? x.toUpperCase() : x;
+  if (l === 'а') return stem + fix('у');
+  if (l === 'я') return stem + fix('ю');
+  if (l === 'й' || l === 'ь') return stem + fix('я');
+  if ('бвгджзклмнпрстфхцчшщ'.includes(l)) return n.trim() + fix('а');
+  return n;
+}
+// Править можно своё и то, что сам внёс за другого
+function isMyExpense(e) {
+  return !!currentUser && (e.user === currentUser.name || e.addedBy === currentUser.name);
+}
+
 function buildExpenseItem(exp, canEdit, { showDate = false, showCategory = true, showUser = true } = {}) {
   const item = document.createElement('div');
   item.className = 'expense-item';
@@ -3202,7 +3224,7 @@ function buildExpenseItem(exp, canEdit, { showDate = false, showCategory = true,
     <div class="expense-info">
       <div class="expense-desc">${esc(exp.description || exp.category)}</div>
       <div class="expense-meta">
-        ${showUser ? `<span class="expense-user-tag">${esc(exp.user)}</span>` : ''}
+        ${exp.addedBy ? `<span class="expense-user-tag">${esc(whoLabel(exp))}</span>` : showUser ? `<span class="expense-user-tag">${esc(exp.user)}</span>` : ''}
         ${showCategory ? `<span>${esc(exp.category)}</span>` : ''}
         ${showDate && exp.date ? `<span class="expense-date-tag">${formatDayMonth(exp.date)}</span>` : ''}
       </div>
@@ -4637,7 +4659,7 @@ function renderDailyFeed(container, entries) {
     return `<div class="feed-entry">
       <span class="feed-icon">${icon}</span>
       <span class="feed-desc">${desc}${pastTag}</span>
-      <span class="feed-user">${esc(e.user)}</span>
+      <span class="feed-user">${esc(whoLabel(e))}</span>
       <span class="feed-amount">${fmt(e.amount)}</span>
     </div>`;
   }).join('');
