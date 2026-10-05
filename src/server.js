@@ -589,7 +589,7 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
       : `${withUser.length} расхода(ов)`;
     sendPushToSubscriptions(subs, {
       title: withUser.every(e => e.addedBy)
-        ? `💸 ${req.user.name} внёс расход за ${withUser[0].user}`
+        ? `💸 ${req.user.name} внёс расход · ${withUser[0].user}`
         : `💸 ${req.user.name} добавил расход`,
       body: `${desc} — ${total.toLocaleString('ru')} ₽`,
       url: '/',

@@ -3195,7 +3195,19 @@ async function confirmParsedExpenses() {
 // Расход, внесённый за другого члена семьи (карта мужа, тратила жена):
 // считается расходом того, за кого внесли, а подпись — «Удав за Марину»
 function whoLabel(e) {
-  return e.addedBy ? `${e.addedBy} за ${e.user || ''}` : (e.user || '');
+  return e.addedBy ? `${e.addedBy} за ${nameAcc(e.user || '')}` : (e.user || '');
+}
+// Винительный падеж имени: Марина › Марину, Антон › Антона (как в приложении)
+function nameAcc(n) {
+  const m = /^(.*?)([а-яё])$/i.exec(n.trim());
+  if (!m) return n;
+  const [, stem, last] = m, up = last !== last.toLowerCase(), l = last.toLowerCase();
+  const fix = x => up ? x.toUpperCase() : x;
+  if (l === 'а') return stem + fix('у');
+  if (l === 'я') return stem + fix('ю');
+  if (l === 'й' || l === 'ь') return stem + fix('я');
+  if ('бвгджзклмнпрстфхцчшщ'.includes(l)) return n.trim() + fix('а');
+  return n;
 }
 // Править можно своё и то, что сам внёс за другого
 function isMyExpense(e) {
