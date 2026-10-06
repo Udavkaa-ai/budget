@@ -23,7 +23,7 @@ const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн'
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
 const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
-const kFmt = (v: number) => Math.abs(v) >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}м` : Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}к` : String(Math.round(v));
+const kFmt = (v: number) => Math.abs(v) >= 1_000_000 ? `${+(v / 1_000_000).toFixed(2)}м` : Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}к` : String(Math.round(v));
 const plural = (n: number, one: string, few: string, many: string) => {
   const m10 = n % 10, m100 = n % 100;
   return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
@@ -210,9 +210,14 @@ export function MonthCharts({ data, plan, month, year, show = { cum: true, daily
 
   // ── 3) Остаток ───────────────────────────────────────────────────────────
   const balVals = bal ? days.map(d => d <= lastDay ? bal[d - 1] ?? null : null) : [];
-  const bMin = bal ? Math.min(0, ...balVals.filter((v): v is number => v != null)) : 0;
-  const bMax = bal ? Math.max(1, ...balVals.filter((v): v is number => v != null)) : 1;
-  const f3: Frame = { H: 170, dim, yMin: bMin < 0 ? -niceMax(-bMin) : 0, yMax: niceMax(bMax) };
+  // Шкала не от нуля, а от минимума за месяц −5% до максимума +5%: при больших
+  // накоплениях иначе колебания остатка сливаются в ровную линию у верха
+  const bNums = balVals.filter((v): v is number => v != null);
+  const bMin = bNums.length ? Math.min(...bNums) : 0;
+  const bMax = bNums.length ? Math.max(...bNums) : 1;
+  let b3Lo = bMin - Math.abs(bMin) * 0.05, b3Hi = bMax + Math.abs(bMax) * 0.05;
+  if (b3Hi - b3Lo < 1) { b3Lo -= 1; b3Hi += 1; }
+  const f3: Frame = { H: 170, dim, yMin: b3Lo, yMax: b3Hi };
 
   const selD = sel && sel <= dim ? sel : null;
 
@@ -339,8 +344,8 @@ export function MonthCharts({ data, plan, month, year, show = { cum: true, daily
           <Scrub dim={dim} onDay={pick} height={f3.H}>
             <Svg width="100%" height={f3.H} viewBox={`0 0 ${W} ${f3.H}`}>
               <Axes f={f3} t={t} sel={selD} />
-              {f3.yMin < 0 && <SvgLine x1={PL} x2={W - PR} y1={yOf(f3, 0)} y2={yOf(f3, 0)} stroke={t.textFaint} strokeWidth={1} strokeDasharray="3 3" />}
-              <Path d={`${linePath(balVals.map((v, i) => v == null ? null : [xOf(f3, i + 1), yOf(f3, v)]))} L${xOf(f3, Math.min(lastDay, dim))} ${yOf(f3, Math.max(0, f3.yMin))} L${xOf(f3, 1)} ${yOf(f3, Math.max(0, f3.yMin))} Z`} fill={alpha(t.primary, 0.1)} />
+              {f3.yMin < 0 && f3.yMax > 0 && <SvgLine x1={PL} x2={W - PR} y1={yOf(f3, 0)} y2={yOf(f3, 0)} stroke={t.textFaint} strokeWidth={1} strokeDasharray="3 3" />}
+              <Path d={`${linePath(balVals.map((v, i) => v == null ? null : [xOf(f3, i + 1), yOf(f3, v)]))} L${xOf(f3, Math.min(lastDay, dim))} ${yOf(f3, Math.min(f3.yMax, Math.max(0, f3.yMin)))} L${xOf(f3, 1)} ${yOf(f3, Math.min(f3.yMax, Math.max(0, f3.yMin)))} Z`} fill={alpha(t.primary, 0.1)} />
               {balVals.map((v, i) => {
                 const nv = balVals[i + 1];
                 if (v == null || nv == null) return null;
