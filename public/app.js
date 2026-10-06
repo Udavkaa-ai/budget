@@ -2079,7 +2079,7 @@ async function loadCategoryDetail(cat, month, year) {
 // 3) остаток на счетах — если заполнен кэшфлоу.
 let chartScreenCharts = [];
 let lastChartData = null;
-const kFmt = v => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}к` : String(Math.round(v));
+const kFmt = v => Math.abs(v) >= 1e6 ? `${+(v / 1e6).toFixed(2)}м` : Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}к` : String(Math.round(v));
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 const MONTHS_GEN_ALL = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const plural = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100;
@@ -2249,11 +2249,20 @@ function renderChartCards(box, data) {
   if (bal) {
     const balOpts = base();
     balOpts.scales.y.beginAtZero = false;
+    // Шкала от минимума за месяц −5% до максимума +5% (при больших накоплениях
+    // иначе колебания остатка сливаются в ровную линию)
+    const bNums = days.filter(d => d <= lastDay).map(d => bal[d - 1]).filter(v => v != null);
+    if (bNums.length) {
+      const lo = Math.min(...bNums), hi = Math.max(...bNums);
+      let yMin = lo - Math.abs(lo) * 0.05, yMax = hi + Math.abs(hi) * 0.05;
+      if (yMax - yMin < 1) { yMin -= 1; yMax += 1; }
+      balOpts.scales.y.min = yMin; balOpts.scales.y.max = yMax;
+    }
     chartScreenCharts.push(new Chart(document.getElementById('ch-bal'), {
       type: 'line',
       data: { labels: days, datasets: [{
         label: 'Остаток', data: days.map(d => d <= lastDay ? bal[d - 1] : null), borderColor: C.primary, borderWidth: 2.5,
-        tension: 0.25, fill: 'origin', backgroundColor: withAlpha(C.primary, 0.10),
+        tension: 0.25, fill: 'start', backgroundColor: withAlpha(C.primary, 0.10),
         segment: { borderColor: ctx => ctx.p1.parsed.y < 0 ? C.danger : C.primary },
         pointRadius: days.map(d => data.incomeDays?.[String(d)] ? 4.5 : 0),
         pointBackgroundColor: C.gold, pointBorderColor: C.surface, pointBorderWidth: 2, pointHoverRadius: 5,
