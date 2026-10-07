@@ -130,12 +130,17 @@ Notifications.setNotificationHandler({
 });
 
 let _registered = false;
-export type PushState = 'ok' | 'denied' | 'unavailable' | 'server-off' | 'server-error';
+export type PushState = 'checking' | 'ok' | 'denied' | 'unavailable' | 'server-off' | 'server-error';
 // Текст последней ошибки — показываем под переключателем, чтобы было видно,
 // на каком шаге и почему не вышло
 let _lastError = '';
 export const pushError = () => _lastError;
 const errText = (e: unknown) => String((e as Error)?.message || e).slice(0, 200);
+// Запрос токена у Google может не ответить вовсе (нет связи с сервисами
+// Google) — без таймаута проверка висела бесконечно и ничего не показывала
+const withTimeout = <T,>(p: Promise<T>, ms: number, what: string) => Promise.race([
+  p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what}: нет ответа ${ms / 1000} с`)), ms)),
+]);
 
 // Разрешение › FCM-токен устройства › сервер. Возвращает, что получилось.
 export async function registerPush(selfName: string): Promise<PushState> {
@@ -143,28 +148,29 @@ export async function registerPush(selfName: string): Promise<PushState> {
   _lastError = '';
   try {
     const { status: cur } = await Notifications.getPermissionsAsync();
-    const status = cur === 'granted' ? cur : (await Notifications.requestPermissionsAsync()).status;
+    const status = cur === 'granted' ? cur : (await Notifications.requestPermissionsAsync()).status;   // ждёт ответа человека — без таймаута
     if (status !== 'granted') return 'denied';
     await ensureChannel().catch(() => {});
-    if (!_registered) { await Notifications.registerTaskAsync(TASK).catch(() => {}); _registered = true; }
+    if (!_registered) { await withTimeout(Notifications.registerTaskAsync(TASK), 10_000, 'фоновая задача').catch(() => {}); _registered = true; }
   } catch (e) { _lastError = `разрешение: ${errText(e)}`; return 'denied'; }
 
   let token = '';
   try {
-    const t = await Notifications.getDevicePushTokenAsync();
+    const t = await withTimeout(Notifications.getDevicePushTokenAsync(), 20_000, 'Google не выдал токен');
     token = typeof t.data === 'string' ? t.data : '';
     if (!token) { _lastError = `токен: пустой (${t.type})`; return 'unavailable'; }
   } catch (e) { _lastError = `токен: ${errText(e)}`; return 'unavailable'; }
 
   try {
-    const r = await api.post<{ ok: boolean; server: boolean }>('/api/push/fcm', {
+    const r = await withTimeout(api.post<{ ok: boolean; server: boolean }>('/api/push/fcm', {
       token, app: Constants.expoConfig?.android?.package || '',
-    });
+    }), 20_000, 'сервер');
     return r.server ? 'ok' : 'server-off';
   } catch (e) { _lastError = `сервер: ${errText(e)}`; return 'server-error'; }
 }
 
 export const PUSH_STATE_TEXT: Record<PushState, string> = {
+  checking: 'Проверяю подключение к пушам…',
   ok: '',
   denied: 'Уведомления запрещены в настройках Android — разрешите их для ФИНИК',
   unavailable: 'Телефон не получил токен для пушей от Google',

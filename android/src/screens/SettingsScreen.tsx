@@ -132,7 +132,7 @@ export default function SettingsScreen() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatEmoji, setNewCatEmoji] = useState('');
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [pushState, setPushState] = useState<PushState>('ok');
+  const [pushState, setPushState] = useState<PushState>('checking');
   const [pushDetail, setPushDetail] = useState<PushDetail>('short');
   const [joinVisible, setJoinVisible] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -430,13 +430,18 @@ export default function SettingsScreen() {
   // с шифрованием). Показываем, что ответил Google, — видно, где обрыв.
   const testPush = async () => {
     try {
-      setPushState(await registerPush(user?.name || ''));
-      const r = await pushSettings.test();
+      // регистрация — в фоне; тест спрашивает сервер сразу (раньше ждал токен и висел)
+      setPushState('checking');
+      registerPush(user?.name || '').then(setPushState).catch(() => {});
+      const r = await Promise.race([
+        pushSettings.test(),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Сервер не ответил за 20 секунд')), 20_000)),
+      ]);
       const line = (l: Array<{ kind: string; ok: boolean; error?: string }>) =>
         l.length ? l.map(x => `${x.kind === 'web' ? 'браузер' : 'приложение'}: ${x.ok ? 'отправлено' : 'ошибка — ' + x.error}`).join('\n') : 'нет подписок';
       showAlert('Тест отправлен',
         `Обычное:\n${line(r.system)}\n\nФоновое:\n${line(r.background)}\n\n` +
-        'Через несколько секунд должны прийти «🔔 Проверка» и «🔔 Проверка (фон)». Сверните ФИНИК, чтобы увидеть их в шторке.');
+        `Подписок на сервере: ${r.subs}. Через несколько секунд должны прийти «🔔 Проверка» и «🔔 Проверка (фон)». Сверните ФИНИК, чтобы увидеть их в шторке.`);
     } catch (e) { showAlert('Не получилось', String((e as Error)?.message || e)); }
   };
 
@@ -445,7 +450,7 @@ export default function SettingsScreen() {
     try {
       await pushSettings.set(v);
       // выключение стирает подписки устройства на сервере — при включении регистрируемся заново
-      if (v) setPushState(await registerPush(user?.name || ''));
+      if (v) { setPushState('checking'); setPushState(await registerPush(user?.name || '')); }
     } catch { setPushEnabled(!v); }
   };
 
