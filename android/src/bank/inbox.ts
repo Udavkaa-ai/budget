@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { openDb } from '../classifier/db';
 import { predict, learn } from '../classifier';
 import { getCategories } from '../categories';
-import { expenses } from '../api/client';
+import { expenses, cashflow, currentUserName } from '../api/client';
 import { queueExpense, isNetworkError } from '../offline';
 import { IS_PERSONAL } from '../appScheme';
 import { parseBankMessage, isSensitive, type ParsedBank } from './parse';
@@ -13,7 +13,9 @@ import { parseBankMessage, isSensitive, type ParsedBank } from './parse';
 // перехваченные СМС/уведомления (нативный модуль FinikBank).
 // Всё хранится только на телефоне (SQLite); исходные тексты — тоже только тут.
 
-export type InboxStatus = 'pending' | 'added' | 'dismissed' | 'income';
+// income — доход до этой версии; income-wait — ждёт 10 минут, не окажется ли
+// переводом между своими счетами; own — оказался; income-added — записан в кэшфлоу
+export type InboxStatus = 'pending' | 'added' | 'dismissed' | 'income' | 'income-wait' | 'own' | 'income-added';
 export interface InboxItem extends ParsedBank {
   id: number;
   source: 'sms' | 'push' | 'share';
@@ -48,7 +50,8 @@ async function db() {
   await d.execAsync(`CREATE TABLE IF NOT EXISTS bank_inbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL, status TEXT NOT NULL, ts INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS bank_journal (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT, sender TEXT, kind TEXT, summary TEXT);`);
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, source TEXT, sender TEXT, kind TEXT, summary TEXT);
+    CREATE TABLE IF NOT EXISTS bank_prefs (k TEXT PRIMARY KEY, v TEXT);`);
   // текст сообщения (кроме кодов) — чтобы по журналу можно было дописать шаблон
   if (!rawColumn) { try { await d.execAsync('ALTER TABLE bank_journal ADD COLUMN raw TEXT'); } catch { /* уже есть */ } rawColumn = true; }
   return d;
@@ -67,8 +70,26 @@ async function journal(source: string, from: string, p: ParsedBank, extra = '', 
   await d.runAsync('DELETE FROM bank_journal WHERE id NOT IN (SELECT id FROM bank_journal ORDER BY id DESC LIMIT 150)');
 }
 
+// ── Настройки (только на телефоне) ─────────────────────────────────────────────
+async function getPref(k: string): Promise<string | null> {
+  const d = await db();
+  return (await d.getFirstAsync<{ v: string }>('SELECT v FROM bank_prefs WHERE k = ?', [k]))?.v ?? null;
+}
+async function setPref(k: string, v: string) {
+  const d = await db();
+  await d.runAsync('INSERT OR REPLACE INTO bank_prefs (k, v) VALUES (?, ?)', [k, v]);
+}
+// Доходы из банка — сразу в кэшфлоу (по умолчанию включено)
+export async function getAutoIncome() { return (await getPref('autoIncome')) !== '0'; }
+export async function setAutoIncome(on: boolean) { await setPref('autoIncome', on ? '1' : '0'); if (on) settleIncomes().catch(() => {}); }
+// Служебные сообщения без суммы («Вы вошли в приложение», реклама) — в журнал
+// не пишем, только считаем
+export async function getSkippedCount() { return parseInt((await getPref('skipped')) || '0', 10) || 0; }
+
 export async function getJournal(): Promise<JournalEntry[]> {
   const d = await db();
+  // старые записи о служебных сообщениях без суммы (до этой версии писались)
+  await d.runAsync(`DELETE FROM bank_journal WHERE kind = 'unknown' AND summary LIKE '%не нашлась сумма%'`);
   const rows = await d.getAllAsync<{ id: number; ts: number; source: string; sender: string; kind: string; summary: string; raw: string | null }>(
     'SELECT * FROM bank_journal ORDER BY id DESC LIMIT 150');
   return rows.map(r => ({ id: r.id, ts: r.ts, source: r.source, from: r.sender, kind: r.kind, summary: r.summary, raw: r.raw || undefined }));
@@ -94,6 +115,10 @@ async function nearby(ts: number) {
 // Принять одно сообщение: разобрать, отбросить лишнее, положить во «Входящие»
 export async function ingest(text: string, from: string, source: InboxItem['source'], ts = Date.now()): Promise<InboxItem | null> {
   const p = parseBankMessage(text, from);
+  if (p.kind === 'unknown' && !p.amount) {
+    await setPref('skipped', String((await getSkippedCount()) + 1));
+    return null;
+  }
   if (p.kind === 'ignore' || p.kind === 'unknown' || !p.amount) {
     await journal(source, from, p, '', text);
     return null;
@@ -109,18 +134,22 @@ export async function ingest(text: string, from: string, source: InboxItem['sour
   // исходящий перевод на ту же сумму из другого банка — это перевод между
   // своими счетами, а не расход: убираем его из «Входящих».
   if (p.kind === 'income') {
-    await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify({ ...p, source, from, ts }), 'income', ts]);
     const own = near.find(n => n.p.kind === 'transfer' && n.status === 'pending' && n.p.amount === p.amount && n.p.bank !== p.bank);
+    // Без пары ждём 10 минут: перевод со своего счёта может прийти позже
+    await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify({ ...p, source, from, ts, category: '' }), own ? 'own' : 'income-wait', ts]);
     if (own) {
       await d.runAsync(`UPDATE bank_inbox SET status = 'dismissed' WHERE id = ?`, [own.id]);
       await journal(source, from, p, ' · перевод между своими счетами — убран из «Входящих»', text);
       notify();
     } else {
-      await journal(source, from, p, ' · доход, не расход', text);
+      await journal(source, from, p, (await getAutoIncome()) ? ' · доход — запишется в кэшфлоу' : ' · доход, не расход', text);
     }
     return null;
   }
-  if (p.kind === 'transfer' && near.some(n => n.p.kind === 'income' && n.p.amount === p.amount && n.p.bank !== p.bank)) {
+  const pair = p.kind === 'transfer' && near.find(n => n.p.kind === 'income' && n.p.amount === p.amount && n.p.bank !== p.bank);
+  if (pair) {
+    // доход-пара — тоже не доход (если ещё не записан в кэшфлоу)
+    if (pair.status === 'income-wait') await d.runAsync(`UPDATE bank_inbox SET status = 'own' WHERE id = ?`, [pair.id]);
     await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify({ ...p, source, from, ts, category: 'Прочее' }), 'dismissed', ts]);
     await journal(source, from, p, ' · перевод между своими счетами — не расход', text);
     return null;
@@ -148,7 +177,44 @@ export async function drainNative(): Promise<number> {
     const list = JSON.parse(await Bank.drain()) as Array<{ source: 'sms' | 'push'; from: string; text: string; ts: number }>;
     for (const m of list) if (await ingest(m.text, m.from, m.source, m.ts)) added++;
   } catch { /* не критично */ } finally { draining = false; }
+  settleIncomes().catch(() => {});
   return added;
+}
+
+// Доходы, которые 10 минут не нашли пары-перевода со своего счёта, — в кэшфлоу
+// месяца («Поступления» на графике остатка). Офлайн — попробуем в следующий раз.
+let settling = false;
+export async function settleIncomes(): Promise<number> {
+  if (settling || !(await getAutoIncome())) return 0;
+  const user = currentUserName();
+  if (!user) return 0;
+  settling = true;
+  let n = 0;
+  try {
+    const d = await db();
+    const rows = await d.getAllAsync<{ id: number; payload: string; ts: number }>(
+      `SELECT id, payload, ts FROM bank_inbox WHERE status = 'income-wait' AND ts < ? ORDER BY ts`, [Date.now() - WINDOW]);
+    const byMonth = new Map<string, Array<{ id: number; p: ParsedBank & { from?: string; source?: string }; ts: number }>>();
+    for (const r of rows) {
+      const dt = new Date(r.ts);
+      const ym = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      if (!byMonth.has(ym)) byMonth.set(ym, []);
+      byMonth.get(ym)!.push({ id: r.id, p: JSON.parse(r.payload), ts: r.ts });
+    }
+    for (const [ym, list] of byMonth) {
+      const cf = await cashflow.get(ym);
+      const incomeDays = [...(Array.isArray(cf.incomeDays) ? cf.incomeDays : [])];
+      for (const it of list) incomeDays.push({ day: new Date(it.ts).getDate(), user, amount: Math.round(it.p.amount || 0) });
+      await cashflow.save(ym, { ...cf, incomeDays });
+      for (const it of list) {
+        await d.runAsync(`UPDATE bank_inbox SET status = 'income-added' WHERE id = ?`, [it.id]);
+        await journal(it.p.source || 'sms', it.p.from || '', it.p, ' · записан в кэшфлоу');
+        n++;
+      }
+    }
+  } finally { settling = false; }
+  if (n) notify();
+  return n;
 }
 
 // «Поделиться → ФИНИК»: возвращает текст, если он пришёл (и уже разобран во «Входящие»)

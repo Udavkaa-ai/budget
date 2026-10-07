@@ -8,6 +8,7 @@ import { SectionTitle, Toggle, OutlineButton, SecondaryButton } from './UI';
 import { openBankInbox, useBankInboxCount } from './BankInbox';
 import {
   isPersonalBuild, getBankStatus, requestSmsPermission, bankNative, getJournal, drainNative,
+  getAutoIncome, setAutoIncome, getSkippedCount,
   type BankStatus, type JournalEntry,
 } from '../bank/inbox';
 import { haptics } from '../haptics';
@@ -27,11 +28,14 @@ export function BankSettings() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [journal, setJournal] = useState<JournalEntry[]>([]);
   const [openRaw, setOpenRaw] = useState<number | null>(null);
+  const [autoIncome, setAutoIncomeSt] = useState(true);
+  const [skipped, setSkipped] = useState(0);
 
   const load = useCallback(async () => {
     const s = await getBankStatus().catch(() => null);
     setSt(s);
     if (s) { setSenders(s.senders.join(', ')); setPackages(s.packages.join(', ')); }
+    setAutoIncomeSt(await getAutoIncome().catch(() => true));
   }, []);
   useEffect(() => {
     load();
@@ -43,7 +47,7 @@ export function BankSettings() {
   if (!isPersonalBuild || !st) return null;
 
   const list = (v: string) => v.split(/[,\s]+/).map(x => x.trim()).filter(Boolean);
-  const openJournal = async () => { await drainNative(); setJournal(await getJournal()); setJournalOpen(true); };
+  const openJournal = async () => { await drainNative(); setJournal(await getJournal()); setSkipped(await getSkippedCount()); setJournalOpen(true); };
   const discovering = st.discoverUntil > Date.now();
 
   const Line = ({ icon, title, hint, ok, right }: { icon: string; title: string; hint: string; ok?: boolean; right?: React.ReactNode }) => (
@@ -79,6 +83,10 @@ export function BankSettings() {
         right={st.notificationAccess
           ? <Toggle value={st.push} onValueChange={v => { bankNative.setEnabled('push', v); setSt({ ...st, push: v }); }} />
           : <Pressable onPress={() => bankNative.openNotificationAccess()}><Text style={{ color: t.primary, fontWeight: '700' }}>Открыть</Text></Pressable>} />
+
+      <Line icon="trending-up-outline" title="Доходы — в кэшфлоу"
+        hint="Зарплата, кешбэк, пополнения появятся в «Поступлениях» на графике остатка. Переводы между своими счетами не считаются"
+        right={<Toggle value={autoIncome} onValueChange={v => { setAutoIncomeSt(v); setAutoIncome(v).catch(() => {}); }} />} />
 
       {st.smsPermission && !st.smsRead && (
         <Pressable onPress={async () => { await requestSmsPermission(); load(); }} style={{ marginTop: spacing.sm }}>
@@ -145,6 +153,11 @@ export function BankSettings() {
             <Text style={{ color: t.textMuted, fontSize: 12, marginBottom: spacing.sm }}>
               Последние 150 сообщений и что с ними сделал ФИНИК. Хранится только на этом телефоне. Нажмите на запись, чтобы увидеть текст сообщения (коды подтверждения не сохраняются) — его можно выделить и прислать разработчику, чтобы дописать шаблон.
             </Text>
+            {skipped > 0 && (
+              <Text style={{ color: t.textFaint, fontSize: 12, marginBottom: spacing.sm }}>
+                Служебных сообщений без суммы (входы в приложение, реклама) пропущено: {skipped}
+              </Text>
+            )}
             {journal.length === 0 && <Text style={{ color: t.textFaint, textAlign: 'center', marginTop: 40 }}>Пока пусто</Text>}
             {journal.map(j => (
               <Pressable key={j.id} onPress={() => j.raw && setOpenRaw(o => o === j.id ? null : j.id)} style={[styles.jRow, { borderBottomColor: t.border }]}>

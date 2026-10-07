@@ -9,7 +9,7 @@ let _serverUrl = '';
 let _token = '';
 
 // Имя текущего пользователя из JWT — нужно как автор при локальной записи (E2E)
-function currentUserName(): string { return parseJwt(_token)?.name ?? ''; }
+export function currentUserName(): string { return parseJwt(_token)?.name ?? ''; }
 
 export async function initApi() {
   _serverUrl = (await SecureStore.getItemAsync(SERVER_URL_KEY)) || '';
