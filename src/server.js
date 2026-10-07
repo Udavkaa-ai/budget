@@ -672,7 +672,11 @@ async function sendFcm(sub, payload) {
 
 async function sendPushToSubscriptions(subscriptions, payload) {
   const results = await Promise.allSettled(
-    subscriptions.map(sub =>
+    subscriptions
+      // старые сборки приложения регистрировали Expo-токен как веб-подписку —
+      // доставить по нему нельзя, пропускаем
+      .filter(sub => sub.fcm || /^https:/.test(sub.endpoint || ''))
+      .map(sub =>
       (sub.fcm ? sendFcm(sub, payload) : webpush.sendNotification(sub, JSON.stringify(payload))).catch(err => {
         // 410 Gone — подписка протухла, удаляем
         if (err.statusCode === 410) removePushSubscription(sub.endpoint, sub.family);
