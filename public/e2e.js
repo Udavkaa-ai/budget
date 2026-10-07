@@ -285,6 +285,34 @@ async function rawFetch(method, path, body) {
 
 let _syncing = false;
 
+// Сводка для пуша партнёру: новые расходы [сумма, дата, категория], число
+// правок и удалений. Шифруется ключом семьи — сервер видит только блоб.
+// Новым считаем созданное за последние 6 часов (остальное — правка).
+// Сжимаем: одна строка на день+категорию [сумма, дата, категория, штук] —
+// чтобы сводка влезла в пуш (лимит ~4 КБ) даже при пакетном вводе
+function packItems(items) {
+  const m = new Map();
+  for (const [a, d, c] of items) {
+    const k = d + '|' + c, cur = m.get(k);
+    if (cur) { cur[0] += a; cur[3]++; } else m.set(k, [a, d, c, 1]);
+  }
+  return [...m.values()].slice(0, 40);
+}
+
+async function buildHint(chunk) {
+  const fresh = Date.now() - 6 * 3600_000;
+  const items = [], h = { upd: 0, del: 0 };
+  for (const r of chunk) {
+    if (r.deleted) { h.del++; continue; }
+    const p = r.payload || {};
+    if (Date.parse(p.createdAt || '') > fresh) items.push([Number(p.amount) || 0, p.date, p.category]);
+    else h.upd++;
+  }
+  // Ничего нового (например, восстановление из бэкапа) — пуш не нужен
+  if (!items.length && !h.upd && !h.del) return '';
+  return encryptJson({ items: packItems(items), ...h });
+}
+
 async function pushExpenses() {
   const dirty = dirtyRecords();
   if (!dirty.length) return;
@@ -294,7 +322,8 @@ async function pushExpenses() {
       id: r.id, ver: r.ver, deleted: r.deleted,
       blob: r.deleted ? '' : await encryptJson(r.payload),
     })));
-    await rawFetch('POST', '/api/sync/records', { records });
+    const hint = await buildHint(chunk).catch(() => '');
+    await rawFetch('POST', '/api/sync/records', { records, hint });
     clearDirty(chunk.map(r => r.id));
   }
 }

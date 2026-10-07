@@ -5,7 +5,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View, AppState, Linking } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { flushOutbox } from './src/offline';
 import { refreshCategories } from './src/categories';
 import { initThemeMode, useEffectiveScheme } from './src/theme';
@@ -33,15 +32,9 @@ import { importSeed } from './src/classifier/db';
 import { initPremium } from './src/premium';
 import { initFinik } from './src/finik';
 import { initBlocks } from './src/blocks';
-import { crowd, api } from './src/api/client';
+import { crowd } from './src/api/client';
+import { registerPush } from './src/push';   // там же фоновая задача и обработчик пушей
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 initClassifier().catch(console.error);
 initPremium().catch(console.error);
@@ -61,27 +54,6 @@ async function syncCrowdDict() {
     }));
     if (entries.length > 0) await importSeed(entries);
   } catch { /* offline — use cached seed */ }
-}
-
-// Register device for push notifications and send token to server
-async function registerPushToken() {
-  try {
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let finalStatus = existing;
-    if (existing !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') return;
-
-    const { data: token } = await Notifications.getExpoPushTokenAsync();
-    // Send token to server so family members can receive push when someone adds an expense
-    await api.post('/api/push/subscribe', {
-      endpoint: token,
-      keys: { p256dh: '', auth: '' }, // Expo push — server detects by endpoint prefix
-      platform: 'expo',
-    }).catch(() => {});
-  } catch { /* notifications not available */ }
 }
 
 function Root() {
@@ -119,7 +91,7 @@ function Root() {
   useEffect(() => {
     if (user) {
       syncCrowdDict();
-      registerPushToken();
+      registerPush(user.name).catch(() => {});
       refreshCategories();
       flushOutbox().catch(() => {});
       // E2E: узнаём статус семьи и подтягиваем шифрованные изменения

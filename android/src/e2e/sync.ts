@@ -12,6 +12,28 @@ import {
 
 let _running = false;
 
+// Сводка для пуша партнёру (как buildHint в public/e2e.js): новые расходы
+// одной строкой на день+категорию [сумма, дата, категория, штук], число
+// правок и удалений. Шифруется ключом семьи — сервер видит только блоб.
+// Новым считаем созданное за последние 6 часов, остальное — правка.
+async function buildHint(chunk: Array<{ deleted: boolean; payload: Expense | null }>): Promise<string> {
+  const fresh = Date.now() - 6 * 3600_000;
+  const m = new Map<string, [number, string, string, number]>();
+  let upd = 0, del = 0;
+  for (const r of chunk) {
+    if (r.deleted || !r.payload) { del++; continue; }
+    const p = r.payload;
+    if (Date.parse(p.createdAt || '') > fresh) {
+      const k = `${p.date}|${p.category}`, cur = m.get(k);
+      if (cur) { cur[0] += Number(p.amount) || 0; cur[3]++; } else m.set(k, [Number(p.amount) || 0, p.date, p.category, 1]);
+    } else upd++;
+  }
+  // Ничего нового (например, восстановление из бэкапа) — пуш не нужен
+  // Массовые правки без новых трат (бэкап, чистка дублей) — тоже без пуша
+  if (!m.size && (upd + del === 0 || upd + del > 30)) return '';
+  return encryptJson({ items: [...m.values()].slice(0, 40), upd, del });
+}
+
 // Отправляем локальные изменения (расходы) на сервер шифроблобами
 async function pushExpenses(): Promise<void> {
   const dirty = await dirtyRecords();
@@ -23,7 +45,8 @@ async function pushExpenses(): Promise<void> {
       id: r.id, ver: r.ver, deleted: r.deleted,
       blob: r.deleted ? '' : await encryptJson(r.payload),
     })));
-    await api.post('/api/sync/records', { records });
+    const hint = await buildHint(chunk).catch(() => '');
+    await api.post('/api/sync/records', { records, hint });
     await clearDirty(chunk.map(r => r.id));
   }
 }
