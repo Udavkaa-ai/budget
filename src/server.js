@@ -744,6 +744,12 @@ app.post('/api/push/fcm', authMiddleware, (req, res) => {
   res.json({ ok: true, server: !!fcmAccount() });
 });
 
+// Приложение выключило уведомления на этом телефоне — убираем только его токен
+app.delete('/api/push/fcm/:token', authMiddleware, (req, res) => {
+  removePushSubscription(`fcm:${req.params.token}`, req.user.family);
+  res.json({ ok: true });
+});
+
 app.delete('/api/push/subscribe', authMiddleware, (req, res) => {
   const { endpoint } = req.body || {};
   if (endpoint) removePushSubscription(endpoint, req.user.family);
