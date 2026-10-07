@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 import { api } from './api/client';
 import { decryptJson } from './crypto';
 
@@ -112,22 +113,41 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
   if (p?.e2e) await present(p).catch(() => {});
 });
 
-// Своё системное уведомление (обычная семья) при открытом приложении и
-// data-сообщение E2E на переднем плане: показываем сами, свои — не показываем
+// Пуш с сервера при открытом приложении. Системный текст показываем всегда,
+// кроме случая, когда удалось нарисовать подробную сводку (E2E — расшифровав):
+// раньше при любой ошибке уведомление пропадало молча.
 let _selfName = '';
+const SHOW = { shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false };
+const HIDE = { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false };
 Notifications.setNotificationHandler({
   handleNotification: async n => {
+    const fromServer = (n.request.trigger as any)?.type === 'push';
+    if (!fromServer) return SHOW;                    // наше локальное (present) — показываем
     const p = findFinik(n.request.content.data) || findFinik((n.request.trigger as any)?.remoteMessage);
-    const fromServer = n.request.trigger && (n.request.trigger as any).type === 'push';
-    if (fromServer && p) {
-      if (p.by && p.by === _selfName) return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false };
-      // Пуш с сервера на переднем плане: рисуем свою сводку (для E2E — расшифровав)
-      present(p).catch(() => {});
-      return { shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false };
-    }
-    return { shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false };
+    if (!p) return SHOW;
+    if (p.by && p.by === _selfName) return HIDE;     // о своих же записях не уведомляем
+    const rich = (p.e2e && p.hints?.length) || (Array.isArray(p.items) && p.items.length);
+    if (!rich) return SHOW;
+    try {
+      await Promise.race([present(p), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]);
+      return HIDE;                                   // показали свою сводку вместо системной
+    } catch { return SHOW; }
   },
 });
+
+// ── Вкл/выкл на этом телефоне (браузер и другие устройства — сами по себе) ──
+const OFF_KEY = 'push_off';
+let _token = '';
+export async function isPushOff() { return (await SecureStore.getItemAsync(OFF_KEY).catch(() => null)) === '1'; }
+export async function disablePush() {
+  await SecureStore.setItemAsync(OFF_KEY, '1').catch(() => {});
+  if (!_token) { try { _token = String((await Notifications.getDevicePushTokenAsync()).data || ''); } catch { /* нет токена — и подписки нет */ } }
+  if (_token) await api.delete(`/api/push/fcm/${encodeURIComponent(_token)}`).catch(() => {});
+}
+export async function enablePush(selfName: string) {
+  await SecureStore.deleteItemAsync(OFF_KEY).catch(() => {});
+  return registerPush(selfName);
+}
 
 let _registered = false;
 export type PushState = 'checking' | 'ok' | 'denied' | 'unavailable' | 'server-off' | 'server-error';
@@ -146,6 +166,7 @@ const withTimeout = <T,>(p: Promise<T>, ms: number, what: string) => Promise.rac
 export async function registerPush(selfName: string): Promise<PushState> {
   _selfName = selfName;
   _lastError = '';
+  if (await isPushOff()) return 'ok';               // выключено на этом телефоне
   try {
     const { status: cur } = await Notifications.getPermissionsAsync();
     const status = cur === 'granted' ? cur : (await Notifications.requestPermissionsAsync()).status;   // ждёт ответа человека — без таймаута
@@ -158,6 +179,7 @@ export async function registerPush(selfName: string): Promise<PushState> {
   try {
     const t = await withTimeout(Notifications.getDevicePushTokenAsync(), 20_000, 'Google не выдал токен');
     token = typeof t.data === 'string' ? t.data : '';
+    _token = token;
     if (!token) { _lastError = `токен: пустой (${t.type})`; return 'unavailable'; }
   } catch (e) { _lastError = `токен: ${errText(e)}`; return 'unavailable'; }
 

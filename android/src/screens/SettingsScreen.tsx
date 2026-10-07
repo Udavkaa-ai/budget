@@ -15,7 +15,7 @@ import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
 import { SectionTitle } from '../components/UI';
-import { registerPush, pushError, PUSH_STATE_TEXT, type PushState, type PushDetail } from '../push';
+import { registerPush, enablePush, disablePush, isPushOff, pushError, PUSH_STATE_TEXT, type PushState, type PushDetail } from '../push';
 import { api, invites, csv, pushSettings, support as supportApi, type SupportMessage, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
@@ -178,11 +178,12 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     refreshBackups();
-    pushSettings.get().then(r => {
-      setPushEnabled(r.enabled);
-      setPushDetail(r.detail || 'short');
-      if (r.enabled) registerPush(user?.name || '').then(setPushState).catch(() => {});
-    }).catch(() => {});
+    // Вкл/выкл — настройка этого телефона; с сервера берём только «что показывать»
+    pushSettings.get().then(r => setPushDetail(r.detail || 'short')).catch(() => {});
+    isPushOff().then(off => {
+      setPushEnabled(!off);
+      if (!off) registerPush(user?.name || '').then(setPushState).catch(() => {});
+    });
     settingsApi.get().then(s => {
       if (s.familyName) setFamilyName(s.familyName);
       if (s.plannedMonthly) setPlannedMonthly(String(s.plannedMonthly));
@@ -445,13 +446,11 @@ export default function SettingsScreen() {
     } catch (e) { showAlert('Не получилось', String((e as Error)?.message || e)); }
   };
 
+  // Только этот телефон: браузер и другие устройства включаются отдельно
   const togglePush = async (v: boolean) => {
     setPushEnabled(v);
-    try {
-      await pushSettings.set(v);
-      // выключение стирает подписки устройства на сервере — при включении регистрируемся заново
-      if (v) { setPushState('checking'); setPushState(await registerPush(user?.name || '')); }
-    } catch { setPushEnabled(!v); }
+    if (v) { setPushState('checking'); setPushState(await enablePush(user?.name || '')); }
+    else { setPushState('ok'); await disablePush(); }
   };
 
   // Тестовый режим: премиум включается бесплатно.

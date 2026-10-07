@@ -46,7 +46,7 @@ export function summarize(by, items, extra = { upd: 0, del: 0 }, detail = 'short
   };
 }
 
-export function createNotifier({ getSubs, send, detailOf = () => 'short' }) {
+export function createNotifier({ getSubs, send, detailOf = () => 'short', log = () => {} }) {
   const pending = new Map();
 
   function flush(key) {
@@ -55,7 +55,7 @@ export function createNotifier({ getSubs, send, detailOf = () => 'short' }) {
     pending.delete(key);
     clearTimeout(p.timer);
     const subs = getSubs(p.family, p.by);
-    if (!subs.length) return;
+    if (!subs.length) { log(`📭 Пуш от ${p.by} не отправлен: у остальных в семье нет подписок на уведомления`); return; }
     // id — чтобы клиент не посчитал одно сообщение дважды (задача + обработчик)
     const base = { url: '/', by: p.by, tag: `upd:${p.by}`, id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}` };
     // Подробность выбирает получатель — группируем подписки по его настройке
@@ -81,13 +81,17 @@ export function createNotifier({ getSubs, send, detailOf = () => 'short' }) {
   function add(family, by, part) {
     const key = `${family}|${by}`;
     let p = pending.get(key);
-    if (!p) { p = { family, by, e2e: !!part.e2e, items: [], hints: [], records: 0, first: Date.now(), timer: null }; pending.set(key, p); }
+    if (!p) {
+      p = { family, by, e2e: !!part.e2e, items: [], hints: [], records: 0, first: Date.now(), timer: null };
+      pending.set(key, p);
+      log(`🕒 Изменения от ${by} — пуш семье через минуту тишины`);
+    }
     if (part.items) p.items.push(...part.items);
     if (part.hint) p.hints.push(part.hint);
     p.records += part.records || part.items?.length || 0;
     clearTimeout(p.timer);
     const wait = Math.max(0, Math.min(QUIET, p.first + MAX - Date.now()));
-    p.timer = setTimeout(() => flush(key), wait);
+    p.timer = setTimeout(() => { try { flush(key); } catch (e) { log(`⚠️ Пуш от ${by}: ${e.message}`); } }, wait);
   }
 
   return { add, flush, pending };
