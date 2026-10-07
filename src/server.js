@@ -645,8 +645,8 @@ function fcmAccount() {
       const raw = env.FIREBASE_SERVICE_ACCOUNT.trim();
       _fcmSa = JSON.parse(raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8'));
     }
-  } catch (e) { console.error('Firebase: не удалось прочитать ключ сервисного аккаунта —', e.message); _fcmSa = false; }
-  if (_fcmSa) console.log(`Firebase: пуши в приложение включены (проект ${_fcmSa.project_id})`);
+  } catch (e) { console.error('⚠️ Firebase: не удалось прочитать ключ сервисного аккаунта —', e.message); _fcmSa = false; }
+  if (_fcmSa) console.log(`🔔 Firebase: пуши в приложение включены (проект ${_fcmSa.project_id})`);
   return _fcmSa;
 }
 async function fcmAccessToken() {
@@ -1823,6 +1823,11 @@ async function start() {
   // '0.0.0.0' обязательно для Railway — слушаем на всех интерфейсах
   httpServer.listen(config.port, '0.0.0.0', () => {
     console.log(`🌐 Запущено на порту ${config.port}`);
+    // Сразу проверяем ключ Firebase, чтобы статус пушей был виден в логе запуска
+    if (!fcmAccount()) console.log('🔕 Firebase: ключ не задан — пуши в приложение выключены');
+    else fcmAccessToken()
+      .then(() => console.log('✅ Firebase: ключ принят Google, пуши в приложение работают'))
+      .catch(e => console.error('⚠️ Firebase: Google не принял ключ —', e.message));
     console.log(`⏰ Напоминания: ${config.reminderHour}:${String(config.reminderMinute).padStart(2, '0')} MSK`);
   });
 }
