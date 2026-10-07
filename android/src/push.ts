@@ -6,6 +6,8 @@ import { api } from './api/client';
 import { decryptJson } from './crypto';
 
 // Пуши о расходах семьи через FCM (без Expo push-сервиса).
+// Нужны: google-services.json в сборке (секрет GOOGLE_SERVICES_JSON в CI)
+// и ключ сервисного аккаунта на сервере (FIREBASE_PROJECT_ID/_CLIENT_EMAIL/_PRIVATE_KEY).
 //
 // Сервер копит изменения автора и шлёт одно сообщение (src/notify.js).
 // Обычная семья — системное уведомление с готовым текстом.
