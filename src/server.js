@@ -619,6 +619,7 @@ const notifier = createNotifier({
     .then(n => console.log(`📨 Пуш от ${payload.by}: доставлено ${n} из ${subs.length}`))
     .catch(() => {}),
   detailOf: (sub, family) => getUserPushDetail(sub.userId, family),
+  log: msg => console.log(msg),
 });
 function loginOfName(family, name) {
   return getUsers().find(u => (u.family || 'family1') === family && u.name === name)?.login || null;
