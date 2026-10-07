@@ -67,6 +67,8 @@ import {
   getFamilyPushSubscriptions,
   getUserPushEnabled,
   setUserPushEnabled,
+  getUserPushDetail,
+  setUserPushDetail,
   getAllFamilyExpenses,
   getCustomCategories,
   addCustomCategory,
@@ -614,6 +616,7 @@ const notifier = createNotifier({
   getSubs: (family, by) => getFamilyPushSubscriptions(family, [by, loginOfName(family, by)])
     .filter(s => getUserPushEnabled(s.userId, family)),
   send: (subs, payload) => sendPushToSubscriptions(subs, payload).catch(() => {}),
+  detailOf: (sub, family) => getUserPushDetail(sub.userId, family),
 });
 function loginOfName(family, name) {
   return getUsers().find(u => (u.family || 'family1') === family && u.name === name)?.login || null;
@@ -715,13 +718,17 @@ app.delete('/api/push/subscribe', authMiddleware, (req, res) => {
 });
 
 app.get('/api/push/settings', authMiddleware, (req, res) => {
-  res.json({ enabled: getUserPushEnabled(req.user.name, req.user.family) });
+  res.json({ enabled: getUserPushEnabled(req.user.name, req.user.family), detail: getUserPushDetail(req.user.name, req.user.family) });
 });
 
 app.post('/api/push/settings', authMiddleware, (req, res) => {
-  const { enabled } = req.body || {};
-  setUserPushEnabled(req.user.name, req.user.family, !!enabled);
-  if (!enabled) removeUserPushSubscriptions(req.user.name, req.user.family);
+  const { enabled, detail } = req.body || {};
+  // Только смена подробности — подписки не трогаем
+  if (['short', 'full', 'hidden'].includes(detail)) setUserPushDetail(req.user.name, req.user.family, detail);
+  if (typeof enabled === 'boolean') {
+    setUserPushEnabled(req.user.name, req.user.family, enabled);
+    if (!enabled) removeUserPushSubscriptions(req.user.name, req.user.family);
+  }
   res.json({ ok: true });
 });
 

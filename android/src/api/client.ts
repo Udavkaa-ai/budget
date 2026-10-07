@@ -402,8 +402,10 @@ export const support = {
 };
 
 export const pushSettings = {
-  get: () => api.get<{ enabled: boolean }>('/api/push/settings'),
+  get: () => api.get<{ enabled: boolean; detail?: 'short' | 'full' | 'hidden' }>('/api/push/settings'),
   set: (enabled: boolean) => api.post<{ ok: boolean }>('/api/push/settings', { enabled }),
+  // что показывать в уведомлении о расходах партнёра
+  setDetail: (detail: 'short' | 'full' | 'hidden') => api.post<{ ok: boolean }>('/api/push/settings', { detail }),
 };
 
 // ─── Crowd classifier dictionary ─────────────────────────────────────────────

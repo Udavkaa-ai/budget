@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Toggle } from '../components/UI';
+import { Toggle, Segmented } from '../components/UI';
 import { showAlert } from '../dialog';
 import { haptics } from '../haptics';
 import { BankSettings } from '../components/BankSettings';
@@ -15,7 +15,7 @@ import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
 import { SectionTitle } from '../components/UI';
-import { registerPush, PUSH_STATE_TEXT, type PushState } from '../push';
+import { registerPush, PUSH_STATE_TEXT, type PushState, type PushDetail } from '../push';
 import { api, invites, csv, pushSettings, support as supportApi, type SupportMessage, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
@@ -39,6 +39,12 @@ import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } 
 import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
 import * as e2eData from '../e2e/compute';
+
+const DETAIL_HINT: Record<PushDetail, string> = {
+  short: '«💸 Марина · 5 новых расходов», ниже — «за 6 октября»',
+  full: 'С суммами и категориями — их увидит любой, кто взглянет на экран',
+  hidden: '«Новые записи в семейном бюджете» — без имён и цифр',
+};
 
 const SETTINGS_PAGES: Array<{ id: SettingsPage; title: string; sub: string; icon: string; tone?: 'success' | 'gold' }> = [
   { id: 'family', title: 'Семья и бюджет', sub: 'Семья, приглашения, план, категории, регулярные платежи', icon: 'people-outline' },
@@ -127,6 +133,7 @@ export default function SettingsScreen() {
   const [newCatEmoji, setNewCatEmoji] = useState('');
   const [pushEnabled, setPushEnabled] = useState(true);
   const [pushState, setPushState] = useState<PushState>('ok');
+  const [pushDetail, setPushDetail] = useState<PushDetail>('short');
   const [joinVisible, setJoinVisible] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [importVisible, setImportVisible] = useState(false);
@@ -173,6 +180,7 @@ export default function SettingsScreen() {
     refreshBackups();
     pushSettings.get().then(r => {
       setPushEnabled(r.enabled);
+      setPushDetail(r.detail || 'short');
       if (r.enabled) registerPush(user?.name || '').then(setPushState).catch(() => {});
     }).catch(() => {});
     settingsApi.get().then(s => {
@@ -837,6 +845,21 @@ export default function SettingsScreen() {
               onValueChange={togglePush}
             />
           </View>
+          {pushEnabled && (
+            <View style={{ marginTop: spacing.md }}>
+              <Text style={{ color: t.text, marginBottom: spacing.sm }}>Что показывать в уведомлении</Text>
+              <Segmented<PushDetail>
+                value={pushDetail}
+                options={[{ value: 'short', label: 'Кратко' }, { value: 'full', label: 'Подробно' }, { value: 'hidden', label: 'Скрыто' }]}
+                onChange={v => {
+                  const prev = pushDetail;
+                  setPushDetail(v);
+                  pushSettings.setDetail(v).catch(() => setPushDetail(prev));
+                }}
+              />
+              <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>{DETAIL_HINT[pushDetail]}</Text>
+            </View>
+          )}
         </Card>
 
         {/* Покупки из банка — только личная сборка */}

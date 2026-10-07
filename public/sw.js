@@ -44,28 +44,37 @@ async function getSelfName() {
 }
 
 // ─── Сводка в уведомлении ─────────────────────────────────────────────────────
-// Повторяет summarize() из src/notify.js: «Марина · 3 расхода · 2 450 ₽»,
-// «за 5–6 окт · Продукты 1 200 ₽, Кафе 450 ₽».
-const MON = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+// «💸 Марина · 5 новых расходов», «за 6 октября» (повторяет src/notify.js)
+const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 const fmtR = n => `${Math.round(n).toLocaleString('ru-RU')} ₽`;
 const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? b : c; };
-function summarize(by, items, extra = { upd: 0, del: 0 }) {
-  const n = items.reduce((k, it) => k + (Number(it[3]) || 1), 0);   // it[3] — штук в сжатой строке
-  const sum = items.reduce((s, it) => s + (Number(it[0]) || 0), 0);
+
+// items: [[сумма, 'ДД.ММ.ГГГГ', категория, штук?]]; detail — что видит получатель:
+//   'short' (по умолчанию) — сколько и за какие дни, без сумм;
+//   'full'  — с суммами и категориями; 'hidden' — без имён и цифр.
+// Одна и та же функция в src/notify.js, public/sw.js и android/src/push.ts.
+function summarize(by, items, extra = { upd: 0, del: 0 }, detail = 'short') {
+  if (detail === 'hidden') return { title: 'ФИНИК', body: 'Новые записи в семейном бюджете' };
+  const n = items.reduce((k, it) => k + (Number(it[3]) || 1), 0);
   const days = [...new Set(items.map(it => it[1]).filter(Boolean))]
     .sort((a, b) => a.split('.').reverse().join('').localeCompare(b.split('.').reverse().join('')));
   const dd = d => { const [x, m] = d.split('.'); return `${+x} ${MON[+m - 1] || ''}`; };
-  const when = !days.length ? '' : days.length === 1 ? dd(days[0])
-    : days[0].slice(3) === days[days.length - 1].slice(3) ? `${+days[0].split('.')[0]}–${dd(days[days.length - 1])}`
-    : `${dd(days[0])} – ${dd(days[days.length - 1])}`;
+  const first = days[0], last = days[days.length - 1];
+  const when = !days.length ? '' : days.length === 1 ? dd(first)
+    : first.slice(3) === last.slice(3) ? `${+first.split('.')[0]}–${dd(last)}` : `${dd(first)} – ${dd(last)}`;
   const tail = [extra.upd ? `изменено ${extra.upd}` : '', extra.del ? `удалено ${extra.del}` : ''].filter(Boolean).join(', ');
   if (!n) return { title: `💸 ${by}`, body: tail ? `Правки в расходах: ${tail}` : 'Правки в расходах' };
+  const what = `${n} ${plural(n, 'новый расход', 'новых расхода', 'новых расходов')}`;
+  if (detail !== 'full') {
+    return { title: `💸 ${by} · ${what}`, body: [when ? `за ${when}` : '', tail].filter(Boolean).join(' · ') };
+  }
+  const sum = items.reduce((s, it) => s + (Number(it[0]) || 0), 0);
   const cats = {};
   for (const it of items) cats[it[2] || 'Прочее'] = (cats[it[2] || 'Прочее'] || 0) + (Number(it[0]) || 0);
   const top = Object.entries(cats).sort((a, b) => b[1] - a[1]);
   const catTxt = top.slice(0, 3).map(([c, v]) => `${c} ${fmtR(v)}`).join(', ') + (top.length > 3 ? '…' : '');
   return {
-    title: `💸 ${by} · ${n} ${plural(n, 'расход', 'расхода', 'расходов')} · ${fmtR(sum)}`,
+    title: `💸 ${by} · ${what} · ${fmtR(sum)}`,
     body: [when ? `за ${when}` : '', catTxt, tail].filter(Boolean).join(' · '),
   };
 }
@@ -100,9 +109,10 @@ self.addEventListener('push', e => {
     if (data.e2e) {
       acc = await decryptHints(data.hints).catch(() => null);
       if (acc && !acc.items.length && !acc.upd && !acc.del) acc = null;
-    } else if (Array.isArray(data.items)) {
+    } else if (Array.isArray(data.items) && data.items.length) {
       acc = { items: data.items, upd: 0, del: 0 };
     }
+    if (data.detail === 'hidden') acc = null;   // скрытый режим: текст сервера как есть
     // Ещё не смахнули прошлое уведомление того же автора — дописываем в него,
     // а не плодим новые строки
     if (acc && data.tag) {
@@ -110,7 +120,7 @@ self.addEventListener('push', e => {
       const p = prev?.data?.acc;
       if (p) acc = { items: [...p.items, ...acc.items].slice(-200), upd: p.upd + acc.upd, del: p.del + acc.del };
     }
-    if (acc) ({ title, body } = summarize(data.by || 'Семья', acc.items, acc));
+    if (acc) ({ title, body } = summarize(data.by || 'Семья', acc.items, acc, data.detail || 'short'));
     await self.registration.showNotification(title, {
       body,
       icon: '/icon-512.png',

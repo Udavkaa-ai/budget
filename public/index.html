@@ -323,7 +323,16 @@
               <span class="toggle-slider"></span>
             </span>
           </label>
-          <div class="settings-hint">Получайте уведомления когда партнёр добавляет расходы, даже если приложение закрыто.</div>
+          <div class="settings-hint">Одно уведомление, когда партнёр закончит вносить расходы, — даже если приложение закрыто.</div>
+          <div id="push-detail-row" style="margin-top:12px">
+            <div class="toggle-label" style="margin-bottom:6px">Что показывать в уведомлении</div>
+            <select id="push-detail" class="form-control">
+              <option value="short">Кратко — «Марина · 5 новых расходов за 6 октября»</option>
+              <option value="full">Подробно — с суммами и категориями</option>
+              <option value="hidden">Скрыто — «Новые записи в семейном бюджете»</option>
+            </select>
+            <div class="settings-hint">Суммы на экране блокировки может увидеть кто угодно — поэтому по умолчанию их нет.</div>
+          </div>
         </div>
 
         <div class="settings-section" id="e2e-section">
