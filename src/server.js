@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import webpush from 'web-push';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { createNotifier } from './notify.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -579,23 +580,11 @@ app.post('/api/expenses', authMiddleware, async (req, res) => {
   // Уведомляем только пользователей той же семьи
   io.to(req.user.family).emit('expense:added', { expenses: withUser, by: req.user.name });
 
-  // Web Push — отправляем другим участникам семьи у которых включены уведомления
-  const subs = getFamilyPushSubscriptions(req.user.family, [req.user.name, req.user.login])
-    .filter(s => getUserPushEnabled(s.userId, req.user.family));
-  if (subs.length) {
-    const total = withUser.reduce((s, e) => s + (e.amount || 0), 0);
-    const desc = withUser.length === 1
-      ? (withUser[0].description || withUser[0].category)
-      : `${withUser.length} расхода(ов)`;
-    sendPushToSubscriptions(subs, {
-      title: withUser.every(e => e.addedBy)
-        ? `💸 ${req.user.name} внёс расход · ${withUser[0].user}`
-        : `💸 ${req.user.name} добавил расход`,
-      body: `${desc} — ${total.toLocaleString('ru')} ₽`,
-      url: '/',
-      by: req.user.name,
-    }).catch(() => {});
-  }
+  // Пуш остальным в семье — сводкой, когда автор закончит вносить (см. notify.js)
+  notifier.add(req.user.family, req.user.name, {
+    items: withUser.map(e => [Number(e.amount) || 0, e.date, e.category]),
+    login: req.user.login,
+  });
 
   res.json({ ok: true, count: withUser.length });
 });
@@ -620,10 +609,71 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
 
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
+// Сводные уведомления семье (копим изменения автора, шлём одно)
+const notifier = createNotifier({
+  getSubs: (family, by) => getFamilyPushSubscriptions(family, [by, loginOfName(family, by)])
+    .filter(s => getUserPushEnabled(s.userId, family)),
+  send: (subs, payload) => sendPushToSubscriptions(subs, payload).catch(() => {}),
+});
+function loginOfName(family, name) {
+  return getUsers().find(u => (u.family || 'family1') === family && u.name === name)?.login || null;
+}
+
+// ─── FCM (пуши приложению) ────────────────────────────────────────────────────
+// Нужен env FIREBASE_SERVICE_ACCOUNT — JSON сервисного аккаунта Firebase
+// (Project settings › Service accounts › Generate new private key).
+let _fcmSa = null, _fcmTok = null, _fcmTokExp = 0;
+function fcmAccount() {
+  if (_fcmSa !== null) return _fcmSa;
+  try { _fcmSa = process.env.FIREBASE_SERVICE_ACCOUNT ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) : false; }
+  catch { console.error('FIREBASE_SERVICE_ACCOUNT: некорректный JSON'); _fcmSa = false; }
+  return _fcmSa;
+}
+async function fcmAccessToken() {
+  const sa = fcmAccount();
+  if (!sa) return null;
+  if (_fcmTok && Date.now() < _fcmTokExp) return _fcmTok;
+  const now = Math.floor(Date.now() / 1000);
+  const assertion = jwt.sign(
+    { iss: sa.client_email, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 },
+    sa.private_key, { algorithm: 'RS256' },
+  );
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error('FCM auth: ' + JSON.stringify(j).slice(0, 200));
+  _fcmTok = j.access_token; _fcmTokExp = Date.now() + 50 * 60_000;
+  return _fcmTok;
+}
+async function sendFcm(sub, payload) {
+  const sa = fcmAccount();
+  if (!sa) throw new Error('FCM не настроен');
+  const token = await fcmAccessToken();
+  const data = { finik: JSON.stringify(payload) };
+  // E2E — только data: текст соберёт приложение, расшифровав сводку.
+  // Обычная семья — системное уведомление (надёжно и при выгруженном приложении);
+  // tag заменяет прошлое уведомление того же автора вместо новой строки.
+  const message = payload.e2e
+    ? { token: sub.fcm, data, android: { priority: 'HIGH' } }
+    : { token: sub.fcm, data, android: { priority: 'HIGH', notification: { title: payload.title, body: payload.body, tag: payload.tag || undefined, channel_id: 'family' } } };
+  const r = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    const err = new Error('FCM ' + r.status + ': ' + txt.slice(0, 200));
+    if (r.status === 404 || txt.includes('UNREGISTERED')) err.statusCode = 410;   // токен протух
+    throw err;
+  }
+}
+
 async function sendPushToSubscriptions(subscriptions, payload) {
   const results = await Promise.allSettled(
     subscriptions.map(sub =>
-      webpush.sendNotification(sub, JSON.stringify(payload)).catch(err => {
+      (sub.fcm ? sendFcm(sub, payload) : webpush.sendNotification(sub, JSON.stringify(payload))).catch(err => {
         // 410 Gone — подписка протухла, удаляем
         if (err.statusCode === 410) removePushSubscription(sub.endpoint, sub.family);
         throw err;
@@ -642,6 +692,15 @@ app.post('/api/push/subscribe', authMiddleware, (req, res) => {
   if (!subscription?.endpoint) return res.status(400).json({ error: 'Нет подписки' });
   savePushSubscription(subscription, req.user.name, req.user.family);
   res.json({ ok: true });
+});
+
+// Приложение: токен FCM устройства. Храним рядом с веб-подписками
+// (endpoint «fcm:<токен>»), чтобы работали те же фильтры и отписка.
+app.post('/api/push/fcm', authMiddleware, (req, res) => {
+  const token = String(req.body?.token || '');
+  if (!token || token.length > 4096) return res.status(400).json({ error: 'Нет токена' });
+  savePushSubscription({ endpoint: `fcm:${token}`, fcm: token, app: String(req.body?.app || '').slice(0, 60) }, req.user.name, req.user.family);
+  res.json({ ok: true, server: !!fcmAccount() });
 });
 
 app.delete('/api/push/subscribe', authMiddleware, (req, res) => {
@@ -842,16 +901,12 @@ app.post('/api/sync/records', authMiddleware, (req, res) => {
   const out = upsertSyncRecords(req.user.family, records);
   io.to(req.user.family).emit('sync:changed', { by: req.user.name });
 
-  // Пуш без деталей — сервер не знает сумм
-  const subs = getFamilyPushSubscriptions(req.user.family, [req.user.name, req.user.login])
-    .filter(sub => getUserPushEnabled(sub.userId, req.user.family));
-  if (subs.length) {
-    sendPushToSubscriptions(subs, {
-      title: '💸 Обновление бюджета',
-      body: `${req.user.name} внёс изменения`,
-      url: '/',
-      by: req.user.name,
-    }).catch(() => {});
+  // Пуш без сумм: сервер их не знает. Клиент прикладывает hint — сводку,
+  // зашифрованную ключом семьи; её расшифрует только устройство получателя.
+  const hint = typeof req.body?.hint === 'string' && req.body.hint.length <= 2048 ? req.body.hint : '';
+  // Синхронизация без новых данных (пустой hint от нового клиента) — без пуша
+  if (req.body?.hint !== '') {
+    notifier.add(req.user.family, req.user.name, { e2e: true, hint, records: records.length, login: req.user.login });
   }
   res.json(out);
 });

@@ -364,6 +364,7 @@ function logout() {
   localStorage.removeItem('budget_user');
   token = null;
   currentUser = null;
+  pushSelfToSW();   // стираем у воркера имя и ключ семьи
   if (socket) { socket.disconnect(); socket = null; }
   showLogin();
   document.getElementById('screen-login').style.display = '';
@@ -405,6 +406,8 @@ async function pushSelfToSW() {
     const reg = await navigator.serviceWorker.ready;
     (reg.active || navigator.serviceWorker.controller)?.postMessage({
       type: 'set-self', name: currentUser?.name || '',
+      // ключ семьи (E2E): воркер расшифрует им сводку в пуше от партнёра
+      key: currentUser && E2E.active() ? (E2E.exportKeyHex() || '') : '',
     });
   } catch { /* ignore */ }
 }
@@ -2450,6 +2453,7 @@ async function doEnableE2E() {
   try {
     const res = await E2E.enableE2E();
     if (res.ok) {
+      pushSelfToSW();
       renderE2ESection();
       showE2EKey(res.keyPhrase);
       showToastSuccess(`Шифрование включено. Перенесено расходов: ${res.migrated}`);
@@ -2491,6 +2495,7 @@ async function doImportE2EKey() {
   const ok = await E2E.importKeyHex(clean);
   if (!ok) { showToastError('Неверный ключ (нужно 64 hex-символа)'); return; }
   showToastSuccess('Ключ сохранён. Обновляю данные…');
+  pushSelfToSW();
   try { await E2E.syncNow(); } catch { /* ignore */ }
   renderE2ESection();
   refreshCurrentScreen();
@@ -3449,6 +3454,7 @@ async function initApp() {
     await E2E.init({ getToken: () => token, userName: currentUser.name });
     if (E2E.active()) await E2E.syncNow();
   } catch { /* сеть — синхронизируемся позже */ }
+  pushSelfToSW();   // ключ семьи известен только после E2E.init
 
   showApp();
   refreshSupportUnread();
