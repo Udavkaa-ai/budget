@@ -623,13 +623,30 @@ function loginOfName(family, name) {
 }
 
 // ─── FCM (пуши приложению) ────────────────────────────────────────────────────
-// Нужен env FIREBASE_SERVICE_ACCOUNT — JSON сервисного аккаунта Firebase
-// (Project settings › Service accounts › Generate new private key).
+// Ключ сервисного аккаунта Firebase (Project settings › Service accounts ›
+// Generate new private key). Amvera не принимает кавычки в переменных,
+// поэтому основной способ — три переменные из полей JSON-файла:
+//   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
+//   (ключ как в файле, с «\n» внутри — без обрамляющих кавычек).
+// Либо FIREBASE_SERVICE_ACCOUNT — весь JSON как есть или в base64.
 let _fcmSa = null, _fcmTok = null, _fcmTokExp = 0;
 function fcmAccount() {
   if (_fcmSa !== null) return _fcmSa;
-  try { _fcmSa = process.env.FIREBASE_SERVICE_ACCOUNT ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) : false; }
-  catch { console.error('FIREBASE_SERVICE_ACCOUNT: некорректный JSON'); _fcmSa = false; }
+  _fcmSa = false;
+  const env = process.env;
+  try {
+    if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY) {
+      _fcmSa = {
+        project_id: env.FIREBASE_PROJECT_ID.trim(),
+        client_email: env.FIREBASE_CLIENT_EMAIL.trim(),
+        private_key: env.FIREBASE_PRIVATE_KEY.trim().replace(/^"|"$/g, '').replace(/\\n/g, '\n'),
+      };
+    } else if (env.FIREBASE_SERVICE_ACCOUNT) {
+      const raw = env.FIREBASE_SERVICE_ACCOUNT.trim();
+      _fcmSa = JSON.parse(raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8'));
+    }
+  } catch (e) { console.error('Firebase: не удалось прочитать ключ сервисного аккаунта —', e.message); _fcmSa = false; }
+  if (_fcmSa) console.log(`Firebase: пуши в приложение включены (проект ${_fcmSa.project_id})`);
   return _fcmSa;
 }
 async function fcmAccessToken() {
