@@ -613,8 +613,8 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
 
 // Сводные уведомления семье (копим изменения автора, шлём одно)
 const notifier = createNotifier({
-  getSubs: (family, by) => getFamilyPushSubscriptions(family, [by, loginOfName(family, by)])
-    .filter(s => getUserPushEnabled(s.userId, family)),
+  // Подписка — настройка устройства: выключил в браузере — отписался только браузер
+  getSubs: (family, by) => getFamilyPushSubscriptions(family, [by, loginOfName(family, by)]),
   send: (subs, payload) => sendPushToSubscriptions(subs, payload)
     .then(n => console.log(`📨 Пуш от ${payload.by}: доставлено ${n} из ${subs.length}`))
     .catch(() => {}),
@@ -675,12 +675,11 @@ async function sendFcm(sub, payload) {
   if (!sa) throw new Error('FCM не настроен');
   const token = await fcmAccessToken();
   const data = { finik: JSON.stringify(payload) };
-  // E2E — только data: текст соберёт приложение, расшифровав сводку.
-  // Обычная семья — системное уведомление (надёжно и при выгруженном приложении);
-  // tag заменяет прошлое уведомление того же автора вместо новой строки.
-  const message = payload.e2e
-    ? { token: sub.fcm, data, android: { priority: 'HIGH' } }
-    : { token: sub.fcm, data, android: { priority: 'HIGH', notification: { title: payload.title, body: payload.body, tag: payload.tag || undefined, channel_id: 'family' } } };
+  // Всегда системное уведомление: его показывает сам Android, даже если
+  // приложение выгружено (тихие data-сообщения прошивки вроде HiOS не доставляют).
+  // Для E2E текст без сумм; открытое приложение может заменить его расшифрованной
+  // сводкой. tag заменяет прошлое уведомление того же автора вместо новой строки.
+  const message = { token: sub.fcm, data, android: { priority: 'HIGH', notification: { title: payload.title, body: payload.body, tag: payload.tag || undefined, channel_id: 'family' } } };
   const r = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
@@ -760,10 +759,9 @@ app.post('/api/push/settings', authMiddleware, (req, res) => {
   const { enabled, detail } = req.body || {};
   // Только смена подробности — подписки не трогаем
   if (['short', 'full', 'hidden'].includes(detail)) setUserPushDetail(req.user.name, req.user.family, detail);
-  if (typeof enabled === 'boolean') {
-    setUserPushEnabled(req.user.name, req.user.family, enabled);
-    if (!enabled) removeUserPushSubscriptions(req.user.name, req.user.family);
-  }
+  // Флаг браузера. Подписки не трогаем: раньше выключение в браузере стирало
+  // и подписку телефона. Каждое устройство отписывает себя само (DELETE subscribe).
+  if (typeof enabled === 'boolean') setUserPushEnabled(req.user.name, req.user.family, enabled);
   res.json({ ok: true });
 });
 
