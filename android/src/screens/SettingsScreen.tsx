@@ -15,7 +15,7 @@ import * as Sharing from 'expo-sharing';
 import { useTheme, useThemeMode, setThemeMode, spacing, font, radius } from '../theme';
 import { Card } from '../components/Card';
 import { SectionTitle } from '../components/UI';
-import { registerPush, PUSH_STATE_TEXT, type PushState, type PushDetail } from '../push';
+import { registerPush, pushError, PUSH_STATE_TEXT, type PushState, type PushDetail } from '../push';
 import { api, invites, csv, pushSettings, support as supportApi, type SupportMessage, settings as settingsApi, categoriesApi, backups as backupsApi, type BackupMeta, setToken } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { usePremium, setPremium } from '../premium';
@@ -837,7 +837,9 @@ export default function SettingsScreen() {
                 Одно уведомление, когда партнёр закончит вносить: сколько, на какую сумму и за какие дни
               </Text>
               {pushEnabled && pushState !== 'ok' && (
-                <Text style={{ color: t.warning, fontSize: font.xs, marginTop: 4 }}>{PUSH_STATE_TEXT[pushState]}</Text>
+                <Text style={{ color: t.warning, fontSize: font.xs, marginTop: 4 }} selectable>
+                  {PUSH_STATE_TEXT[pushState]}{pushError() ? `\n${pushError()}` : ''}
+                </Text>
               )}
             </View>
             <Toggle

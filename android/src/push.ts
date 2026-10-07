@@ -130,32 +130,44 @@ Notifications.setNotificationHandler({
 });
 
 let _registered = false;
-export type PushState = 'ok' | 'denied' | 'unavailable' | 'server-off';
+export type PushState = 'ok' | 'denied' | 'unavailable' | 'server-off' | 'server-error';
+// Текст последней ошибки — показываем под переключателем, чтобы было видно,
+// на каком шаге и почему не вышло
+let _lastError = '';
+export const pushError = () => _lastError;
+const errText = (e: unknown) => String((e as Error)?.message || e).slice(0, 200);
 
 // Разрешение › FCM-токен устройства › сервер. Возвращает, что получилось.
 export async function registerPush(selfName: string): Promise<PushState> {
   _selfName = selfName;
+  _lastError = '';
   try {
     const { status: cur } = await Notifications.getPermissionsAsync();
     const status = cur === 'granted' ? cur : (await Notifications.requestPermissionsAsync()).status;
     if (status !== 'granted') return 'denied';
-    await ensureChannel();
+    await ensureChannel().catch(() => {});
     if (!_registered) { await Notifications.registerTaskAsync(TASK).catch(() => {}); _registered = true; }
-    const { data: token } = await Notifications.getDevicePushTokenAsync();
-    if (!token || typeof token !== 'string') return 'unavailable';
+  } catch (e) { _lastError = `разрешение: ${errText(e)}`; return 'denied'; }
+
+  let token = '';
+  try {
+    const t = await Notifications.getDevicePushTokenAsync();
+    token = typeof t.data === 'string' ? t.data : '';
+    if (!token) { _lastError = `токен: пустой (${t.type})`; return 'unavailable'; }
+  } catch (e) { _lastError = `токен: ${errText(e)}`; return 'unavailable'; }
+
+  try {
     const r = await api.post<{ ok: boolean; server: boolean }>('/api/push/fcm', {
       token, app: Constants.expoConfig?.android?.package || '',
     });
     return r.server ? 'ok' : 'server-off';
-  } catch {
-    // Нет google-services.json для этого пакета (сборка без Firebase)
-    return 'unavailable';
-  }
+  } catch (e) { _lastError = `сервер: ${errText(e)}`; return 'server-error'; }
 }
 
 export const PUSH_STATE_TEXT: Record<PushState, string> = {
   ok: '',
   denied: 'Уведомления запрещены в настройках Android — разрешите их для ФИНИК',
-  unavailable: 'В этой сборке пуши недоступны (не подключён Firebase)',
+  unavailable: 'Телефон не получил токен для пушей от Google',
   'server-off': 'Сервер пока не настроен на отправку пушей в приложение',
+  'server-error': 'Не удалось зарегистрировать телефон на сервере',
 };
