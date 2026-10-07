@@ -55,6 +55,7 @@ function Row({ item }: { item: InboxItem }) {
   const others = useMembers().filter(n => n !== me);
   const [who, setWho] = useState('');           // '' — мой расход
   const transfer = item.kind === 'transfer';
+  const guessed = item.guess === 'balance';
 
   const add = async () => {
     setBusy(true);
@@ -64,10 +65,10 @@ function Row({ item }: { item: InboxItem }) {
   };
 
   return (
-    <View style={[styles.row, { backgroundColor: t.surface, borderColor: transfer ? t.warning : t.border }]}>
+    <View style={[styles.row, { backgroundColor: t.surface, borderColor: transfer || guessed ? t.warning : t.border }]}>
       <View style={styles.rowTop}>
         <View style={{ flex: 1 }}>
-          <TextInput value={desc} onChangeText={setDesc} placeholder={transfer ? 'Кому перевод' : 'Где покупка'}
+          <TextInput value={desc} onChangeText={setDesc} placeholder={item.guess ? 'На что потрачено' : transfer ? 'Кому перевод' : 'Где покупка'}
             placeholderTextColor={t.textFaint} style={[styles.desc, { color: t.text }]} />
           <Text style={{ color: t.textFaint, fontSize: 12 }}>
             {item.bank}{item.card ? ` ·${item.card}` : ''} · {SOURCE[item.source]} · {when(item.ts)}
@@ -78,6 +79,11 @@ function Row({ item }: { item: InboxItem }) {
       {transfer && (
         <Text style={{ color: t.warning, fontSize: 12, fontWeight: '700', marginTop: 6 }}>
           Перевод человеку — добавьте, только если это расход
+        </Text>
+      )}
+      {item.guess === 'balance' && (
+        <Text style={{ color: t.warning, fontSize: 12, fontWeight: '700', marginTop: 6 }}>
+          Списание без уведомления — банк не прислал сообщение, но баланс уменьшился на эту сумму. Подпишите, на что потрачено
         </Text>
       )}
       <Pressable onPress={() => { haptics.select(); setPicking(p => !p); }}

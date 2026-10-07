@@ -23,6 +23,7 @@ export interface InboxItem extends ParsedBank {
   ts: number;              // время сообщения, мс
   category: string;        // подсказка классификатора
   status: InboxStatus;
+  guess?: 'balance';       // не из сообщения, а найдено по разнице балансов
 }
 export interface JournalEntry { id: number; ts: number; source: string; from: string; kind: string; summary: string; raw?: string }
 
@@ -112,6 +113,39 @@ async function nearby(ts: number) {
   return rows.map(r => ({ id: r.id, status: r.status, p: JSON.parse(r.payload) as ParsedBank }));
 }
 
+// Сверка баланса: банк не всегда шлёт уведомление (ВТБ при переводе из самого
+// приложения показывает только баннер внутри). Но баланс в следующем сообщении
+// по тому же счёту его выдаёт: было B, пришла покупка A, стало не B−A, а меньше —
+// значит, было списание без уведомления. Кладём его во «Входящие» на проверку.
+async function reconcileBalance(p: ParsedBank, source: InboxItem['source'], from: string, ts: number) {
+  if (p.balance == null || !p.card || !p.amount) return;
+  const key = `bal:${p.bank}|${p.card}`;
+  const raw = await getPref(key);
+  const last = raw ? JSON.parse(raw) as { bal: number; ts: number } : null;
+  if (last && ts <= last.ts) return;                 // старое сообщение (дочитали СМС позже) — не сверяем
+  await setPref(key, JSON.stringify({ bal: p.balance, ts }));
+  if (!last || ts - last.ts > 7 * 86_400_000) return;
+  const expected = last.bal + (p.kind === 'income' ? p.amount : -p.amount);
+  const diff = Math.round((expected - p.balance) * 100) / 100;
+  if (Math.abs(diff) < 1) return;
+  const d = await db();
+  if (diff > 0) {
+    // Уже знаем об этой операции (поделились чеком, сообщение без баланса) — не дублируем
+    const known = await d.getAllAsync<{ payload: string }>(
+      'SELECT payload FROM bank_inbox WHERE ts > ? AND ts <= ?', [last.ts, ts]);
+    if (known.some(r => { const k = JSON.parse(r.payload) as ParsedBank; return k.balance == null && Math.abs((k.amount || 0) - diff) < 1; })) return;
+    // Время неизвестно — где-то между двумя сообщениями; ставим на секунду раньше текущего
+    const missed: ParsedBank = { kind: 'purchase', bank: p.bank, amount: diff, merchant: '', card: p.card, reason: 'по балансу' };
+    const item = { ...missed, source, from, ts: ts - 1000, category: 'Прочее', guess: 'balance' as const };
+    await d.runAsync('INSERT INTO bank_inbox (payload, status, ts) VALUES (?, ?, ?)', [JSON.stringify(item), 'pending', ts - 1000]);
+    await journal(source, from, missed, ' · списание без уведомления, найдено по балансу — во «Входящих»');
+    notify();
+  } else {
+    await journal(source, from, { kind: 'income', bank: p.bank, amount: -diff, card: p.card, reason: 'по балансу' },
+      ' · поступление без уведомления, найдено по балансу (в кэшфлоу не записано)');
+  }
+}
+
 // Принять одно сообщение: разобрать, отбросить лишнее, положить во «Входящие»
 export async function ingest(text: string, from: string, source: InboxItem['source'], ts = Date.now()): Promise<InboxItem | null> {
   const p = parseBankMessage(text, from);
@@ -129,6 +163,7 @@ export async function ingest(text: string, from: string, source: InboxItem['sour
     return null;
   }
   const d = await db();
+  await reconcileBalance(p, source, from, ts);
 
   // Поступление: запоминаем (во «Входящих» не показываем). Если рядом висит
   // исходящий перевод на ту же сумму из другого банка — это перевод между
@@ -249,7 +284,7 @@ export async function accept(item: InboxItem, category: string, description?: st
     date: toDate(item.ts),
     category,
     amount: item.amount || 0,
-    description: (description ?? item.merchant ?? '').trim() || (item.kind === 'transfer' ? 'Перевод' : item.bank),
+    description: (description ?? item.merchant ?? '').trim() || (item.guess ? 'Списание без уведомления' : item.kind === 'transfer' ? 'Перевод' : item.bank),
   };
   try {
     await expenses.add({ expenses: [exp] });

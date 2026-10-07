@@ -17,6 +17,7 @@ export interface ParsedBank {
   card?: string;         // последние 4 цифры
   time?: string;         // HH:MM, если есть в тексте
   reason?: string;       // почему пропущено / не распознано
+  balance?: number;      // «Баланс 127075.94р» — для поиска списаний без уведомления
 }
 
 // Всё, что похоже на код подтверждения, отбрасываем целиком — даже если там
@@ -59,6 +60,16 @@ const clean = (m: string) => m
   .replace(/\s+/g, ' ').replace(/[.,;:\s·•]+$/, '').trim();
 
 export function parseBankMessage(text: string, sender = ''): ParsedBank {
+  const p = parseCore(text, sender);
+  if (p.amount) {
+    const t = (text || '').replace(/\s+/g, ' ');
+    const b = t.match(new RegExp(`(?:Баланс|Доступно|Остаток)(?![а-яё])[:\\s]*${AMT}`, 'i'));
+    if (b) p.balance = parseAmount(b[1]);
+  }
+  return p;
+}
+
+function parseCore(text: string, sender: string): ParsedBank {
   const t = (text || '').replace(/\s+/g, ' ').trim();
   const bank = bankOf(sender, t);
   if (!t) return { kind: 'ignore', bank, reason: 'пусто' };
