@@ -49,7 +49,8 @@ export function createNotifier({ getSubs, send }) {
     clearTimeout(p.timer);
     const subs = getSubs(p.family, p.by);
     if (!subs.length) return;
-    const base = { url: '/', by: p.by, tag: `upd:${p.by}` };
+    // id — чтобы клиент не посчитал одно сообщение дважды (задача + обработчик)
+    const base = { url: '/', by: p.by, tag: `upd:${p.by}`, id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}` };
     if (p.e2e) {
       // Текст-заглушка на случай, если устройство не смогло расшифровать
       const n = p.records;

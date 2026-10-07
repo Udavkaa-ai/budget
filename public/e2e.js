@@ -309,7 +309,8 @@ async function buildHint(chunk) {
     else h.upd++;
   }
   // Ничего нового (например, восстановление из бэкапа) — пуш не нужен
-  if (!items.length && !h.upd && !h.del) return '';
+  // Массовые правки без новых трат (бэкап, чистка дублей) — тоже без пуша
+  if (!items.length && (h.upd + h.del === 0 || h.upd + h.del > 30)) return '';
   return encryptJson({ items: packItems(items), ...h });
 }
 
