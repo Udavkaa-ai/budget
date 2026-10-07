@@ -3,7 +3,7 @@ import { Toggle, Segmented } from '../components/UI';
 import { showAlert } from '../dialog';
 import { haptics } from '../haptics';
 import { BankSettings } from '../components/BankSettings';
-import {View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Modal, TextInput, BackHandler } from 'react-native';
+import {View, Text, ScrollView, TouchableOpacity, Pressable, StyleSheet, Share, Modal, TextInput, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSupportUnread } from '../supportStore';
 import { isPersonalBuild } from '../bank/inbox';
@@ -424,6 +424,20 @@ export default function SettingsScreen() {
       { text: 'Отмена', style: 'cancel' },
       { text: 'Выйти', style: 'destructive', onPress: logout },
     ]);
+  };
+
+  // Сервер шлёт на этот же телефон два пуша: обычный и фоновый (как у семей
+  // с шифрованием). Показываем, что ответил Google, — видно, где обрыв.
+  const testPush = async () => {
+    try {
+      setPushState(await registerPush(user?.name || ''));
+      const r = await pushSettings.test();
+      const line = (l: Array<{ kind: string; ok: boolean; error?: string }>) =>
+        l.length ? l.map(x => `${x.kind === 'web' ? 'браузер' : 'приложение'}: ${x.ok ? 'отправлено' : 'ошибка — ' + x.error}`).join('\n') : 'нет подписок';
+      showAlert('Тест отправлен',
+        `Обычное:\n${line(r.system)}\n\nФоновое:\n${line(r.background)}\n\n` +
+        'Через несколько секунд должны прийти «🔔 Проверка» и «🔔 Проверка (фон)». Сверните ФИНИК, чтобы увидеть их в шторке.');
+    } catch (e) { showAlert('Не получилось', String((e as Error)?.message || e)); }
   };
 
   const togglePush = async (v: boolean) => {
@@ -860,6 +874,9 @@ export default function SettingsScreen() {
                 }}
               />
               <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>{DETAIL_HINT[pushDetail]}</Text>
+              <Pressable onPress={testPush} style={{ marginTop: spacing.md }}>
+                <Text style={{ color: t.primary, fontWeight: '700' }}>Прислать тестовое уведомление ›</Text>
+              </Pressable>
             </View>
           )}
         </Card>

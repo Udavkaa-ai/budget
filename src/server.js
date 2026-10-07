@@ -615,7 +615,9 @@ app.delete('/api/expenses/:id', authMiddleware, async (req, res) => {
 const notifier = createNotifier({
   getSubs: (family, by) => getFamilyPushSubscriptions(family, [by, loginOfName(family, by)])
     .filter(s => getUserPushEnabled(s.userId, family)),
-  send: (subs, payload) => sendPushToSubscriptions(subs, payload).catch(() => {}),
+  send: (subs, payload) => sendPushToSubscriptions(subs, payload)
+    .then(n => console.log(`📨 Пуш от ${payload.by}: доставлено ${n} из ${subs.length}`))
+    .catch(() => {}),
   detailOf: (sub, family) => getUserPushDetail(sub.userId, family),
 });
 function loginOfName(family, name) {
@@ -690,22 +692,37 @@ async function sendFcm(sub, payload) {
   }
 }
 
-async function sendPushToSubscriptions(subscriptions, payload) {
-  const results = await Promise.allSettled(
-    subscriptions
-      // старые сборки приложения регистрировали Expo-токен как веб-подписку —
-      // доставить по нему нельзя, пропускаем
-      .filter(sub => sub.fcm || /^https:/.test(sub.endpoint || ''))
-      .map(sub =>
-      (sub.fcm ? sendFcm(sub, payload) : webpush.sendNotification(sub, JSON.stringify(payload))).catch(err => {
-        // 410 Gone — подписка протухла, удаляем
-        if (err.statusCode === 410) removePushSubscription(sub.endpoint, sub.family);
-        throw err;
-      })
-    )
-  );
-  return results.filter(r => r.status === 'fulfilled').length;
+// Отправка по подпискам; детали по каждой — для тестовой кнопки и лога
+async function sendPushDetailed(subscriptions, payload) {
+  const list = subscriptions
+    // старые сборки приложения регистрировали Expo-токен как веб-подписку —
+    // доставить по нему нельзя, пропускаем
+    .filter(sub => sub.fcm || /^https:/.test(sub.endpoint || ''));
+  return Promise.all(list.map(async sub => {
+    const kind = sub.fcm ? `app${sub.app ? ' ' + sub.app : ''}` : 'web';
+    try {
+      await (sub.fcm ? sendFcm(sub, payload) : webpush.sendNotification(sub, JSON.stringify(payload)));
+      return { kind, ok: true };
+    } catch (err) {
+      // 410 Gone — подписка протухла, удаляем
+      if (err.statusCode === 410) removePushSubscription(sub.endpoint, sub.family);
+      console.error(`🔕 Пуш ${kind} для ${sub.userId} не доставлен:`, String(err.message || err).slice(0, 300));
+      return { kind, ok: false, error: String(err.message || err).slice(0, 300) };
+    }
+  }));
 }
+async function sendPushToSubscriptions(subscriptions, payload) {
+  return (await sendPushDetailed(subscriptions, payload)).filter(r => r.ok).length;
+}
+
+// Тест: себе — обычное системное уведомление и «фоновое» (как у E2E-семей)
+app.post('/api/push/test', authMiddleware, async (req, res) => {
+  const subs = getUserPushSubscriptions(req.user.name, req.user.login, req.user.family);
+  const id = Date.now().toString(36);
+  const sys = await sendPushDetailed(subs, { title: '🔔 Проверка', body: 'Обычное уведомление дошло', tag: 'test-sys', id: id + 's', url: '/' });
+  const bg = await sendPushDetailed(subs.filter(s => s.fcm), { e2e: true, hints: [], title: '🔔 Проверка (фон)', body: 'Фоновое уведомление дошло', tag: 'test-bg', id: id + 'b', url: '/' });
+  res.json({ subs: subs.length, system: sys, background: bg });
+});
 
 app.get('/api/push/vapid-key', authMiddleware, (req, res) => {
   res.json({ publicKey: getOrCreateVapidKeys().publicKey });

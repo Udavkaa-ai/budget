@@ -401,11 +401,15 @@ export const support = {
   close: () => api.post<{ ok: boolean }>('/api/support/close', {}),
 };
 
+export interface PushTestResult { kind: string; ok: boolean; error?: string }
+
 export const pushSettings = {
   get: () => api.get<{ enabled: boolean; detail?: 'short' | 'full' | 'hidden' }>('/api/push/settings'),
   set: (enabled: boolean) => api.post<{ ok: boolean }>('/api/push/settings', { enabled }),
   // что показывать в уведомлении о расходах партнёра
   setDetail: (detail: 'short' | 'full' | 'hidden') => api.post<{ ok: boolean }>('/api/push/settings', { detail }),
+  // тест: сервер шлёт себе обычный и фоновый пуш и говорит, что ответил Google
+  test: () => api.post<{ subs: number; system: PushTestResult[]; background: PushTestResult[] }>('/api/push/test', {}),
 };
 
 // ─── Crowd classifier dictionary ─────────────────────────────────────────────
