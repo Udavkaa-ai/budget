@@ -1226,6 +1226,18 @@ export function getUserPushEnabled(userId, family) {
   return s.pushEnabled?.[userId] !== false; // default true
 }
 
+// Подробность уведомлений, которые видит пользователь: short | full | hidden
+export function getUserPushDetail(userId, family) {
+  const d = familySettings(family).pushDetail?.[userId];
+  return d === 'full' || d === 'hidden' ? d : 'short';
+}
+export function setUserPushDetail(userId, family, detail) {
+  const s = familySettings(family);
+  if (!s.pushDetail) s.pushDetail = {};
+  s.pushDetail[userId] = detail;
+  debouncedSave();
+}
+
 export function setUserPushEnabled(userId, family, enabled) {
   const s = familySettings(family);
   if (!s.pushEnabled) s.pushEnabled = {};

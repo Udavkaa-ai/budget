@@ -691,6 +691,8 @@ async function initPushNotifications() {
     pushSelfToSW();
     const settings = await apiJson('GET', '/api/push/settings');
     updatePushToggleUI(settings.enabled);
+    const det = document.getElementById('push-detail');
+    if (det) det.value = settings.detail || 'short';
     if (!settings.enabled) return;
     await subscribeToPush();
   } catch { /* push not critical */ }
@@ -3798,6 +3800,14 @@ function setupEventListeners() {
       showToastSuccess(n ? `Удалено дубликатов: ${n}` : 'Дубликатов не найдено');
       refreshCurrentScreen();
     } catch { showToastError('Не удалось убрать дубликаты'); }
+  });
+
+  // Подробность уведомлений (выбирает получатель)
+  document.getElementById('push-detail')?.addEventListener('change', async e => {
+    try {
+      await apiJson('POST', '/api/push/settings', { detail: e.target.value });
+      showToastSuccess('Сохранено');
+    } catch { showToastError('Не удалось сохранить'); }
   });
 
   // Push notifications toggle
