@@ -35,6 +35,7 @@ const Bank = NativeModules.FinikBank as undefined | {
   setPackages(list: string[]): void;
   startDiscover(minutes: number): void;
   openNotificationAccess(): void;
+  rebind?(): void;
 };
 const Share = NativeModules.FinikShare as undefined | { consume(): Promise<string | null> };
 
@@ -204,13 +205,23 @@ export async function ingest(text: string, from: string, source: InboxItem['sour
 
 // Забрать то, что накопил нативный перехватчик (личная сборка)
 let draining = false;
+let rebound = false;
 export async function drainNative(): Promise<number> {
   if (!Bank || draining) return 0;
+  // Раз за запуск просим систему переподключить сервис уведомлений
+  if (!rebound) { rebound = true; try { Bank.rebind?.(); } catch { /* старая сборка */ } }
   draining = true;
   let added = 0;
   try {
     const list = JSON.parse(await Bank.drain()) as Array<{ source: 'sms' | 'push'; from: string; text: string; ts: number }>;
-    for (const m of list) if (await ingest(m.text, m.from, m.source, m.ts)) added++;
+    // Каждое сообщение — отдельно: раньше ошибка в одном теряла всю пачку
+    // (из нативной очереди она уже забрана)
+    for (const m of list) {
+      try { if (await ingest(m.text, m.from, m.source, m.ts)) added++; }
+      catch (e) {
+        await journal(m.source, m.from, { kind: 'unknown', bank: 'Банк', reason: `ошибка разбора: ${String((e as Error)?.message || e).slice(0, 120)}` }, '', m.text).catch(() => {});
+      }
+    }
   } catch { /* не критично */ } finally { draining = false; }
   settleIncomes().catch(() => {});
   return added;
@@ -303,6 +314,7 @@ export interface BankStatus {
   notificationAccess: boolean; sms: boolean; push: boolean; smsPermission: boolean;
   dropped: number; senders: string[]; packages: string[]; discovered: string[]; discoverUntil: number;
   smsSeen: number; smsFrom: string[]; smsRead: boolean;
+  pushSeen?: number; pushLast?: number; listenerOn?: number; listenerOff?: number;
 }
 export async function getBankStatus(): Promise<BankStatus | null> {
   if (!Bank) return null;

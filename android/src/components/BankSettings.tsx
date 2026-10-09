@@ -19,6 +19,20 @@ const KIND_LABEL: Record<string, string> = {
   purchase: 'покупка', transfer: 'перевод', income: 'доход', ignore: 'пропущено', unknown: 'не распознано',
 };
 
+// «Приложения: 5 · получено 12, последнее сегодня 14:05» + не отключён ли сервис
+function pushHint(st: BankStatus) {
+  const ago = (ts?: number) => {
+    if (!ts) return 'ещё не было';
+    const d = new Date(ts), now = new Date();
+    const hm = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === now.toDateString() ? `сегодня ${hm}` : `${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })} ${hm}`;
+  };
+  const parts = [`Приложения: ${st.packages.length}`];
+  if (st.pushSeen != null) parts.push(`получено ${st.pushSeen}, последнее ${ago(st.pushLast)}`);
+  if (st.listenerOff && st.listenerOff > (st.listenerOn || 0)) parts.push('сервис отключён системой — выключите и включите доступ к уведомлениям');
+  return parts.join(' · ');
+}
+
 export function BankSettings() {
   const t = useTheme();
   const pending = useBankInboxCount();
@@ -79,7 +93,7 @@ export function BankSettings() {
 
       <Line icon="notifications-outline" title="Уведомления банков"
         ok={st.push ? st.notificationAccess : undefined}
-        hint={!st.notificationAccess ? 'Включите ФИНИК в «Доступе к уведомлениям»' : `Приложения: ${st.packages.length}`}
+        hint={!st.notificationAccess ? 'Включите ФИНИК в «Доступе к уведомлениям»' : pushHint(st)}
         right={st.notificationAccess
           ? <Toggle value={st.push} onValueChange={v => { bankNative.setEnabled('push', v); setSt({ ...st, push: v }); }} />
           : <Pressable onPress={() => bankNative.openNotificationAccess()}><Text style={{ color: t.primary, fontWeight: '700' }}>Открыть</Text></Pressable>} />

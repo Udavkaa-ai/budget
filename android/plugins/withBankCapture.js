@@ -147,11 +147,20 @@ class BankSmsReceiver : BroadcastReceiver() {
 const LISTENER = `package ${PKG}
 
 import android.app.Notification
+import android.content.Context
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 // Уведомления банковских приложений (пакеты из белого списка)
 class BankNotificationListener : NotificationListenerService() {
+  private fun mark(key: String) {
+    getSharedPreferences("finik_bank", Context.MODE_PRIVATE).edit().putLong(key, System.currentTimeMillis()).apply()
+  }
+  // Диагностика: подключён ли сервис (после обновления приложения прошивка
+  // может не подключить его заново, хотя доступ в настройках включён)
+  override fun onListenerConnected() { mark("listener_on") }
+  override fun onListenerDisconnected() { mark("listener_off") }
+
   override fun onNotificationPosted(sbn: StatusBarNotification) {
     if (!BankQueue.enabled(this, "push")) return
     val n = sbn.notification ?: return
@@ -165,6 +174,8 @@ class BankNotificationListener : NotificationListenerService() {
       BankQueue.discover(this, sbn.packageName, text)
       return
     }
+    val p = getSharedPreferences("finik_bank", Context.MODE_PRIVATE)
+    p.edit().putInt("push_seen", p.getInt("push_seen", 0) + 1).putLong("push_last", System.currentTimeMillis()).apply()
     BankQueue.offer(this, "push", sbn.packageName, text, sbn.postTime)
   }
 }
@@ -208,7 +219,22 @@ class BankModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
       .put("discoverUntil", p.getLong("discover_until", 0))
       .put("smsSeen", p.getInt("sms_seen", 0) + p.getInt("inbox_seen", 0))
       .put("smsFrom", JSONArray((p.getStringSet("sms_from", emptySet()) ?: emptySet()).toList()))
+      .put("pushSeen", p.getInt("push_seen", 0))
+      .put("pushLast", p.getLong("push_last", 0))
+      .put("listenerOn", p.getLong("listener_on", 0))
+      .put("listenerOff", p.getLong("listener_off", 0))
     promise.resolve(o.toString())
+  }
+
+  // Переподключить сервис уведомлений (HiOS и др. не всегда делают это сами
+  // после обновления приложения). Если уже подключён — ничего не происходит.
+  @ReactMethod fun rebind() {
+    if (android.os.Build.VERSION.SDK_INT >= 24) {
+      try {
+        android.service.notification.NotificationListenerService.requestRebind(
+          android.content.ComponentName(ctx, BankNotificationListener::class.java))
+      } catch (e: Exception) { }
+    }
   }
 
   @ReactMethod fun setEnabled(kind: String, on: Boolean) { prefs().edit().putBoolean("on_" + kind, on).apply() }
