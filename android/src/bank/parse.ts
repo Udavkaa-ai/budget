@@ -62,7 +62,7 @@ const clean = (m: string) => m
 
 export function parseBankMessage(text: string, sender = ''): ParsedBank {
   const p = parseCore(text, sender);
-  if (p.amount) {
+  if (p.amount && p.balance == null) {
     const t = (text || '').replace(/\s+/g, ' ');
     const b = t.match(new RegExp(`(?:Баланс|Доступно|Остаток)(?![а-яё])[:\\s]*${AMT}`, 'i'));
     if (b) p.balance = parseAmount(b[1]);
@@ -101,6 +101,20 @@ function parseCore(text: string, sender: string): ParsedBank {
     // «Списание» человеку («Алексей К.») — перевод; «Покупка/Оплата» у ИП с именем — покупка
     if (/перевод/.test(o) || (/списание/.test(o) && looksLikePerson(merchant))) return { kind: 'transfer', bank, amount, merchant, card, time };
     return { kind: 'purchase', bank, amount, merchant, card, time };
+  }
+
+  // ── Сбер, пуш без слов: «➖ 362 ₽ Rostic's  📉 382 101,25 ₽ •• 0717»
+  //    ➖ — списание, ➕ — зачисление, 📉/📈 — остаток на карте
+  m = t.match(new RegExp(`^([➖➕−+\\-])\\s*${AMT}\\s*(.*?)\\s*(?:📉|📈)\\s*${AMT}\\s*(?:[•·*]+\\s*(\\d{4}))?`));
+  if (m) {
+    const [, sign, amt, rest, bal, card] = m;
+    const amount = parseAmount(amt);
+    const merchant = clean(rest || '');
+    const balance = parseAmount(bal);
+    const time = t.match(new RegExp(TIME))?.[1];
+    if (sign === '➕' || sign === '+') return { kind: 'income', bank, amount, merchant, card, time, balance, reason: 'зачисление' };
+    if (/перевод/i.test(merchant) || looksLikePerson(merchant)) return { kind: 'transfer', bank, amount, merchant: merchant.replace(/^перевод\s*/i, ''), card, time, balance };
+    return { kind: 'purchase', bank, amount, merchant, card, time, balance };
   }
 
   // ── Общий случай (пуши банковских приложений): «Покупка 450 ₽ · Пятёрочка»,
