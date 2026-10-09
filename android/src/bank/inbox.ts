@@ -127,7 +127,7 @@ async function reconcileBalance(p: ParsedBank, source: InboxItem['source'], from
   await setPref(key, JSON.stringify({ bal: p.balance, ts }));
   if (!last || ts - last.ts > 7 * 86_400_000) return;
   const expected = last.bal + (p.kind === 'income' ? p.amount : -p.amount);
-  const diff = Math.round((expected - p.balance) * 100) / 100;
+  let diff = Math.round((expected - p.balance) * 100) / 100;
   if (Math.abs(diff) < 1) return;
   const d = await db();
   if (diff > 0) {
@@ -135,6 +135,26 @@ async function reconcileBalance(p: ParsedBank, source: InboxItem['source'], from
     const known = await d.getAllAsync<{ payload: string }>(
       'SELECT payload FROM bank_inbox WHERE ts > ? AND ts <= ?', [last.ts, ts]);
     if (known.some(r => { const k = JSON.parse(r.payload) as ParsedBank; return k.balance == null && Math.abs((k.amount || 0) - diff) < 1; })) return;
+    // Часть пропажи — перевод себе в другой банк: там за это время пришло
+    // пополнение на эту сумму (ВТБ › Яндекс). Это не расход и не доход.
+    const incomes = (await d.getAllAsync<{ id: number; payload: string; status: string; ts: number }>(
+      `SELECT id, payload, status, ts FROM bank_inbox WHERE status IN ('income-wait', 'income-added') AND ts > ? AND ts <= ?`,
+      [last.ts, ts + WINDOW]))
+      .map(r => ({ ...r, p: JSON.parse(r.payload) as ParsedBank }))
+      .filter(r => r.p.bank !== p.bank && r.p.amount)
+      .sort((a, b) => (b.p.amount || 0) - (a.p.amount || 0));
+    let rest = diff;
+    for (const inc of incomes) {
+      const a = inc.p.amount || 0;
+      if (a > rest + 0.5) continue;
+      rest = Math.round((rest - a) * 100) / 100;
+      if (inc.status === 'income-added') await unrecordIncome(inc.ts, a).catch(() => {});
+      await d.runAsync(`UPDATE bank_inbox SET status = 'own' WHERE id = ?`, [inc.id]);
+      await journal(source, from, { kind: 'transfer', bank: p.bank, amount: a, card: p.card, reason: `в ${inc.p.bank}` },
+        ' · перевод между своими счетами, найден по балансу — не расход');
+    }
+    if (rest < 1) return;
+    diff = rest;
     // Время неизвестно — где-то между двумя сообщениями; ставим на секунду раньше текущего
     const missed: ParsedBank = { kind: 'purchase', bank: p.bank, amount: diff, merchant: '', card: p.card, reason: 'по балансу' };
     const item = { ...missed, source, from, ts: ts - 1000, category: 'Прочее', guess: 'balance' as const };
@@ -225,6 +245,18 @@ export async function drainNative(): Promise<number> {
   } catch { /* не критично */ } finally { draining = false; }
   settleIncomes().catch(() => {});
   return added;
+}
+
+// Убрать из кэшфлоу записанный доход, если он оказался переводом себе
+async function unrecordIncome(ts: number, amount: number) {
+  const dt = new Date(ts);
+  const ym = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+  const cf = await cashflow.get(ym);
+  const list = [...(Array.isArray(cf.incomeDays) ? cf.incomeDays : [])];
+  const i = list.findIndex(e => e.day === dt.getDate() && e.amount === Math.round(amount) && e.user === currentUserName());
+  if (i < 0) return;
+  list.splice(i, 1);
+  await cashflow.save(ym, { ...cf, incomeDays: list });
 }
 
 // Доходы, которые 10 минут не нашли пары-перевода со своего счёта, — в кэшфлоу

@@ -57,6 +57,7 @@ function looksLikePerson(name: string): boolean {
 const clean = (m: string) => m
   .replace(/^(?:Баланс|Доступно|Остаток)(?![а-яё]).*$/i, '')
   .replace(/[,;]?\s*(?:карта|карты|сч[её]т)\s*\*?\d{4}.*$/i, '')   // хвост «, карта *8539»
+  .replace(/\s*\d{2}\.\d{2}\.\d{4}.*$/, '')                          // хвост «09.10.2026 07:22. Доступно …»
   .replace(/\s+/g, ' ').replace(/[.,;:\s·•]+$/, '').trim();
 
 export function parseBankMessage(text: string, sender = ''): ParsedBank {
@@ -107,7 +108,10 @@ function parseCore(text: string, sender: string): ParsedBank {
   const amtM = t.match(new RegExp(`[−\\-]?\\s*${AMT}`, 'i'));
   if (amtM) {
     const amount = parseAmount(amtM[1]);
-    const op = t.match(/(покупка|оплата|списание|перевод|зачисление|поступление|пополнение|возврат|кешб[эе]к|cashback)/i)?.[1]?.toLowerCase() || '';
+    // Признаки дохода проверяем первыми: у Яндекса заголовок «Входящий перевод»,
+    // а суть — «Пополнение на 100 RUB»; слово «перевод» иначе делало его расходом
+    const incomeOp = t.match(/(входящий\s+перевод|перевод\s+от|зачисление|поступление|пополнение|возврат|кешб[эе]к|cashback)/i)?.[1]?.toLowerCase();
+    const op = incomeOp ? 'зачисление' : t.match(/(покупка|оплата|списание|перевод)/i)?.[1]?.toLowerCase() || '';
     // место: «в X», «X» после суммы или заголовок пуша (первая строка)
     let merchant = t.match(/(?:оплата|покупка)\s+(?:в|на)\s+(.+?)(?:\s+\d|\s+на сумму|[.,]|$)/i)?.[1]
       || t.slice((amtM.index ?? 0) + amtM[0].length).replace(/^[\s·•,.:\-—]+/, '').split(/\s+(?:Баланс|Доступно|Остаток)(?![а-яё])/i)[0]
