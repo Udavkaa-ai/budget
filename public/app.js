@@ -2630,6 +2630,95 @@ function renderFamilyNameEdit(container, famId, currentName) {
   });
 }
 
+// Админка: пользователи и записи по дням за выбранный период (по Москве).
+// История записей восстановлена полностью; «активные» до появления учёта
+// заходов — только по тем, кто вносил расходы в обычных (нешифрованных) семьях.
+let adminTimelineCharts = [];
+let adminTimelinePeriod = 30;
+async function renderAdminTimeline(box) {
+  box.innerHTML = '<div class="loading">Загрузка статистики…</div>';
+  const r = await apiJson('GET', '/api/admin/timeline');
+  const all = r?.days || [];
+  if (!all.length) { box.innerHTML = '<div class="empty-state">Пока нет данных</div>'; return; }
+
+  const draw = () => {
+    const per = adminTimelinePeriod;
+    const rows = per ? all.slice(-per) : all;
+    // больше 92 дней — по неделям, иначе столбики не читаются
+    const weekly = rows.length > 92;
+    const buckets = [];
+    for (const x of rows) {
+      const key = weekly ? weekStart(x.d) : x.d;
+      const b = buckets[buckets.length - 1];
+      if (b && b.key === key) {
+        b.records += x.records; b.recordsE2E += x.recordsE2E; b.newUsers += x.newUsers;
+        b.active = Math.max(b.active, x.active); b.totalUsers = x.totalUsers;
+      } else buckets.push({ key, ...x });
+    }
+    const label = k => { const [, mm, dd] = k.split('-'); return `${+dd}.${mm}`; };
+    const sum = (k) => rows.reduce((s, x) => s + x[k], 0);
+    const last = rows[rows.length - 1], first = rows[0];
+    const C = { primary: cssVar('--primary'), border: cssVar('--border'), faint: cssVar('--text-faint') };
+    const series = seriesColors();
+
+    box.innerHTML = `
+      <div class="chart-card-head">
+        <div class="settings-title">Статистика</div>
+        <div class="admin-period">${[[30, '30 дн'], [90, '3 мес'], [365, 'год'], [0, 'всё']].map(([v, t]) =>
+          `<button class="chip${v === per ? ' active' : ''}" data-per="${v}">${t}</button>`).join('')}</div>
+      </div>
+      <div class="chart-kpis">
+        <div class="chart-kpi"><span class="chart-kpi-label">Пользователей</span><span class="chart-kpi-value">${last.totalUsers}</span></div>
+        <div class="chart-kpi"><span class="chart-kpi-label">Новых за период</span><span class="chart-kpi-value">+${last.totalUsers - first.totalUsers + first.newUsers}</span></div>
+        <div class="chart-kpi"><span class="chart-kpi-label">Записей за период</span><span class="chart-kpi-value">${(sum('records') + sum('recordsE2E')).toLocaleString('ru-RU')}</span></div>
+      </div>
+      <div class="admin-chart-title">Пользователи${weekly ? ' · по неделям' : ''}</div>
+      <div class="chart-box chart-box--sm"><canvas id="ch-adm-users"></canvas></div>
+      <div class="chart-legend"><span><i class="legend-line" style="border-color:${C.primary}"></i>всего</span><span><i class="legend-sq" style="background:${series[1]}"></i>активные${weekly ? ' (макс. за день)' : ''}</span></div>
+      <div class="admin-chart-title">Записи${weekly ? ' за неделю' : ' в день'}</div>
+      <div class="chart-box chart-box--sm"><canvas id="ch-adm-records"></canvas></div>
+      <div class="chart-legend"><span><i class="legend-sq" style="background:${series[0]}"></i>обычные</span><span><i class="legend-sq" style="background:${series[2]}"></i>зашифрованные</span></div>
+      <div class="settings-hint">Активные — кто заходил в приложение или веб (учёт заходов ведётся с ${r.activitySince ? r.activitySince.split('-').reverse().join('.') : 'сегодня'}); раньше — только кто вносил расходы в нешифрованных семьях.${r.unknownUsers ? ` Без даты регистрации: ${r.unknownUsers}.` : ''}</div>`;
+
+    box.querySelectorAll('[data-per]').forEach(b => b.addEventListener('click', () => { adminTimelinePeriod = +b.dataset.per; draw(); }));
+    adminTimelineCharts.forEach(c => c.destroy());
+    const opts = (stacked) => ({
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => (weekly ? 'неделя с ' : '') + it[0].label } } },
+      scales: {
+        x: { stacked, grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
+        y: { stacked, beginAtZero: true, grid: { color: C.border }, border: { display: false }, ticks: { maxTicksLimit: 5, precision: 0 } },
+      },
+    });
+    const labels = buckets.map(b => label(b.key));
+    adminTimelineCharts = [
+      new Chart(box.querySelector('#ch-adm-users'), {
+        data: { labels, datasets: [
+          { type: 'line', label: 'Всего', data: buckets.map(b => b.totalUsers), borderColor: C.primary, borderWidth: 2.5, pointRadius: 0, stepped: true },
+          { type: 'bar', label: 'Активные', data: buckets.map(b => b.active), backgroundColor: withAlpha(series[1], 0.7), borderRadius: 2 },
+        ] },
+        options: opts(false),
+      }),
+      new Chart(box.querySelector('#ch-adm-records'), {
+        type: 'bar',
+        data: { labels, datasets: [
+          { label: 'Обычные', data: buckets.map(b => b.records), backgroundColor: withAlpha(series[0], 0.8), borderRadius: 2 },
+          { label: 'Зашифрованные', data: buckets.map(b => b.recordsE2E), backgroundColor: withAlpha(series[2], 0.8), borderRadius: 2 },
+        ] },
+        options: opts(true),
+      }),
+    ];
+  };
+  draw();
+}
+// Понедельник недели для «ГГГГ-ММ-ДД»
+function weekStart(d) {
+  const t = new Date(d + 'T12:00:00Z');
+  t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+  return t.toISOString().slice(0, 10);
+}
+
 async function openAdminPanel(month, year) {
   document.getElementById('admin-overlay').classList.remove('hidden');
   document.getElementById('admin-panel').classList.remove('hidden');
@@ -2684,8 +2773,10 @@ async function openAdminPanel(month, year) {
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.totalUsers}</div><div class="admin-stat-label">пользователей</div></div>
       <div class="admin-stat-card"><div class="admin-stat-num">${stats.users.reduce((s,u)=>s+u.expenseCount,0)}</div><div class="admin-stat-label">записей всего</div></div>
     </div>
+    <div id="admin-timeline" class="card chart-card admin-timeline"></div>
     <div id="admin-families-stat"></div>
   `;
+  renderAdminTimeline(body.querySelector('#admin-timeline')).catch(() => {});
 
   (async () => {
     const box = body.querySelector('#admin-support');

@@ -43,6 +43,8 @@ import {
   getMonthDailyTotals,
   getUserByLogin,
   getUsers,
+  markActive,
+  getAdminTimeline,
   getUserStats,
   addUser,
   updateUser,
@@ -184,6 +186,7 @@ function authMiddleware(req, res, next) {
 
   try {
     req.user = jwt.verify(token, config.jwtSecret);
+    markActive(req.user.login, req.user.family);   // статистика «заходил сегодня» для админки
     next();
   } catch {
     return res.status(401).json({ error: 'Недействительный токен' });
@@ -1220,6 +1223,11 @@ app.post('/api/admin/force-update', authMiddleware, adminMiddleware, (req, res) 
 });
 
 // Статистика использования (только количество, без сумм)
+// Ряд по дням для графиков админки (пользователи, активные, записи)
+app.get('/api/admin/timeline', authMiddleware, adminMiddleware, (_req, res) => {
+  res.json(getAdminTimeline());
+});
+
 app.get('/api/admin/stats', authMiddleware, adminMiddleware, (req, res) => {
   const now = new Date();
   const month = req.query.month ? parseInt(req.query.month) : now.getMonth() + 1;
