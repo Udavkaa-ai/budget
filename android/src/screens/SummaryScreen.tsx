@@ -9,6 +9,7 @@ import PagerView from 'react-native-pager-view';
 import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, whoLabel, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
+import { CategoryTrend } from '../components/CategoryTrend';
 import { useCategories } from '../categories';
 import { MonthPickerModal } from '../components/Pickers';
 import { usePremium } from '../premium';
@@ -802,6 +803,9 @@ export default function SummaryScreen() {
           <ScrollView contentContainerStyle={{ padding: spacing.md }}>
             {drillList.length === 0 && (
               <ActivityIndicator style={{ marginTop: 40 }} color={t.primary} />
+            )}
+            {drillCat && drillList.length > 0 && (
+              <CategoryTrend cat={drillCat} month={month} year={year} user={drillUser} current={drillList} />
             )}
             {drillList.filter(e => !drillUser || e.user === drillUser).map(e => (
               <Card key={e.id}>
