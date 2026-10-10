@@ -3044,6 +3044,13 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--p
 .chart-box--sm { height: 160px; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+/* Карточка категории: линия-образец в легенде и сравнение с прошлыми месяцами */
+.legend-line { display: inline-block; width: 18px; border-top: 3px solid; }
+.legend-line--dash { border-top: 2px dashed; }
+#category-trend { margin: 12px 0; }
+.cat-trend-delta { margin-top: 8px; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cat-trend-delta.is-over { color: var(--danger); }
+.cat-trend-delta.is-under { color: var(--success); }
 .chart-legend i { display: inline-block; flex: none; }
 .lg-line { width: 16px; height: 3px; border-radius: 2px; background: var(--primary); }
 .lg-dash { width: 16px; height: 0; border-top: 2px dashed var(--text-faint); }

@@ -2055,10 +2055,12 @@ async function loadCategoryDetail(cat, month, year) {
 
   const listEl = document.getElementById('category-detail-list');
   listEl.innerHTML = '<div class="loading">Загрузка</div>';
+  document.getElementById('category-trend').classList.add('hidden');
 
   try {
     const expenses = await apiJson('GET', `/api/expenses/category/${encodeURIComponent(cat)}?${params}`);
     listEl.innerHTML = '';
+    if (Array.isArray(expenses) && expenses.length) renderCategoryTrend(cat, month, year, expenses).catch(() => {});
 
     if (!Array.isArray(expenses) || expenses.length === 0) {
       listEl.innerHTML = '<div class="empty-state">Нет расходов</div>';
@@ -2071,6 +2073,81 @@ async function loadCategoryDetail(cat, month, year) {
   } catch {
     listEl.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
   }
+}
+
+// Карточка категории: накопленные траты по дням за месяц (сплошная линия)
+// против трёх прошлых месяцев (пунктир своим цветом). Как CategoryTrend в приложении.
+let categoryTrendChart = null;
+async function renderCategoryTrend(cat, month, year, current) {
+  const box = document.getElementById('category-trend');
+  const now = new Date();
+  const m = month || now.getMonth() + 1, y = year || now.getFullYear();
+  const MONTHS_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  const shift = d => { const t = new Date(y, m - 1 + d, 1); return { m: t.getMonth() + 1, y: t.getFullYear() }; };
+  const dimOf = (mm, yy) => new Date(yy, mm, 0).getDate();
+  const isCurrent = now.getMonth() + 1 === m && now.getFullYear() === y;
+  const today = isCurrent ? now.getDate() : dimOf(m, y);
+  const cum = (list, upTo) => {
+    const daily = new Array(31).fill(0);
+    for (const e of list) { const d = parseInt((e.date || '').split('.')[0], 10); if (d >= 1 && d <= 31) daily[d - 1] += e.amount || 0; }
+    let acc = 0; return daily.map((v, i) => { acc += v; return i < upTo ? acc : null; });
+  };
+  const prevMonths = [1, 2, 3].map(i => shift(-i));
+  const prev = await Promise.all(prevMonths.map(({ m: pm, y: py }) => {
+    const q = new URLSearchParams({ month: pm, year: py, ...(summaryUserFilter ? { user: summaryUserFilter } : {}) });
+    return apiJson('GET', `/api/expenses/category/${encodeURIComponent(cat)}?${q}`).then(l => Array.isArray(l) ? l : []).catch(() => []);
+  }));
+  // пока грузили, могли открыть другую категорию
+  if (!document.getElementById('category-detail-title').textContent.includes(cat)) return;
+
+  const series = seriesColors();
+  const C = { primary: cssVar('--primary'), faint: cssVar('--text-faint'), border: cssVar('--border'), danger: cssVar('--danger'), success: cssVar('--success') };
+  const colors = [series[1], series[2], C.faint];
+  const lines = [
+    { label: MONTHS_FULL[m - 1], data: cum(current, today), color: C.primary, dashed: false },
+    ...prevMonths.map((pm, i) => ({ label: MONTHS_FULL[pm.m - 1], data: cum(prev[i], dimOf(pm.m, pm.y)), color: colors[i], dashed: true })),
+  ];
+  const totals = lines.map(l => Math.max(0, ...l.data.filter(v => v != null)));
+  const at = (data, d) => { for (let i = d - 1; i >= 0; i--) if (data[i] != null) return data[i]; return 0; };
+  const nowVal = at(lines[0].data, today);
+  const avg = lines.slice(1).reduce((s, l) => s + at(l.data, today), 0) / 3;
+  const delta = avg > 0 ? Math.round((nowVal / avg - 1) * 100) : null;
+  const deltaCls = delta == null ? '' : delta > 10 ? 'is-over' : delta < -10 ? 'is-under' : '';
+
+  box.innerHTML = `
+    <div class="chart-card-head"><div class="settings-title">По дням против прошлых месяцев</div></div>
+    <div class="chart-box"><canvas id="ch-cat-trend" aria-label="Траты категории по дням против прошлых месяцев"></canvas></div>
+    <div class="chart-legend">${lines.map((l, i) => `<span><i class="legend-line${l.dashed ? ' legend-line--dash' : ''}" style="border-color:${l.color}"></i>${i === 0 ? '<b>' : ''}${l.label} · ${fmt(totals[i])}${i === 0 && isCurrent ? ' (пока)' : ''}${i === 0 ? '</b>' : ''}</span>`).join('')}</div>
+    ${delta != null ? `<div class="cat-trend-delta ${deltaCls}">${isCurrent ? `На ${today}-е` : 'За месяц'}: ${fmt(nowVal)}, обычно ${isCurrent ? 'к этому дню ' : ''}${fmt(avg)}${delta === 0 ? ' — как обычно' : ` (${delta > 0 ? '+' : '−'}${Math.abs(delta)}%)`}</div>` : ''}`;
+  box.classList.remove('hidden');
+
+  categoryTrendChart?.destroy();
+  categoryTrendChart = new Chart(document.getElementById('ch-cat-trend'), {
+    type: 'line',
+    data: {
+      labels: Array.from({ length: 31 }, (_, i) => i + 1),
+      // текущий месяц — последним, чтобы рисовался поверх пунктиров
+      datasets: [...lines.slice(1).reverse(), lines[0]].map(l => ({
+        label: l.label, data: l.data, borderColor: l.color, borderWidth: l.dashed ? 2 : 2.8,
+        borderDash: l.dashed ? [5, 4] : [], pointRadius: 0, pointHoverRadius: 4, tension: 0.2,
+        fill: l.dashed ? false : 'origin', backgroundColor: l.dashed ? 'transparent' : withAlpha(C.primary, 0.1),
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: motionOK() ? { duration: 600 } : false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { filter: it => it.parsed.y != null, callbacks: { title: it => `${it[0].label}-е число`, label: ctx => ` ${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y))}` } },
+      },
+      scales: {
+        x: { grid: { display: false }, border: { display: false },
+          ticks: { maxRotation: 0, autoSkip: false, callback: (_v, i) => (i === 0 || (i + 1) % 5 === 0) ? i + 1 : '' } },
+        y: { beginAtZero: true, grid: { color: C.border }, border: { display: false }, ticks: { maxTicksLimit: 5, callback: v => kFmt(v) } },
+      },
+    },
+  });
 }
 
 // ─── CHART SCREEN ─────────────────────────────────────────────────────────────
