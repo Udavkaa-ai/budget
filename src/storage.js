@@ -1037,6 +1037,7 @@ export async function addUser({ login, password, name, family, isAdmin = false }
     name: name.trim(),
     family: (family || 'family1').trim(),
     isAdmin,
+    createdAt: new Date().toISOString(),
   };
   data.users.push(user);
   debouncedSave();
@@ -1381,4 +1382,101 @@ export function getAdminPushSubscriptions() {
     `${u.name}|${fam(u.family)}`, `${u.login}|${fam(u.family)}`,
   ]));
   return (data.pushSubscriptions || []).filter(s => admins.has(`${s.userId}|${s.family}`));
+}
+
+
+// ─── Статистика для админки: пользователи и записи по дням ───────────────────
+// День считаем по Москве. Заходы пользователей копятся с момента появления
+// этого кода (data.activity); прошлое восстанавливаем из того, что уже есть:
+// дата регистрации, время создания расходов, время в id шифрозаписей E2E.
+
+const MSK = 3 * 3600_000;
+const dayKey = ms => new Date(ms + MSK).toISOString().slice(0, 10);
+
+/** Отметить, что пользователь сегодня заходил (вызывается на каждый запрос — дёшево) */
+export function markActive(login, family) {
+  if (!login) return;
+  if (!data.activity) data.activity = {};
+  const d = dayKey(Date.now());
+  const day = data.activity[d] || (data.activity[d] = {});
+  if (day[login]) return;
+  day[login] = fam(family);
+  const keys = Object.keys(data.activity);
+  if (keys.length > 800) for (const k of keys.sort().slice(0, keys.length - 800)) delete data.activity[k];
+  debouncedSave();
+}
+
+// Время создания шифрозаписи из её id: «e_<время base36>_<случайное>»
+function e2eIdTime(id) {
+  const m = /^e_([0-9a-z]+)_/.exec(id || '');
+  if (!m) return null;
+  const t = parseInt(m[1], 36);
+  return t > 1.6e12 && t < Date.now() + 86_400_000 ? t : null;
+}
+
+/** Ряд по дням: новые и всего пользователей, активные, записи (обычные и шифрованные) */
+export function getAdminTimeline() {
+  const days = new Map();
+  const at = d => {
+    let r = days.get(d);
+    if (!r) days.set(d, r = { newUsers: 0, active: new Set(), records: 0, recordsE2E: 0 });
+    return r;
+  };
+
+  // Записи: обычные — по createdAt; кто вносил — тоже «активен» в тот день
+  const firstByUser = new Map();     // family|name › первый день
+  for (const e of data.expenses || []) {
+    const t = Date.parse(e.createdAt || '');
+    if (!t) continue;
+    const d = dayKey(t), key = `${fam(e.family)}|${e.user}`;
+    const r = at(d); r.records++; r.active.add(key);
+    if (!firstByUser.has(key) || d < firstByUser.get(key)) firstByUser.set(key, d);
+  }
+  // Шифрованные — по времени в id; первый день семьи — для старых аккаунтов без даты
+  const firstByFamily = new Map();
+  for (const rec of syncState().records || []) {
+    const t = e2eIdTime(rec.id);
+    if (!t) continue;
+    const d = dayKey(t);
+    at(d).recordsE2E++;
+    if (!firstByFamily.has(rec.family) || d < firstByFamily.get(rec.family)) firstByFamily.set(rec.family, d);
+  }
+  // Заходы (с момента появления учёта)
+  const nameOf = new Map((data.users || []).map(u => [u.login, u]));
+  const firstSeen = new Map();
+  for (const [d, logins] of Object.entries(data.activity || {})) {
+    for (const [login, f] of Object.entries(logins)) {
+      const u = nameOf.get(login);
+      at(d).active.add(`${f}|${u?.name || login}`);
+      if (!firstSeen.has(login) || d < firstSeen.get(login)) firstSeen.set(login, d);
+    }
+  }
+
+  // Регистрации: дата создания, иначе самое раннее, что о человеке известно
+  const allDays = [...days.keys()].sort();
+  const fallback = allDays[0] || dayKey(Date.now());
+  let unknown = 0;
+  for (const u of data.users || []) {
+    const f = fam(u.family);
+    const cands = [
+      u.createdAt ? dayKey(Date.parse(u.createdAt)) : null,
+      firstByUser.get(`${f}|${u.name}`), firstByFamily.get(f), firstSeen.get(u.login),
+    ].filter(Boolean).sort();
+    if (!cands.length) unknown++;
+    at(cands[0] || fallback).newUsers++;
+  }
+
+  // Сплошной ряд от первого дня до сегодня (пустые дни — нулями)
+  const keys = [...days.keys()].sort();
+  const out = [];
+  if (!keys.length) return { days: out, unknownUsers: unknown, activitySince: null };
+  let total = 0;
+  for (let t = Date.parse(keys[0] + 'T12:00:00Z'), end = Date.parse(dayKey(Date.now()) + 'T12:00:00Z'); t <= end; t += 86_400_000) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    const r = days.get(d);
+    total += r?.newUsers || 0;
+    out.push({ d, newUsers: r?.newUsers || 0, totalUsers: total, active: r?.active.size || 0, records: r?.records || 0, recordsE2E: r?.recordsE2E || 0 });
+  }
+  const activitySince = Object.keys(data.activity || {}).sort()[0] || null;
+  return { days: out, unknownUsers: unknown, activitySince };
 }
