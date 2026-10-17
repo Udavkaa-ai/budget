@@ -33,6 +33,12 @@
     "plugins": [
       "expo-secure-store",
       [
+        "expo-av",
+        {
+          "microphonePermission": "Разрешите доступ к микрофону, чтобы надиктовать расходы голосом."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Разрешите доступ к камере для сканирования чеков."

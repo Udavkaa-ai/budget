@@ -39,6 +39,7 @@ import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } 
 import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
 import { SyncSettings } from '../components/SyncSettings';
+import { AiSettings } from '../components/AiSettings';
 import { isLocal } from '../local/mode';
 import * as e2eData from '../e2e/compute';
 
@@ -54,7 +55,7 @@ const SETTINGS_PAGES: Array<{ id: SettingsPage; title: string; sub: string; icon
   { id: 'notify', title: isPersonalBuild ? 'Уведомления и банк' : 'Уведомления',
     sub: isPersonalBuild ? 'О расходах партнёра, покупки из СМС и пушей банков' : 'О расходах партнёра', icon: 'notifications-outline' },
   { id: 'security', title: 'Безопасность и данные', sub: 'Замок, шифрование, резервные копии, экспорт и импорт', icon: 'shield-checkmark-outline', tone: 'success' },
-  { id: 'premium', title: 'Премиум', sub: 'ИИ-разбор, сканирование чеков, анализ месяца', icon: 'diamond-outline', tone: 'gold' },
+  { id: 'premium', title: 'ИИ', sub: 'Ключ OpenRouter: текст, фото чеков, голос, анализ месяца', icon: 'sparkles-outline', tone: 'gold' },
   { id: 'help', title: 'Помощь и поддержка', sub: 'Вопросы и ответы, тур, написать разработчику, оценить', icon: 'help-circle-outline', tone: 'gold' },
 ];
 
@@ -1031,6 +1032,7 @@ export default function SettingsScreen() {
 
         {page === 'premium' && (
           <>
+        <AiSettings />
         {/* Subscription */}
         <View ref={premiumTarget} collapsable={false} onLayout={offset('settings.premium')}>
         {premium ? (

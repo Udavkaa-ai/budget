@@ -359,6 +359,9 @@ export const ai = {
     api.post<{ expenses: ParsedExpense[] }>('/api/parse', { text }),
   parseImage: (base64: string, mimeType = 'image/jpeg') =>
     api.post<{ expenses: ParsedExpense[] }>('/api/parse-image', { base64, mimeType }),
+  // Голосом: запись с микрофона (AAC) › ИИ разбирает траты
+  parseAudio: (base64: string, format = 'aac') =>
+    api.post<{ expenses: ParsedExpense[] }>('/api/parse-audio', { base64, format }),
 
   // Обезличенная сводка для ИИ-чата (одинаково для E2E и обычных семей — только агрегаты)
   chatContext: async (month: number, year: number): Promise<string> => {

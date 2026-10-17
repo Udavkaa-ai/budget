@@ -6,6 +6,7 @@ import { syncNow } from '../e2e/sync';
 import { BASE_CATEGORIES } from '../categories';
 import { predict } from '../classifier';
 import { localMe } from './mode';
+import { hasAiKey, aiParseText, aiParseImage, aiParseAudio, aiAnalyze, aiChat } from '../ai/openrouter';
 
 // Ответы «сервера» в режиме без сервера. api/client перенаправляет сюда все
 // запросы, которые не покрыты локальным движком (e2e/compute): настройки семьи,
@@ -123,15 +124,29 @@ export async function localRequest(method: string, path: string, body?: any): Pr
     return { ok: true, moved };
   }
 
-  if (p === '/api/parse') return { expenses: await parseTextLocally(String(body?.text || '')) };
+  // ИИ — напрямую в OpenRouter с ключом владельца (Настройки › ИИ)
+  const cats = async () => (await customCategories()).map(c => c.name);
+  if (p === '/api/parse') {
+    const text = String(body?.text || '');
+    if (await hasAiKey()) {
+      try { return await aiParseText(text, await cats()); } catch { /* ИИ недоступен — разбираем сами */ }
+    }
+    return { expenses: await parseTextLocally(text) };
+  }
+  if (seg[1] === 'parse-image' || seg[1] === 'parse-audio' || seg[1] === 'analyze' || seg[1] === 'analyze-raw' || seg[1] === 'chat') {
+    if (!(await hasAiKey())) unavailable('ИИ без ключа OpenRouter (Настройки › ИИ)');
+  }
+  if (seg[1] === 'parse-image') return aiParseImage(String(body?.base64 || ''), body?.mimeType || 'image/jpeg', await cats());
+  if (seg[1] === 'parse-audio') return aiParseAudio(String(body?.base64 || ''), body?.format || 'aac', await cats());
+  if (seg[1] === 'analyze-raw') return aiAnalyze(String(body?.reportText || ''));
+  if (seg[1] === 'analyze') return aiAnalyze(await compute.buildAiReport(Number(body?.month), Number(body?.year)));
+  if (seg[1] === 'chat') return aiChat(String(body?.context || ''), body?.messages || []);
   if (p === '/api/import') return { ok: true, imported: await importCsv(String(body?.csv || '')) };
 
   // Пушей с сервера нет — уведомления показывает сам телефон после синхронизации
   if (seg[1] === 'push') return p === '/api/push/settings' && method === 'GET' ? { enabled: false, detail: 'short' } : { ok: true };
   if (seg[1] === 'crowd') return method === 'GET' ? {} : { ok: true };
 
-  if (seg[1] === 'parse-image') unavailable('Распознавание чека');
-  if (seg[1] === 'analyze' || seg[1] === 'analyze-raw' || seg[1] === 'chat') unavailable('ИИ-анализ');
   if (seg[1] === 'support') unavailable('Поддержка');
   if (seg[1] === 'backup' || seg[1] === 'snapshot' || seg[1] === 'restore') unavailable('Резервные копии на сервере');
   if (seg[1] === 'invite') unavailable('Приглашение по ссылке');

@@ -5,6 +5,8 @@ import BottomSheet, { BottomSheetScrollView, BottomSheetFooter, type BottomSheet
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { useTheme, spacing, font, radius } from '../theme';
 import { predict, learn, queueContribution, type PredictResult } from '../classifier';
 import { useCategories, getCategories } from '../categories';
@@ -43,6 +45,8 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [predicting, setPredicting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [hearing, setHearing] = useState(false);
   // По умолчанию — свободный ввод текстом с ИИ-распознаванием (если премиум).
   // Без премиума открываем форму, чтобы не упереться в платный разбор.
   const [mode, setMode] = useState<'form' | 'text'>(premium ? 'text' : 'form');
@@ -50,7 +54,7 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
   const [focusedField, setFocusedField] = useState<'free' | 'desc' | 'amount' | null>(null);
   const [parsing, setParsing] = useState(false);
   // Тематическое превью ИИ-разбора (вместо системного Alert) — позиции редактируемы
-  const [preview, setPreview] = useState<{ items: ParsedExpense[]; source: 'text' | 'photo' } | null>(null);
+  const [preview, setPreview] = useState<{ items: ParsedExpense[]; source: 'text' | 'photo' | 'voice' } | null>(null);
   const [adding, setAdding] = useState(false);
   const [catEditIdx, setCatEditIdx] = useState<number | null>(null);
   const [dateEditIdx, setDateEditIdx] = useState<number | null>(null);
@@ -230,7 +234,49 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
     }
   };
 
-  // Free-text AI parse (premium): "продукты 2300, вчера такси 450" → expenses
+  // Голосом: нажал — говоришь — нажал ещё раз; запись (AAC, моно) уходит в ИИ
+  const toggleVoice = async () => {
+    if (recording) {
+      const rec = recording;
+      setRecording(null);
+      setHearing(true);
+      try {
+        await rec.stopAndUnloadAsync();
+        const uri = rec.getURI();
+        if (!uri) throw new Error('запись не сохранилась');
+        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+        const res = await ai.parseAudio(b64, 'aac');
+        const parsed = res.expenses ?? [];
+        if (!parsed.length) { showAlert('Не расслышал расходов', 'Попробуйте ещё раз: «продукты две тысячи триста, вчера такси четыреста пятьдесят».'); return; }
+        setPreview({ items: parsed, source: 'voice' });
+      } catch (e) {
+        showAlert('Не получилось', String((e as Error)?.message || e));
+      } finally { setHearing(false); }
+      return;
+    }
+    beginSystemUi();
+    try {
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) { showAlert('Нет доступа к микрофону', 'Разрешите микрофон для ФИНИКа в настройках телефона.'); return; }
+    } finally { endSystemUi(); }
+    try {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording: rec } = await Audio.Recording.createAsync({
+        ...Audio.RecordingOptionsPresets.LOW_QUALITY,
+        android: {
+          extension: '.aac',
+          outputFormat: Audio.AndroidOutputFormat.AAC_ADTS,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 16000, numberOfChannels: 1, bitRate: 32000,
+        },
+      });
+      Haptics.selectionAsync();
+      setRecording(rec);
+    } catch (e) { showAlert('Не удалось включить микрофон', String((e as Error)?.message || e)); }
+  };
+
+  // Free-text AI parse (premium): "продукты 2300, вчера такси 450" › expenses
   const parseFreeText = async () => {
     if (!freeText.trim()) return;
     setParsing(true);
@@ -322,9 +368,19 @@ export const AddExpenseSheet = forwardRef<BottomSheet, Props>(function AddExpens
                 textAlignVertical="top"
               />
               <View style={styles.aiFoot}>
-                <Text style={{ color: t.textFaint, fontSize: 12, flex: 1 }}>
-                  {scanning ? 'Читаю чек…' : 'ИИ разберёт суммы, категории и даты'}
+                <Text style={{ color: recording ? t.danger : t.textFaint, fontSize: 12, flex: 1 }}>
+                  {recording ? 'Слушаю… нажмите ещё раз, когда закончите' : hearing ? 'Разбираю голос…' : scanning ? 'Читаю чек…' : 'ИИ разберёт суммы, категории и даты'}
                 </Text>
+                <TouchableOpacity
+                  style={[styles.toolBtn, { backgroundColor: recording ? t.dangerSoft : t.surface, borderColor: recording ? t.danger : t.border, marginRight: 8 }]}
+                  onPress={toggleVoice}
+                  disabled={hearing}
+                  accessibilityLabel={recording ? 'Остановить запись' : 'Надиктовать расходы'}
+                >
+                  {hearing
+                    ? <ActivityIndicator size="small" color={t.primary} />
+                    : <Ionicons name={recording ? 'stop' : 'mic-outline'} size={21} color={recording ? t.danger : t.primary} />}
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.toolBtn, { backgroundColor: t.surface, borderColor: t.border }]}
                   onPress={scanReceipt}
