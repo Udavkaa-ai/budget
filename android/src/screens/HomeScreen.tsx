@@ -14,6 +14,8 @@ import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { getOutbox, removeFromOutbox, flushOutbox, onOutboxChange } from '../offline';
 import { DayPickerModal } from '../components/Pickers';
+import { CommentsModal } from '../components/CommentsModal';
+import { useCommentCounts } from '../comments';
 import { ScreenGradient } from '../components/ScreenGradient';
 import { Finik } from '../components/Finik';
 import { noteUsefulAction } from '../rateApp';
@@ -203,6 +205,9 @@ export default function HomeScreen() {
 
   // Edit expense
   const [editing, setEditing] = useState<Expense | null>(null);
+  // Комментарии: нажатие на расход (свой или партнёра); долгое нажатие на свой — правка
+  const [commenting, setCommenting] = useState<Expense | null>(null);
+  const commentCounts = useCommentCounts();
   const [editDesc, setEditDesc] = useState('');
   const [editAmt, setEditAmt] = useState('');
   const [editCat, setEditCat] = useState('');
@@ -258,6 +263,7 @@ export default function HomeScreen() {
       <TouchableOpacity
         activeOpacity={0.7}
         style={[styles.item, { backgroundColor: t.surface, borderColor: t.border, opacity: pending ? 0.75 : 1 }]}
+        onPress={() => { if (!pending) { haptics.select(); setCommenting(e); } }}
         onLongPress={() => {
           if (pending) { deleteExpense(e.id); }
           // своё — и то, что сам внёс за другого члена семьи
@@ -269,6 +275,7 @@ export default function HomeScreen() {
           <Text style={[styles.itemDesc, { color: t.text }]}>{e.description}</Text>
           <Text style={[styles.itemMeta, { color: t.textMuted }]}>
             {pending ? '⏳ ожидает синхронизации · ' : ''}{e.category} · {whoLabel(e)}
+            {commentCounts[e.id] ? `  💬 ${commentCounts[e.id]}` : ''}
           </Text>
         </View>
         <Text style={[styles.itemAmt, { color: t.text }]}>{fmt(e.amount)}</Text>
@@ -390,6 +397,7 @@ export default function HomeScreen() {
         />
 
         {/* Edit expense modal */}
+        <CommentsModal expense={commenting} onClose={() => setCommenting(null)} />
         <Modal visible={!!editing} animationType="slide" transparent onRequestClose={() => setEditing(null)}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalBox, { backgroundColor: t.surface }]}>

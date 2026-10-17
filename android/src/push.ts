@@ -116,6 +116,19 @@ export async function notifyPartnerItems(by: string, items: Array<[number, strin
   } catch { /* не критично */ }
 }
 
+// Без сервера: партнёр оставил комментарий к расходу
+export async function notifyPartnerComment(by: string, text: string) {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+    await ensureChannel();
+    await Notifications.scheduleNotificationAsync({
+      content: { title: `💬 ${by}`, body: text.length > 140 ? text.slice(0, 140) + '…' : text },
+      trigger: Platform.OS === 'android' ? { channelId: CHANNEL } : null,
+    });
+  } catch { /* не критично */ }
+}
+
 // Фоновая задача: data-сообщения E2E (приложение может быть выгружено)
 TaskManager.defineTask(TASK, async ({ data, error }) => {
   if (error) return;

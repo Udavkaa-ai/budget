@@ -34,6 +34,8 @@ const setStatus = (s: SyncStatus) => { _status = s; listeners.forEach(l => l());
 // Новые чужие расходы — для уведомления «💸 Марина · 3 новых расхода»
 let onPartnerItems: ((by: string, items: Array<[number, string, string]>) => void) | null = null;
 export function setPartnerNotifier(fn: typeof onPartnerItems) { onPartnerItems = fn; }
+let onComment: ((by: string, text: string) => void) | null = null;
+export function setCommentNotifier(fn: typeof onComment) { onComment = fn; }
 export function announce(fresh: Map<string, Array<[number, string, string]>>) { for (const [by, items] of fresh) onPartnerItems?.(by, items); }
 
 export async function deviceId(): Promise<string> {
@@ -100,6 +102,11 @@ export async function apply(records: Rec[], docs: Doc[], fresh: Map<string, Arra
     const local = await getLocalDoc(d.key);
     if (local && local.ver >= d.ver) continue;
     await setLocalDoc(d.key, d.value, { dirty: false, ver: d.ver });
+    // Новый комментарий партнёра (cm:<расход>:<id>) — покажем уведомление
+    const c = d.value as { by?: string; text?: string; at?: number; deleted?: boolean } | null;
+    if (!local && d.key.startsWith('cm:') && c && !c.deleted && c.by && c.by !== me && (c.at || 0) > recent) {
+      onComment?.(c.by, c.text || '');
+    }
   }
 }
 

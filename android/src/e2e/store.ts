@@ -255,3 +255,9 @@ export async function allDocs(): Promise<Array<{ key: string; json: string; ver:
   const d = await db();
   return d.getAllAsync<any>('SELECT key, json, ver FROM doc');
 }
+
+// Документы по префиксу ключа (комментарии: «cm:<id расхода>:<id комментария>»)
+export async function docsByPrefix(prefix: string): Promise<Array<{ key: string; json: string; ver: number }>> {
+  const d = await db();
+  return d.getAllAsync<any>("SELECT key, json, ver FROM doc WHERE key LIKE ? ESCAPE '\\'", [prefix.replace(/[\\%_]/g, m => '\\' + m) + '%']);
+}

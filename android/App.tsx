@@ -32,14 +32,15 @@ import { initPremium } from './src/premium';
 import { initFinik } from './src/finik';
 import { initBlocks } from './src/blocks';
 import { crowd } from './src/api/client';
-import { registerPush, notifyPartnerItems } from './src/push';
+import { registerPush, notifyPartnerItems, notifyPartnerComment } from './src/push';
 import * as Notifications from 'expo-notifications';
 import { isLocal } from './src/local/mode';
-import { setPartnerNotifier } from './src/local/sync';
+import { setPartnerNotifier, setCommentNotifier } from './src/local/sync';
 import { startLan, stopLan } from './src/local/lan';
 
 // Без сервера: о новых расходах партнёра сообщает сам телефон после синхронизации
-setPartnerNotifier((by, items) => { notifyPartnerItems(by, items); });   // там же фоновая задача и обработчик пушей
+setPartnerNotifier((by, items) => { notifyPartnerItems(by, items); });
+setCommentNotifier((by, text) => { notifyPartnerComment(by, text); });   // там же фоновая задача и обработчик пушей
 
 
 initClassifier().catch(console.error);
