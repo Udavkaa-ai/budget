@@ -1,102 +1,30 @@
 import React, { useState } from 'react';
 import { showAlert } from '../dialog';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Constants from 'expo-constants';
-import { APP_SCHEME } from '../appScheme';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-import { useTheme, spacing, font, radius } from '../theme';
-import { setServerUrl, setToken, passwordLogin, api } from '../api/client';
+import { useTheme, spacing, font } from '../theme';
 import { Field, PrimaryButton } from '../components/UI';
 import { Finik } from '../components/Finik';
-import { loginLocal } from '../hooks/useAuth';
 import { useFinikEnabled } from '../finik';
+import { loginLocal } from '../hooks/useAuth';
 
-WebBrowser.maybeCompleteAuthSession();
-
-// Демо-сборка: включает вход по логину/паролю (lena/Lena) и предзаполняет сервер.
-// EXPO_PUBLIC_* вшивается в JS-бандл при сборке (надёжнее Constants.extra,
-// который в prebuild-сборке часто пустой). Constants — запасной вариант.
-const IS_DEMO = process.env.EXPO_PUBLIC_APP_VARIANT === 'demo'
-  || Constants.expoConfig?.extra?.isDemo === true;
-// Адрес сервера по умолчанию — чтобы новый пользователь не гадал, что вводить.
-// Продвинутые могут сменить через «Изменить сервер».
-const DEFAULT_SERVER = 'https://semejnyj-budzet-udavkaa.amvera.io';
-
+// Первый запуск: без сервера и аккаунтов — только имя, под которым будут
+// ваши расходы. Данные хранятся на телефоне; с телефоном партнёра — через
+// общую папку на Яндекс Диске или напрямую по Wi-Fi (Настройки › Семья).
 interface Props {
-  onLoginSuccess: (token: string) => void;
+  onLoginSuccess: (token: string) => void;   // оставлено для совместимости с App
 }
 
-export default function AuthScreen({ onLoginSuccess }: Props) {
+export default function AuthScreen(_props: Props) {
   const t = useTheme();
   const finikOn = useFinikEnabled();
-  const [serverUrl, setServerUrlState] = useState(DEFAULT_SERVER);
-  const [localName, setLocalName] = useState('');
-  const [loading, setLoading] = useState(false);
-  // Сразу показываем экран входа (сервер уже прописан), а не ввод адреса
-  const [step, setStep] = useState<'url' | 'auth'>('auth');
-  const [pwLogin, setPwLogin] = useState('lena');
-  const [pwPass, setPwPass] = useState('Lena');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handlePasswordLogin = async () => {
-    setLoading(true);
-    try {
-      await setServerUrl((serverUrl || DEFAULT_SERVER).trim().replace(/\/+$/, ''));
-      const token = await passwordLogin(pwLogin.trim(), pwPass);
-      onLoginSuccess(token);
-    } catch (e) {
-      showAlert('Не удалось войти', 'Проверьте логин и пароль');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleServerUrl = async () => {
-    const url = serverUrl.trim().replace(/\/+$/, '');
-    setServerUrlState(url);
-    if (!url.startsWith('http')) { showAlert('Введите корректный URL'); return; }
-    setLoading(true);
-    try {
-      await setServerUrl(url);
-      // Ping the server
-      await api.get('/health').catch(() => {});
-      setStep('auth');
-    } catch {
-      showAlert('Не удалось подключиться к серверу', url);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOAuth = async (provider: 'google' | 'yandex' | 'vk') => {
-    setLoading(true);
-    try {
-      // Сохраняем адрес сервера (шаг ввода URL пропущен) — нужен для api-вызовов
-      const srv = (serverUrl || DEFAULT_SERVER).trim().replace(/\/+$/, '');
-      await setServerUrl(srv);
-      // Открываем OAuth-страницу сервера в браузер-сессии; сервер редиректит
-      // обратно с токеном в query (?token=). Один флоу на всех провайдеров.
-      const redirectUri = AuthSession.makeRedirectUri({ scheme: APP_SCHEME });
-      const result = await WebBrowser.openAuthSessionAsync(
-        `${srv}/auth/${provider}/mobile?redirect=${encodeURIComponent(redirectUri)}`,
-        redirectUri,
-      );
-      if (result.type === 'success' && result.url) {
-        const url = new URL(result.url);
-        const token = url.searchParams.get('token') ?? url.hash.replace('#token=', '');
-        if (token) {
-          await setToken(token);
-          onLoginSuccess(token);
-          return;
-        }
-      }
-      showAlert('Не удалось войти', 'Попробуйте ещё раз');
-    } catch (e) {
-      showAlert('Ошибка входа', String(e));
-    } finally {
-      setLoading(false);
-    }
+  const start = async () => {
+    if (!name.trim()) { showAlert('Введите имя', 'Под этим именем будут ваши расходы — например «Удав».'); return; }
+    setBusy(true);
+    try { await loginLocal(name.trim()); } finally { setBusy(false); }
   };
 
   return (
@@ -111,72 +39,20 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
               </Text>
             </View>
           )}
-          <Text style={[styles.title, { color: t.text }]}>{IS_DEMO ? 'Бюджет · Демо' : 'Семейный бюджет'}</Text>
-          <Text style={[styles.sub, { color: t.textMuted }]}>
-            {IS_DEMO ? 'Демо-режим: вход по паролю' : (step === 'url' ? 'Введите адрес вашего сервера' : 'Выберите способ входа')}
+          <Text style={[styles.title, { color: t.text }]}>Семейный бюджет</Text>
+          <Text style={[styles.sub, { color: t.textMuted }]}>Как вас зовут?</Text>
+          <Field
+            style={{ marginBottom: spacing.md }}
+            value={name}
+            onChangeText={setName}
+            placeholder="Ваше имя (как в семейных расходах)"
+            autoCorrect={false}
+            onSubmitEditing={start}
+          />
+          <PrimaryButton title="Начать" loading={busy} onPress={start} />
+          <Text style={{ color: t.textMuted, textAlign: 'center', fontSize: 12, marginTop: spacing.md }}>
+            Всё хранится на телефоне. С телефоном партнёра — через общую папку на Яндекс Диске или напрямую по Wi-Fi (Настройки › Семья).
           </Text>
-
-          {IS_DEMO ? (
-            <>
-              <Field
-                style={{ marginBottom: spacing.md }}
-                value={pwLogin}
-                onChangeText={setPwLogin}
-                placeholder="Логин"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Field
-                style={{ marginBottom: spacing.md }}
-                value={pwPass}
-                onChangeText={setPwPass}
-                placeholder="Пароль"
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <PrimaryButton title="Войти" onPress={handlePasswordLogin} loading={loading} />
-            </>
-          ) : step === 'url' ? (
-            <>
-              <Field
-                style={{ marginBottom: spacing.md }}
-                value={serverUrl}
-                onChangeText={setServerUrlState}
-                placeholder="https://semejnyj-budzet-udavkaa.amvera.io"
-                autoCapitalize="none"
-                keyboardType="url"
-                autoCorrect={false}
-              />
-              <PrimaryButton title="Продолжить" onPress={handleServerUrl} loading={loading} />
-            </>
-          ) : (
-            <>
-              {/* Без сервера: данные на телефоне, обмен с партнёром — через облако */}
-              <Field
-                style={{ marginBottom: spacing.md }}
-                value={localName}
-                onChangeText={setLocalName}
-                placeholder="Ваше имя (как в семейных расходах)"
-                autoCorrect={false}
-              />
-              <PrimaryButton title="Начать без сервера" loading={loading} onPress={async () => {
-                if (!localName.trim()) { showAlert('Введите имя', 'Под этим именем будут ваши расходы — как раньше, например «Удав».'); return; }
-                await loginLocal(localName.trim());
-              }} />
-              <Text style={{ color: t.textMuted, textAlign: 'center', fontSize: 12, marginTop: spacing.sm, marginBottom: spacing.lg }}>
-                Всё хранится на телефоне. С телефоном партнёра — через общую папку на Яндекс Диске (Настройки › Семья).
-              </Text>
-              <PrimaryButton title="Войти через Яндекс" onPress={() => handleOAuth('yandex')} loading={loading} />
-              <View style={{ height: spacing.md }} />
-              <PrimaryButton title="Войти через VK" onPress={() => handleOAuth('vk')} loading={loading} />
-              {/* Google-кнопку в RuStore-сборке не показываем. Существующие
-                  Google-аккаунты переносятся привязкой Яндекс/VK в веб-версии. */}
-              <TouchableOpacity onPress={() => setStep('url')} style={{ marginTop: spacing.lg }}>
-                <Text style={{ color: t.textMuted, textAlign: 'center' }}>‹ Изменить сервер</Text>
-              </TouchableOpacity>
-            </>
-          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -187,10 +63,6 @@ const styles = StyleSheet.create({
   safe:  { flex: 1 },
   kav:   { flex: 1 },
   inner: { flex: 1, justifyContent: 'center', padding: spacing.xl },
-  logo:  { fontSize: 64, textAlign: 'center', marginBottom: spacing.md },
   title: { fontSize: font.xxl, fontWeight: '800', textAlign: 'center', marginBottom: spacing.xs },
   sub:   { fontSize: font.md, textAlign: 'center', marginBottom: spacing.xl },
-  input: { borderRadius: radius.md, borderWidth: 1, padding: spacing.lg, fontSize: font.md, marginBottom: spacing.md },
-  btn:   { borderRadius: radius.md, padding: spacing.lg, alignItems: 'center' },
-  btnText: { color: '#fff', fontSize: font.md, fontWeight: '600' },
 });

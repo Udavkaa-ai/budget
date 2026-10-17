@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { isLocal } from './local/mode';
 
 // Тестовый режим премиума: активируется бесплатно из настроек на время
 // тестирования. TODO: заменить на Google Play Billing перед релизом в стор.
@@ -13,7 +14,8 @@ export async function initPremium() {
   listeners.forEach(l => l(_premium));
 }
 
-export function isPremium() { return _premium; }
+// Без сервера всё открыто: текст разбирается на телефоне, ИИ — по ключу OpenRouter
+export function isPremium() { return _premium || isLocal(); }
 
 export async function setPremium(v: boolean) {
   _premium = v;
@@ -22,9 +24,9 @@ export async function setPremium(v: boolean) {
 }
 
 export function usePremium(): boolean {
-  const [value, setValue] = useState(_premium);
+  const [value, setValue] = useState(_premium || isLocal());
   useEffect(() => {
-    const l = (v: boolean) => setValue(v);
+    const l = (v: boolean) => setValue(v || isLocal());
     listeners.add(l);
     return () => { listeners.delete(l); };
   }, []);

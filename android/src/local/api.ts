@@ -134,7 +134,7 @@ export async function localRequest(method: string, path: string, body?: any): Pr
     return { expenses: await parseTextLocally(text) };
   }
   if (seg[1] === 'parse-image' || seg[1] === 'parse-audio' || seg[1] === 'analyze' || seg[1] === 'analyze-raw' || seg[1] === 'chat') {
-    if (!(await hasAiKey())) unavailable('ИИ без ключа OpenRouter (Настройки › ИИ)');
+    if (!(await hasAiKey())) throw new LocalUnavailable('Нужен ключ OpenRouter — Настройки › ИИ');
   }
   if (seg[1] === 'parse-image') return aiParseImage(String(body?.base64 || ''), body?.mimeType || 'image/jpeg', await cats());
   if (seg[1] === 'parse-audio') return aiParseAudio(String(body?.base64 || ''), body?.format || 'aac', await cats());

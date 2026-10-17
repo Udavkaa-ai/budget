@@ -75,12 +75,6 @@ export function AppNavigator() {
   const t = useTheme();
   const blocks = useBlocks();
   const supportUnread = useSupportUnread();
-  // Ответ поддержки: проверяем при запуске и при каждом возвращении в приложение
-  useEffect(() => {
-    refreshSupportUnread();
-    const sub = AppState.addEventListener('change', st => { if (st === 'active') refreshSupportUnread(); });
-    return () => sub.remove();
-  }, []);
   return (
     <View style={{ flex: 1 }}>
     <Tab.Navigator

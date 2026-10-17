@@ -23,7 +23,6 @@ import { AppNavigator, navigationRef, goToTab } from './src/navigation';
 import { requestQuickAdd } from './src/quickAdd';
 import AuthScreen from './src/screens/AuthScreen';
 import { useAuth } from './src/hooks/useAuth';
-import { checkUpdateNotices } from './src/updateNotices';
 import { showAlert } from './src/dialog';
 import { BankInboxHost, openBankInbox } from './src/components/BankInbox';
 import { consumeShared, drainNative, isPersonalBuild } from './src/bank/inbox';
@@ -74,15 +73,6 @@ function Root() {
     if (user && tourReady && !tourSeen() && !isTourActive()) startTour();
   }, [user, tourReady]);
 
-  // После обновления версии: просьба оценить в RuStore + рассказ о веб-версии.
-  // Ждём разблокировки, чтобы окна не легли поверх экрана PIN-кода.
-  const ready = !!user && tourReady && (!lockEnabled || unlocked);
-  useEffect(() => {
-    if (!ready) return;
-    const existing = tourSeen() && !isTourActive();
-    const id = setTimeout(() => { checkUpdateNotices(existing).catch(() => {}); }, 1200);
-    return () => clearTimeout(id);
-  }, [ready]);
 
   // Блокируем заново при уходе в фон. Игнорируем ложный уход в фон, вызванный
   // системным окном биометрии или выбором фото/камерой (иначе промпт «мигает»

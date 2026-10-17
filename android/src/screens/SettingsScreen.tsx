@@ -50,13 +50,13 @@ const DETAIL_HINT: Record<PushDetail, string> = {
 };
 
 const SETTINGS_PAGES: Array<{ id: SettingsPage; title: string; sub: string; icon: string; tone?: 'success' | 'gold' }> = [
-  { id: 'family', title: 'Семья и бюджет', sub: 'Семья, приглашения, план, категории, регулярные платежи', icon: 'people-outline' },
+  { id: 'family', title: 'Семья и бюджет', sub: 'Синхронизация, семья, план, категории, регулярные платежи', icon: 'people-outline' },
   { id: 'look', title: 'Внешний вид и экраны', sub: 'Тема, Финик и что показывать на вкладках', icon: 'contrast-outline' },
   { id: 'notify', title: isPersonalBuild ? 'Уведомления и банк' : 'Уведомления',
     sub: isPersonalBuild ? 'О расходах партнёра, покупки из СМС и пушей банков' : 'О расходах партнёра', icon: 'notifications-outline' },
-  { id: 'security', title: 'Безопасность и данные', sub: 'Замок, шифрование, резервные копии, экспорт и импорт', icon: 'shield-checkmark-outline', tone: 'success' },
+  { id: 'security', title: 'Безопасность и данные', sub: 'Замок приложения, экспорт и импорт', icon: 'shield-checkmark-outline', tone: 'success' },
   { id: 'premium', title: 'ИИ', sub: 'Ключ OpenRouter: текст, фото чеков, голос, анализ месяца', icon: 'sparkles-outline', tone: 'gold' },
-  { id: 'help', title: 'Помощь и поддержка', sub: 'Вопросы и ответы, тур, написать разработчику, оценить', icon: 'help-circle-outline', tone: 'gold' },
+  { id: 'help', title: 'Помощь', sub: 'Вопросы и ответы, вводный тур', icon: 'help-circle-outline', tone: 'gold' },
 ];
 
 export default function SettingsScreen() {
@@ -154,7 +154,6 @@ export default function SettingsScreen() {
       if (r.unread) { await supportApi.seen(); setSupportUnread(0); }
     } catch { /* офлайн — покажем позже */ }
   }, []);
-  useFocusEffect(React.useCallback(() => { loadSupportThread(); }, [loadSupportThread]));
   // Закрыть диалог: переписка пропадает из настроек (у разработчика остаётся)
   const closeSupport = () => showAlert(
     'Закрыть диалог?',
@@ -180,7 +179,6 @@ export default function SettingsScreen() {
   };
 
   useEffect(() => {
-    refreshBackups();
     // Вкл/выкл — настройка этого телефона; с сервера берём только «что показывать»
     pushSettings.get().then(r => setPushDetail(r.detail || 'short')).catch(() => {});
     isPushOff().then(off => {
@@ -704,17 +702,6 @@ export default function SettingsScreen() {
             keyboardType="decimal-pad"
           />
           <PrimaryButton title="Сохранить" onPress={saveFamilySettings} loading={busy} style={{ marginBottom: spacing.sm }} />
-          <TouchableOpacity style={styles.row} onPress={inviteFamily} disabled={busy}>
-            <Text style={{ color: t.text }}>👨‍👩‍👧 Пригласить в семью</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
-          <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: -2, marginBottom: 2 }}>
-            Android — приложение из RuStore · iPhone и компьютер — веб-версия в браузере
-          </Text>
-          <TouchableOpacity style={styles.row} onPress={() => setJoinVisible(true)}>
-            <Text style={{ color: t.text }}>🔑 Ввести код приглашения</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
         </Card>
         </View>
 
@@ -930,82 +917,6 @@ export default function SettingsScreen() {
         </Card>
         </View>
 
-        {/* End-to-end encryption */}
-        <Card style={e2e.enabled ? { borderColor: t.success, borderWidth: 1.5 } : undefined}>
-          <SectionTitle>Приватность</SectionTitle>
-          {e2e.enabled ? (
-            <>
-              <Text style={{ color: t.text, fontSize: font.sm, lineHeight: 20 }}>
-                Сквозное шифрование включено. Сервер и его владелец видят только зашифрованные блобы — ваши суммы и расходы им недоступны.
-              </Text>
-              {!e2e.hasKey && (
-                <Text style={{ color: t.danger, fontSize: font.sm, marginTop: spacing.sm }}>
-                  На этом устройстве нет ключа — введите ключ-фразу ниже, иначе данные не расшифровать.
-                </Text>
-              )}
-              <TouchableOpacity style={styles.row} onPress={showKey}>
-                <Text style={{ color: t.text }}>🔑 Показать ключ (для второго устройства)</Text>
-                <Text style={{ color: t.textMuted }}>›</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.row} onPress={() => { setKeyInput(''); setKeyVisible(true); }}>
-                <Text style={{ color: t.text }}>📥 Ввести ключ с другого устройства</Text>
-                <Text style={{ color: t.textMuted }}>›</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md }}>
-                Сейчас сервер видит ваши расходы. Включите шифрование — данные будут храниться на сервере только зашифрованными, а ключ останется лишь на ваших устройствах. Тогда даже владелец сервера не сможет их прочитать.
-              </Text>
-              <PrimaryButton title="🔒 Включить шифрование" onPress={doEnableE2E} loading={busy} />
-            </>
-          )}
-        </Card>
-
-        {/* Encrypted backups */}
-        <Card>
-          <SectionTitle>Резервные копии</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.xs, marginBottom: spacing.sm }}>
-            Шифруются на телефоне вашим ключом — сервер содержимое не видит. Без ключа копию не восстановить.
-          </Text>
-          <PrimaryButton title="🔐 Создать копию" onPress={createBackup} loading={busy} />
-          {backupList.length === 0 && (
-            <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: spacing.sm }}>
-              Копий пока нет. Созданные копии появятся здесь списком — рядом с каждой будет кнопка «Восстановить».
-            </Text>
-          )}
-          {backupList.map(b => (
-            <View key={b.id} style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: t.text, fontSize: font.sm }}>
-                  {new Date(b.createdAt).toLocaleString('ru')}
-                </Text>
-                <Text style={{ color: t.textMuted, fontSize: font.xs }}>{Math.round(b.size / 1024)} КБ</Text>
-              </View>
-              <TouchableOpacity onPress={() => restoreBackup(b)} style={{ padding: 6 }}>
-                <Text style={{ color: t.primary, fontSize: font.sm }}>Восстановить</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => showAlert('Удалить копию?', undefined, [
-                  { text: 'Отмена', style: 'cancel' },
-                  { text: 'Удалить', style: 'destructive', onPress: async () => { await backupsApi.remove(b.id); refreshBackups(); } },
-                ])}
-                style={{ padding: 6 }}
-                hitSlop={8}
-                accessibilityLabel="Удалить копию"
-                accessibilityRole="button"
-              >
-                <Text style={{ color: t.danger, fontSize: font.sm }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-          <TouchableOpacity onPress={showKey} style={{ marginTop: spacing.sm }}>
-            <Text style={{ color: t.textMuted, fontSize: font.sm }}>🔑 Показать ключ шифрования</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { setKeyInput(''); setKeyVisible(true); }} style={{ marginTop: spacing.sm }}>
-            <Text style={{ color: t.textMuted, fontSize: font.sm }}>📥 Ввести ключ с другого устройства</Text>
-          </TouchableOpacity>
-        </Card>
 
         {/* Data */}
         <Card>
@@ -1032,38 +943,8 @@ export default function SettingsScreen() {
 
         {page === 'premium' && (
           <>
-        <AiSettings />
-        {/* Subscription */}
         <View ref={premiumTarget} collapsable={false} onLayout={offset('settings.premium')}>
-        {premium ? (
-          <Card style={{ borderColor: t.primary, borderWidth: 1.5 }}>
-            <SectionTitle>Премиум активен</SectionTitle>
-            <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20 }}>
-              Тестовый режим — бесплатно на время тестирования.{'\n'}
-              Доступны ИИ-аналитика и сканирование чеков.
-            </Text>
-            <TouchableOpacity onPress={deactivatePremium} style={{ marginTop: spacing.md }}>
-              <Text style={{ color: t.textMuted, fontSize: font.sm }}>Отключить</Text>
-            </TouchableOpacity>
-          </Card>
-        ) : (
-          <Card style={{ borderColor: t.warning, borderWidth: 1.5 }}>
-            <SectionTitle>Бесплатный тариф</SectionTitle>
-            <Text style={{ color: t.textMuted, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md }}>
-              Все основные функции работают без интернета и без стоимости.{'\n'}
-              Категории определяет локальный ИИ — быстро, приватно, бесплатно.
-            </Text>
-            <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.md }}>
-              {'🤖 ИИ-аналитика\n📸 Сканирование чеков\n— только в Премиуме'}
-            </Text>
-            <TouchableOpacity
-              style={[styles.upgradeBtn, { backgroundColor: t.warning }]}
-              onPress={activatePremium}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700' }}>Активировать Премиум (тест)</Text>
-            </TouchableOpacity>
-          </Card>
-        )}
+          <AiSettings />
         </View>
           </>
         )}
@@ -1075,10 +956,6 @@ export default function SettingsScreen() {
         {/* Guide & Help */}
         <Card>
           <SectionTitle>Помощь</SectionTitle>
-          <TouchableOpacity style={styles.row} onPress={() => openRuStoreListing()}>
-            <Text style={{ color: t.text }}>⭐ Оценить приложение в RuStore</Text>
-            <Text style={{ color: t.textMuted }}>›</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={styles.row} onPress={() => openHelp()}>
             <Text style={{ color: t.text }}>❓ Помощь и частые вопросы</Text>
             <Text style={{ color: t.textMuted }}>›</Text>
@@ -1089,50 +966,13 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </Card>
 
-        <Card>
-          <SectionTitle>Поддержка</SectionTitle>
-          <Text style={{ color: t.textMuted, fontSize: font.sm, marginBottom: spacing.sm, lineHeight: 20 }}>
-            Нашли ошибку, есть идея или вопрос? Напишите — сообщение придёт напрямую разработчику, ответ появится здесь.
-          </Text>
-          {supportThread.length > 0 && (
-            <View style={{ gap: 8, marginBottom: spacing.md }}>
-              {supportThread.map(m => {
-                const mine = m.from !== 'admin';
-                return (
-                  <View key={m.id} style={[styles.supBubble, mine
-                    ? { alignSelf: 'flex-end', backgroundColor: t.primary, borderBottomRightRadius: 6 }
-                    : { alignSelf: 'flex-start', backgroundColor: t.surface2, borderColor: t.border, borderWidth: 1, borderBottomLeftRadius: 6 }]}>
-                    <Text style={{ color: mine ? '#fff' : t.text, fontSize: font.sm, lineHeight: 20 }}>{m.text}</Text>
-                    <Text style={{ color: mine ? 'rgba(255,255,255,0.75)' : t.textMuted, fontSize: 11, marginTop: 3, alignSelf: mine ? 'flex-end' : 'flex-start' }}>
-                      {mine ? 'Вы' : 'Разработчик'} · {new Date(m.createdAt).toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </View>
-                );
-              })}
-              <TouchableOpacity onPress={closeSupport} style={{ alignSelf: 'flex-end', paddingVertical: 6, paddingHorizontal: 2 }} accessibilityRole="button">
-                <Text style={{ color: t.textMuted, fontSize: 13, fontWeight: '600' }}>Закрыть диалог</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          <TextInput
-            style={[styles.input, styles.multiline, { height: 110, color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
-            value={supportText}
-            onChangeText={setSupportText}
-            placeholder="Опишите, что случилось или что хотелось бы улучшить"
-            placeholderTextColor={t.textMuted}
-            maxLength={2000}
-            multiline
-          />
-          <PrimaryButton title="Отправить разработчику" onPress={sendSupport} loading={supportBusy} />
-        </Card>
 
         {/* About */}
         <Card>
           <SectionTitle>О приложении</SectionTitle>
           <Text style={{ color: t.textMuted, fontSize: font.sm }}>Версия {Constants.expoConfig?.version ?? '2.27.0'} A</Text>
           <Text style={{ color: t.textMuted, fontSize: font.sm, marginTop: 4 }}>
-            Классификатор категорий работает полностью на устройстве.{'\n'}
-            Ваши данные не передаются без разрешения.
+            Все данные хранятся на телефоне. Партнёру они уходят через вашу папку на Яндекс Диске или напрямую по Wi-Fi; в ИИ — только то, что вы сами отправили на разбор.
           </Text>
         </Card>
           </>
