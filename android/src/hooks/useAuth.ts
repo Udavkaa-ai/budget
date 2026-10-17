@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { initApi, isAuthenticated, clearAuth, parseJwt, getToken, type AuthUser } from '../api/client';
+import { isLocal, localMe, enterLocal, leaveLocal } from '../local/mode';
+
+const localUser = (): AuthUser => ({ name: localMe(), login: 'local', family: 'local', isAdmin: false });
 
 // Глобальное состояние: экраны и Root должны видеть одного и того же
 // пользователя (logout из настроек обязан переключить корневой экран)
@@ -10,7 +13,8 @@ const listeners = new Set<() => void>();
 function notify() { listeners.forEach(l => l()); }
 
 const initPromise = initApi().then(() => {
-  if (isAuthenticated()) _user = parseJwt(getToken());
+  if (isLocal()) _user = localUser();
+  else if (isAuthenticated()) _user = parseJwt(getToken());
   _loading = false;
   notify();
 });
@@ -25,8 +29,10 @@ export function useAuth() {
     return () => { listeners.delete(l); };
   }, []);
 
+  // Выход: данные на телефоне остаются (локальная база не стирается)
   const logout = useCallback(async () => {
     await clearAuth();
+    await leaveLocal();
     _user = null;
     notify();
   }, []);
@@ -37,4 +43,11 @@ export function useAuth() {
   }, []);
 
   return { user: _user, loading: _loading, logout, onLoginSuccess };
+}
+
+// Перейти на работу без сервера под именем name (данные — на телефоне)
+export async function loginLocal(name: string) {
+  await enterLocal(name);
+  _user = localUser();
+  notify();
 }

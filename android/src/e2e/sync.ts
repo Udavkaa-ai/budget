@@ -6,6 +6,8 @@ import {
   getCursor, setCursor, dirtyDocs, clearDocDirty, setLocalDoc, getLocalDoc,
   type SyncRecord,
 } from './store';
+import { isLocal } from '../local/mode';
+import { localSync } from '../local/sync';
 
 // Движок E2E-синхронизации: расходы — записи с LWW-версией и seq-курсором,
 // документы (план/кэшфлоу/цели) — один блоб на ключ. Сервер видит только блобы.
@@ -90,6 +92,8 @@ async function pullDocs(): Promise<void> {
 }
 
 export async function syncNow(): Promise<void> {
+  // Без сервера — через общую папку в облаке (если подключена)
+  if (isLocal()) return localSync();
   if (_running) return;
   _running = true;
   try {

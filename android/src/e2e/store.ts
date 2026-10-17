@@ -102,14 +102,15 @@ export async function clearDirty(ids: string[]): Promise<void> {
 }
 
 // Применяем расшифрованную удалённую запись (LWW: берём, если ver новее локального)
-export async function applyRemoteExpense(id: string, ver: number, deleted: boolean, payload: Expense | null): Promise<void> {
+// Возвращает: 'new' — такой записи не было, 'updated' — заменили, 'skip' — наша свежее
+export async function applyRemoteExpense(id: string, ver: number, deleted: boolean, payload: Expense | null): Promise<'new' | 'updated' | 'skip'> {
   const d = await db();
   const row = await d.getFirstAsync<any>('SELECT ver, dirty FROM exp WHERE id=?', [id]);
-  if (row && ver <= row.ver) return;               // наша версия свежее или равна
+  if (row && ver <= row.ver) return 'skip';        // наша версия свежее или равна
   if (deleted || !payload) {
     if (row) await d.runAsync('UPDATE exp SET deleted=1, dirty=0, ver=? WHERE id=?', [ver, id]);
     else await d.runAsync('INSERT INTO exp (id, ver, deleted, dirty) VALUES (?, ?, 1, 0)', [id, ver]);
-    return;
+    return row ? 'updated' : 'skip';
   }
   if (row) {
     await d.runAsync(
@@ -123,6 +124,7 @@ export async function applyRemoteExpense(id: string, ver: number, deleted: boole
       [id, ver, payload.date, payload.category, payload.amount, payload.description, payload.user, payload.createdAt, payload.addedBy ?? null],
     );
   }
+  return row ? 'updated' : 'new';
 }
 
 export async function afterPull(): Promise<void> { notify(); }
@@ -226,4 +228,30 @@ export async function tombstoneAllExpenses(): Promise<void> {
   const d = await db();
   await d.runAsync('UPDATE exp SET deleted=1, dirty=1, ver=?', [now()]);
   notify();
+}
+
+// ─── Для синхронизации без сервера (local/sync.ts) ──────────────────────────
+
+export async function getMeta(k: string): Promise<string | null> {
+  const d = await db();
+  return (await d.getFirstAsync<{ v: string }>('SELECT v FROM meta WHERE k=?', [k]))?.v ?? null;
+}
+export async function setMeta(k: string, v: string): Promise<void> {
+  const d = await db();
+  await d.runAsync('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', [k, v]);
+}
+// Всё отметить к отправке — первая выгрузка в новую папку / на новый телефон
+export async function markAllDirty(): Promise<void> {
+  const d = await db();
+  await d.execAsync('UPDATE exp SET dirty=1; UPDATE doc SET dirty=1;');
+}
+// Полное состояние (включая удалённые) — для снимка
+export async function allRecords(): Promise<Array<{ id: string; ver: number; deleted: boolean; payload: Expense | null }>> {
+  const d = await db();
+  const rows = await d.getAllAsync<any>('SELECT * FROM exp');
+  return rows.map(r => ({ id: r.id, ver: r.ver, deleted: !!r.deleted, payload: r.deleted ? null : rowToExpense(r) }));
+}
+export async function allDocs(): Promise<Array<{ key: string; json: string; ver: number }>> {
+  const d = await db();
+  return d.getAllAsync<any>('SELECT key, json, ver FROM doc');
 }

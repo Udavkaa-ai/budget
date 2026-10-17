@@ -38,6 +38,8 @@ import { RUSTORE_URL, openRuStoreListing } from '../rateApp';
 import { useTourTarget, registerScroller, unregisterScroller, setTargetOffset } from '../tourTargets';
 import { useE2E, isE2E } from '../e2e';
 import { enableE2E } from '../e2e/enable';
+import { SyncSettings } from '../components/SyncSettings';
+import { isLocal } from '../local/mode';
 import * as e2eData from '../e2e/compute';
 
 const DETAIL_HINT: Record<PushDetail, string> = {
@@ -182,7 +184,7 @@ export default function SettingsScreen() {
     pushSettings.get().then(r => setPushDetail(r.detail || 'short')).catch(() => {});
     isPushOff().then(off => {
       setPushEnabled(!off);
-      if (!off) registerPush(user?.name || '').then(setPushState).catch(() => {});
+      if (!off && !isLocal()) registerPush(user?.name || '').then(setPushState).catch(() => {});
     });
     settingsApi.get().then(s => {
       if (s.familyName) setFamilyName(s.familyName);
@@ -680,6 +682,7 @@ export default function SettingsScreen() {
 
         {page === 'family' && (
           <>
+        <SyncSettings />
         {/* Family */}
         <View ref={inviteTarget} collapsable={false} onLayout={offset('settings.invite')}>
         <Card>
@@ -846,6 +849,14 @@ export default function SettingsScreen() {
         {page === 'notify' && (
           <>
         {/* Notifications */}
+        {isLocal() ? (
+          <Card>
+            <SectionTitle>Уведомления</SectionTitle>
+            <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 19 }}>
+              Без сервера о новых расходах партнёра сообщает сам телефон — после синхронизации с облаком: «💸 Марина · 3 новых расхода», без сумм. Обмен идёт, пока ФИНИК открыт или недавно был открыт.
+            </Text>
+          </Card>
+        ) : (
         <Card>
           <SectionTitle>Уведомления</SectionTitle>
           <View style={styles.toggleRow}>
@@ -884,6 +895,7 @@ export default function SettingsScreen() {
             </View>
           )}
         </Card>
+        )}
 
         {/* Покупки из банка — только личная сборка */}
         <BankSettings />

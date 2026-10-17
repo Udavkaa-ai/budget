@@ -106,6 +106,16 @@ async function present(p: any) {
   });
 }
 
+// Без сервера: синхронизация увидела новые расходы партнёра — показываем сами.
+// Подробность — «кратко» (без сумм), как по умолчанию у серверных пушей.
+export async function notifyPartnerItems(by: string, items: Array<[number, string, string]>) {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+    await present({ by, items, tag: `upd:${by}`, id: `l${Date.now().toString(36)}`, detail: 'short' });
+  } catch { /* не критично */ }
+}
+
 // Фоновая задача: data-сообщения E2E (приложение может быть выгружено)
 TaskManager.defineTask(TASK, async ({ data, error }) => {
   if (error) return;

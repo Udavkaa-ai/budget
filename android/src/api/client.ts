@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { isE2E } from '../e2e';
 import * as e2e from '../e2e/compute';
+import { initLocal, isLocal, localMe } from '../local/mode';
+import { localRequest, localText } from '../local/api';
 
 const SERVER_URL_KEY = 'server_url';
 const TOKEN_KEY = 'auth_token';
@@ -9,9 +11,10 @@ let _serverUrl = '';
 let _token = '';
 
 // Имя текущего пользователя из JWT — нужно как автор при локальной записи (E2E)
-export function currentUserName(): string { return parseJwt(_token)?.name ?? ''; }
+export function currentUserName(): string { return isLocal() ? localMe() : parseJwt(_token)?.name ?? ''; }
 
 export async function initApi() {
+  await initLocal();
   _serverUrl = (await SecureStore.getItemAsync(SERVER_URL_KEY)) || '';
   _token = (await SecureStore.getItemAsync(TOKEN_KEY)) || '';
 }
@@ -33,9 +36,11 @@ export async function clearAuth() {
 
 export function getServerUrl() { return _serverUrl; }
 export function getToken() { return _token; }
-export function isAuthenticated() { return !!_token && !!_serverUrl; }
+export function isAuthenticated() { return isLocal() || (!!_token && !!_serverUrl); }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // Без сервера отвечает телефон (local/api)
+  if (isLocal()) return localRequest(method, path, body) as Promise<T>;
   const url = `${_serverUrl}${path}`;
   const res = await fetch(url, {
     method,
@@ -53,6 +58,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 async function reqText(path: string): Promise<string> {
+  if (isLocal()) return localText(path);
   const res = await fetch(`${_serverUrl}${path}`, {
     headers: { ...((_token) ? { Authorization: `Bearer ${_token}` } : {}) },
   });

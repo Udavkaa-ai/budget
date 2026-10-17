@@ -10,6 +10,7 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { setServerUrl, setToken, passwordLogin, api } from '../api/client';
 import { Field, PrimaryButton } from '../components/UI';
 import { Finik } from '../components/Finik';
+import { loginLocal } from '../hooks/useAuth';
 import { useFinikEnabled } from '../finik';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -31,6 +32,7 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
   const t = useTheme();
   const finikOn = useFinikEnabled();
   const [serverUrl, setServerUrlState] = useState(DEFAULT_SERVER);
+  const [localName, setLocalName] = useState('');
   const [loading, setLoading] = useState(false);
   // Сразу показываем экран входа (сервер уже прописан), а не ввод адреса
   const [step, setStep] = useState<'url' | 'auth'>('auth');
@@ -150,6 +152,21 @@ export default function AuthScreen({ onLoginSuccess }: Props) {
             </>
           ) : (
             <>
+              {/* Без сервера: данные на телефоне, обмен с партнёром — через облако */}
+              <Field
+                style={{ marginBottom: spacing.md }}
+                value={localName}
+                onChangeText={setLocalName}
+                placeholder="Ваше имя (как в семейных расходах)"
+                autoCorrect={false}
+              />
+              <PrimaryButton title="Начать без сервера" loading={loading} onPress={async () => {
+                if (!localName.trim()) { showAlert('Введите имя', 'Под этим именем будут ваши расходы — как раньше, например «Удав».'); return; }
+                await loginLocal(localName.trim());
+              }} />
+              <Text style={{ color: t.textMuted, textAlign: 'center', fontSize: 12, marginTop: spacing.sm, marginBottom: spacing.lg }}>
+                Всё хранится на телефоне. С телефоном партнёра — через общую папку на Яндекс Диске (Настройки › Семья).
+              </Text>
               <PrimaryButton title="Войти через Яндекс" onPress={() => handleOAuth('yandex')} loading={loading} />
               <View style={{ height: spacing.md }} />
               <PrimaryButton title="Войти через VK" onPress={() => handleOAuth('vk')} loading={loading} />

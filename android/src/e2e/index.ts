@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { loadKey } from '../crypto';
+import { isLocal } from '../local/mode';
 
 // Состояние E2E для текущей семьи: включён ли режим на сервере и есть ли ключ.
 // Клиентский слой (api/client) смотрит на isE2E(), чтобы решить: считать локально
@@ -12,6 +13,8 @@ const listeners = new Set<() => void>();
 function notify() { listeners.forEach(l => l()); }
 
 export async function initE2E(): Promise<void> {
+  // Без сервера: локальная база — единственный источник, ключ не нужен
+  if (isLocal()) { _loaded = true; notify(); return; }
   try {
     const st = await api.get<{ enabled: boolean; keyFingerprint: string | null }>('/api/family/e2e');
     _enabled = !!st.enabled;
@@ -23,7 +26,7 @@ export async function initE2E(): Promise<void> {
 
 // Основной переключатель для клиентского слоя. Работаем локально только когда
 // семья E2E И ключ на устройстве есть (иначе расшифровать нечем).
-export function isE2E(): boolean { return _enabled && _hasKey; }
+export function isE2E(): boolean { return isLocal() || (_enabled && _hasKey); }
 export function e2eEnabledOnServer(): boolean { return _enabled; }
 export function e2eHasKey(): boolean { return _hasKey; }
 export function e2eLoaded(): boolean { return _loaded; }

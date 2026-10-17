@@ -33,7 +33,13 @@ import { initPremium } from './src/premium';
 import { initFinik } from './src/finik';
 import { initBlocks } from './src/blocks';
 import { crowd } from './src/api/client';
-import { registerPush } from './src/push';   // там же фоновая задача и обработчик пушей
+import { registerPush, notifyPartnerItems } from './src/push';
+import * as Notifications from 'expo-notifications';
+import { isLocal } from './src/local/mode';
+import { setPartnerNotifier } from './src/local/sync';
+
+// Без сервера: о новых расходах партнёра сообщает сам телефон после синхронизации
+setPartnerNotifier((by, items) => { notifyPartnerItems(by, items); });   // там же фоновая задача и обработчик пушей
 
 
 initClassifier().catch(console.error);
@@ -90,8 +96,13 @@ function Root() {
 
   useEffect(() => {
     if (user) {
-      syncCrowdDict();
-      registerPush(user.name).catch(() => {});
+      if (isLocal()) {
+        // Без сервера пушей нет — уведомления показывает сам телефон; нужно разрешение
+        Notifications.getPermissionsAsync().then(p => { if (p.status !== 'granted') Notifications.requestPermissionsAsync().catch(() => {}); }).catch(() => {});
+      } else {
+        syncCrowdDict();
+        registerPush(user.name).catch(() => {});
+      }
       refreshCategories();
       flushOutbox().catch(() => {});
       // E2E: узнаём статус семьи и подтягиваем шифрованные изменения
@@ -99,13 +110,17 @@ function Root() {
     }
   }, [user]);
 
-  // E2E: досинхронизация при возврате в приложение
+  // E2E и режим без сервера: досинхронизация при возврате в приложение и,
+  // без сервера, раз в минуту, пока приложение открыто (пушей с сервера нет)
   useEffect(() => {
     if (!user) return;
     const sub = AppState.addEventListener('change', s => {
       if (s === 'active' && isE2E()) syncNow().catch(() => {});
     });
-    return () => sub.remove();
+    const timer = setInterval(() => {
+      if (isLocal() && AppState.currentState === 'active') syncNow().catch(() => {});
+    }, 60_000);
+    return () => { sub.remove(); clearInterval(timer); };
   }, [user]);
 
   // «Поделиться → ФИНИК»: банковское сообщение — во «Входящие», любой другой
