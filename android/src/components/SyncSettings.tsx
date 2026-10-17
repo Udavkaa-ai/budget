@@ -10,6 +10,7 @@ import { isLocal, localMe } from '../local/mode';
 import { getDavConfig, setDavConfig, DEFAULT_DAV, type DavConfig } from '../local/dav';
 import { connectFolder, localSync, syncStatus, onSyncStatus, type SyncStatus } from '../local/sync';
 import { flushOutbox } from '../offline';
+import { lanAvailable, getPairCode, setPairCode, newPairCode, lanStatus, onLanStatus, type LanStatus } from '../local/lan';
 
 const when = (ts: number) => {
   if (!ts) return '—';
@@ -70,6 +71,7 @@ export function SyncSettings() {
 
   const ok = st?.ok;
   return (
+    <>
     <Card>
       <SectionTitle>Синхронизация между телефонами</SectionTitle>
       <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 19 }}>
@@ -119,6 +121,48 @@ export function SyncSettings() {
               <Text style={{ color: t.textMuted, fontSize: font.sm }}>{advanced ? 'Скрыть адрес' : 'Другое облако (WebDAV)'}</Text>
             </Pressable>
           </View>
+        </View>
+      )}
+    </Card>
+    {lanAvailable && <LanCard />}
+    </>
+  );
+}
+
+// Обмен напрямую по домашнему Wi-Fi: код пары одинаковый на обоих телефонах
+function LanCard() {
+  const t = useTheme();
+  const [code, setCode] = useState('');
+  const [input, setInput] = useState('');
+  const [st, setSt] = useState<LanStatus>(lanStatus());
+  useEffect(() => { getPairCode().then(setCode); return onLanStatus(() => setSt(lanStatus())); }, []);
+
+  const save = async (c: string) => { await setPairCode(c); setCode(await getPairCode()); setInput(''); haptics.success(); };
+  return (
+    <Card>
+      <SectionTitle>Напрямую по Wi-Fi</SectionTitle>
+      <Text style={{ color: t.textMuted, fontSize: 13, lineHeight: 19 }}>
+        Дома, в одной Wi-Fi-сети, телефоны обмениваются данными сами — без облака и интернета. Нужно, чтобы ФИНИК был открыт на обоих, и одинаковый код пары.
+      </Text>
+      {code ? (
+        <View style={{ marginTop: spacing.md }}>
+          <Text style={{ color: t.text }}>Код пары: <Text style={{ fontWeight: '800', letterSpacing: 2 }} selectable>{code}</Text></Text>
+          <Text style={{ color: t.textFaint, fontSize: 12, marginTop: 4 }}>Введите этот же код на телефоне партнёра.</Text>
+          {st.peers.map(p => (
+            <Text key={p.who} style={{ color: p.ok ? t.textMuted : t.warning, fontSize: 12, marginTop: 4 }}>
+              {p.who}: {p.ok ? `обмен ${when(p.at)}${p.got ? `, получено ${p.got}` : ', всё совпадает'}` : `ошибка ${when(p.at)} — ${p.error}`}
+            </Text>
+          ))}
+          {!st.peers.length && <Text style={{ color: t.textFaint, fontSize: 12, marginTop: 4 }}>{st.running ? 'Ищу второй телефон в сети…' : 'Не запущено — откройте ФИНИК на обоих телефонах в одной сети.'}</Text>}
+          <Pressable onPress={() => save('')} style={{ marginTop: spacing.sm }}>
+            <Text style={{ color: t.textMuted, fontSize: font.sm }}>Сбросить код</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+          <PrimaryButton title="Создать код пары" onPress={() => save(newPairCode())} />
+          <Field value={input} onChangeText={setInput} placeholder="…или введите код с другого телефона" autoCapitalize="characters" autoCorrect={false} />
+          {input.trim().length >= 6 && <SecondaryButton title="Сохранить код" onPress={() => save(input)} />}
         </View>
       )}
     </Card>

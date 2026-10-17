@@ -37,6 +37,7 @@ import { registerPush, notifyPartnerItems } from './src/push';
 import * as Notifications from 'expo-notifications';
 import { isLocal } from './src/local/mode';
 import { setPartnerNotifier } from './src/local/sync';
+import { startLan, stopLan } from './src/local/lan';
 
 // Без сервера: о новых расходах партнёра сообщает сам телефон после синхронизации
 setPartnerNotifier((by, items) => { notifyPartnerItems(by, items); });   // там же фоновая задача и обработчик пушей
@@ -120,7 +121,13 @@ function Root() {
     const timer = setInterval(() => {
       if (isLocal() && AppState.currentState === 'active') syncNow().catch(() => {});
     }, 60_000);
-    return () => { sub.remove(); clearInterval(timer); };
+    // Wi-Fi напрямую: виден в сети, только пока открыт
+    if (isLocal()) startLan().catch(() => {});
+    const lanSub = AppState.addEventListener('change', s => {
+      if (!isLocal()) return;
+      if (s === 'active') startLan().catch(() => {}); else stopLan();
+    });
+    return () => { sub.remove(); lanSub.remove(); clearInterval(timer); stopLan(); };
   }, [user]);
 
   // «Поделиться → ФИНИК»: банковское сообщение — во «Входящие», любой другой

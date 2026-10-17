@@ -18,8 +18,8 @@ import { localMe } from './mode';
 const SNAP_EVERY = 100;
 const PER_FILE = 1000;
 
-type Rec = { id: string; ver: number; deleted: boolean; payload: Expense | null };
-type Doc = { key: string; ver: number; value: unknown };
+export type Rec = { id: string; ver: number; deleted: boolean; payload: Expense | null };
+export type Doc = { key: string; ver: number; value: unknown };
 interface Batch { device: string; who: string; seq: number; at: number; records: Rec[]; docs: Doc[] }
 interface Snap { device: string; who: string; upTo: number; at: number; records: Rec[]; docs: Doc[] }
 
@@ -34,6 +34,7 @@ const setStatus = (s: SyncStatus) => { _status = s; listeners.forEach(l => l());
 // Новые чужие расходы — для уведомления «💸 Марина · 3 новых расхода»
 let onPartnerItems: ((by: string, items: Array<[number, string, string]>) => void) | null = null;
 export function setPartnerNotifier(fn: typeof onPartnerItems) { onPartnerItems = fn; }
+export function announce(fresh: Map<string, Array<[number, string, string]>>) { for (const [by, items] of fresh) onPartnerItems?.(by, items); }
 
 export async function deviceId(): Promise<string> {
   let id = await SecureStore.getItemAsync('device_id').catch(() => null);
@@ -83,7 +84,7 @@ async function compact(c: DavConfig, dev: string, upTo: number) {
 }
 
 // ── Приём чужих изменений ─────────────────────────────────────────────────────
-async function apply(records: Rec[], docs: Doc[], fresh: Map<string, Array<[number, string, string]>>) {
+export async function apply(records: Rec[], docs: Doc[], fresh: Map<string, Array<[number, string, string]>>) {
   const me = localMe();
   const recent = Date.now() - 24 * 3600_000;
   for (const r of records) {
@@ -137,7 +138,7 @@ async function pull(c: DavConfig, dev: string, devices: SyncStatus['devices']): 
     if (who) await setMeta(`dav_who:${other}`, who);
   }
   if (got) await afterPull();
-  for (const [by, items] of fresh) onPartnerItems?.(by, items);
+  announce(fresh);
   return got;
 }
 

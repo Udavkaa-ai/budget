@@ -32,7 +32,7 @@ module.exports = () => {
         ...base,
         name: 'ФИНИК · Личный',
         scheme: 'familybudgetpersonal',
-        plugins: [...plugins, './plugins/withBankCapture'],
+        plugins: [...plugins, './plugins/withBankCapture', './plugins/withLanSync'],
         android: {
           ...androidRest,
           ...(gs.includes(pkg) ? { googleServicesFile } : {}),
