@@ -10,6 +10,8 @@ import { useTheme, spacing, font, radius } from '../theme';
 import { summary as summaryApi, budgetPlan, ai, expenses as expApi, whoLabel, settings as settingsApi, type SummaryData, type BudgetPlan, type Expense } from '../api/client';
 import { Card } from '../components/Card';
 import { CategoryTrend } from '../components/CategoryTrend';
+import { CommentsModal } from '../components/CommentsModal';
+import { useCommentCounts } from '../comments';
 import { useCategories } from '../categories';
 import { MonthPickerModal } from '../components/Pickers';
 import { usePremium } from '../premium';
@@ -133,6 +135,9 @@ export default function SummaryScreen() {
   const [drillList, setDrillList] = useState<Expense[]>([]);
   const [drillUser, setDrillUser] = useState<string | null>(null);
   const [drillDay, setDrillDay] = useState<number | null>(null);
+  // Комментарии: нажатие на расход в списке дня или категории
+  const [commenting, setCommenting] = useState<Expense | null>(null);
+  const commentCounts = useCommentCounts();
 
   const gaugeTarget = useTourTarget('summary.gauge');
   const totalTarget = useTourTarget('summary.total');
@@ -518,14 +523,17 @@ export default function SummaryScreen() {
                       .filter(e => (!heatUser || e.user === heatUser) && parseInt(e.date?.split('.')[0] ?? '') === drillDay)
                       .sort((a, b) => b.amount - a.amount)
                       .map(e => (
-                        <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
+                        <TouchableOpacity key={e.id} activeOpacity={0.7} onPress={() => { haptics.select(); setCommenting(e); }}
+                          style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.xs }}>
                           <Text style={{ width: 26, fontSize: 16 }}>{catIcon2(e.category)}</Text>
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: t.text }} numberOfLines={1}>{e.description}</Text>
-                            <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>{whoLabel(e)} · {e.category}</Text>
+                            <Text style={{ color: t.textMuted, fontSize: font.xs }} numberOfLines={1}>
+                              {whoLabel(e)} · {e.category}{commentCounts[e.id] ? `  💬 ${commentCounts[e.id]}` : ''}
+                            </Text>
                           </View>
                           <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
-                        </View>
+                        </TouchableOpacity>
                       ))}
                   </ScrollView>
                 </View>
@@ -808,21 +816,26 @@ export default function SummaryScreen() {
               <CategoryTrend cat={drillCat} month={month} year={year} user={drillUser} current={drillList} />
             )}
             {drillList.filter(e => !drillUser || e.user === drillUser).map(e => (
-              <Card key={e.id}>
+              <TouchableOpacity key={e.id} activeOpacity={0.7} onPress={() => { haptics.select(); setCommenting(e); }}>
+              <Card>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: t.text, fontWeight: '500' }}>{e.description}</Text>
                     <Text style={{ color: t.textMuted, fontSize: font.xs, marginTop: 2 }}>
-                      {whoLabel(e)} · {e.date}
+                      {whoLabel(e)} · {e.date}{commentCounts[e.id] ? `  💬 ${commentCounts[e.id]}` : ''}
                     </Text>
                   </View>
                   <Text style={{ color: t.text, fontWeight: '700' }}>{fmt(e.amount)}</Text>
                 </View>
               </Card>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Комментарии к расходу — поверх списков дня и категории */}
+      <CommentsModal expense={commenting} onClose={() => setCommenting(null)} />
 
       {/* AI report modal */}
       <Modal visible={aiVisible} animationType="slide" onRequestClose={() => setAiVisible(false)}>
